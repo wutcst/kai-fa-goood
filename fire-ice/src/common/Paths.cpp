@@ -44,9 +44,14 @@ std::string resolveAssetPath(const std::string& path) {
         return std::filesystem::absolute(requested).string();
     }
 
-    const std::filesystem::path besideExe = executableDirectory() / requested.filename();
+    const std::filesystem::path besideExe = executableDirectory() / requested;
     if (fileReadable(besideExe)) {
         return besideExe.string();
+    }
+
+    const std::filesystem::path besideExeFile = executableDirectory() / requested.filename();
+    if (fileReadable(besideExeFile)) {
+        return besideExeFile.string();
     }
 
     return path;

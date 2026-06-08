@@ -11,6 +11,7 @@ constexpr float JUMP_SPEED = 520.0f;
 constexpr float MAX_FALL_SPEED = 900.0f;
 
 constexpr uint16_t SERVER_PORT = 24567;
+constexpr uint8_t MIN_PLAYERS_TO_START = 1;
 constexpr float TICK_RATE = 60.0f;
 constexpr float TICK_DT = 1.0f / TICK_RATE;
 constexpr float STATE_BROADCAST_HZ = 20.0f;
@@ -64,6 +65,7 @@ constexpr unsigned LOBBY_WINDOW_WIDTH = 1024;
 constexpr unsigned LOBBY_WINDOW_HEIGHT = 640;
 
 constexpr uint8_t MAX_LEVEL_NAME = 32;
+constexpr uint8_t INITIAL_UNLOCKED_LEVEL_MASK = 0x01;
 
 inline InputFlags operator|(InputFlags a, InputFlags b) {
     return static_cast<InputFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
@@ -138,6 +140,8 @@ struct WorldState {
     bool fireDoorOpen = false;
     bool waterDoorOpen = false;
     bool levelComplete = false;
+    uint8_t unlockedMask = INITIAL_UNLOCKED_LEVEL_MASK;
+    uint8_t completedMask = 0;
 };
 
 inline const char* phaseName(GamePhase phase) {

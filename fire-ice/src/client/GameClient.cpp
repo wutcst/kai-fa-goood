@@ -1,5 +1,7 @@
 #include "GameClient.hpp"
 #include "LevelCatalog.hpp"
+#include "LevelMapLayout.hpp"
+#include "LevelProgress.hpp"
 #include "LocaleText.hpp"
 #include "Physics.hpp"
 
@@ -243,10 +245,16 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
         return;
     }
 
-    const std::string path = LevelCatalog::instance().resolvePath(levelIndex);
+    const LevelCatalog& catalog = LevelCatalog::instance();
+    const std::string path = catalog.resolvePath(levelIndex);
     if (!map_.loadFromFile(path)) {
         std::cerr << "[Client] Failed to load level preview: " << path << std::endl;
         return;
+    }
+
+    const std::string visualPath = catalog.resolveVisualPath(levelIndex);
+    if (!visualPath.empty() && tiledMap_.load(visualPath)) {
+        tiledMap_.bake();
     }
 
     loadedLevelIndex_ = levelIndex;
@@ -448,6 +456,17 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         return;
     }
 
+    if (renderWorld_.phase == GamePhase::Lobby) {
+        if (event.type == sf::Event::MouseMoved) {
+            lobbyHoverNode_ = levelNodeAtPosition(static_cast<float>(event.mouseMove.x),
+                static_cast<float>(event.mouseMove.y));
+        } else if (event.type == sf::Event::MouseButtonPressed) {
+            handleLobbyMouseClick(event);
+        } else if (event.type == sf::Event::MouseWheelScrolled) {
+            handleLobbyMouseWheel(event);
+        }
+    }
+
     if (event.type != sf::Event::KeyPressed) {
         return;
     }
@@ -471,9 +490,7 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         }
         if (event.key.code >= sf::Keyboard::Num1 && event.key.code <= sf::Keyboard::Num8 && !localReady_) {
             const uint8_t level = static_cast<uint8_t>(event.key.code - sf::Keyboard::Num1);
-            if (level < renderWorld_.levelCount) {
-                sendAction(PlayerAction::SelectLevel, level);
-            }
+            trySelectLevel(level);
             return;
         }
         if (event.key.code == sf::Keyboard::Enter && !localReady_) {
@@ -490,7 +507,8 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
 
     if (renderWorld_.phase == GamePhase::Victory) {
         if (event.key.code == sf::Keyboard::N
-            && renderWorld_.levelIndex + 1 < renderWorld_.levelCount) {
+            && renderWorld_.levelIndex + 1 < renderWorld_.levelCount
+            && isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(renderWorld_.levelIndex + 1))) {
             localReady_ = false;
             sendAction(PlayerAction::NextLevel);
             return;
@@ -710,69 +728,262 @@ void GameClient::drawBackgroundSprite(sf::RenderWindow& window, const sf::Textur
     window.draw(sprite);
 }
 
+void GameClient::trySelectLevel(uint8_t index) {
+    if (localReady_ || index >= renderWorld_.levelCount) {
+        return;
+    }
+    if (!isLevelUnlocked(renderWorld_.unlockedMask, index)) {
+        return;
+    }
+    sendAction(PlayerAction::SelectLevel, index);
+}
+
+int GameClient::levelNodeAtPosition(float x, float y) const {
+    const sf::FloatRect viewport = levelMapViewportRect();
+    if (!viewport.contains({x, y})) {
+        return -1;
+    }
+
+    const float localX = x - viewport.left;
+    const float localY = y - viewport.top + levelMapScrollY_;
+    const sf::Vector2f local(localX, localY);
+
+    for (uint8_t i = 0; i < renderWorld_.levelCount; ++i) {
+        if (levelNodeLocalHitArea(i).contains(local)) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+void GameClient::handleLobbyMouseWheel(const sf::Event& event) {
+    const sf::FloatRect viewport = levelMapViewportRect();
+    const sf::Vector2f mouse(static_cast<float>(event.mouseWheelScroll.x),
+        static_cast<float>(event.mouseWheelScroll.y));
+    if (!viewport.contains(mouse)) {
+        return;
+    }
+
+    levelMapScrollY_ = clampLevelMapScroll(levelMapScrollY_ - event.mouseWheelScroll.delta * kMapScrollStep);
+}
+
+void GameClient::handleLobbyMouseClick(const sf::Event& event) {
+    if (localReady_ || event.mouseButton.button != sf::Mouse::Left) {
+        return;
+    }
+    const int node = levelNodeAtPosition(static_cast<float>(event.mouseButton.x),
+        static_cast<float>(event.mouseButton.y));
+    if (node >= 0) {
+        trySelectLevel(static_cast<uint8_t>(node));
+    }
+}
+
+void GameClient::drawLevelPath(uint8_t fromIndex, uint8_t toIndex, bool unlocked) {
+    const sf::Vector2f from = levelNodeLocalCenter(fromIndex);
+    const sf::Vector2f to = levelNodeLocalCenter(toIndex);
+    const sf::Vector2f delta = to - from;
+    const float length = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+    if (length <= 1.0f) {
+        return;
+    }
+
+    sf::RectangleShape line({length, unlocked ? 9.0f : 6.0f});
+    line.setOrigin(0.0f, line.getSize().y / 2.0f);
+    line.setPosition(from);
+    line.setRotation(std::atan2(delta.y, delta.x) * 180.0f / 3.14159265f);
+    line.setFillColor(unlocked ? sf::Color(196, 150, 72) : sf::Color(70, 62, 48, 180));
+    window_.draw(line);
+}
+
+void GameClient::drawLevelNode(uint8_t index, bool selected, bool unlocked, bool completed) {
+    const sf::Vector2f center = levelNodeLocalCenter(index);
+    const float radius = kLevelNodeRadius;
+
+    if (selected) {
+        sf::CircleShape glow(radius + 12.0f);
+        glow.setOrigin(radius + 12.0f, radius + 12.0f);
+        glow.setPosition(center);
+        glow.setFillColor(sf::Color(255, 220, 80, 70));
+        glow.setOutlineThickness(3.0f);
+        glow.setOutlineColor(sf::Color(255, 240, 120, 180));
+        window_.draw(glow);
+    }
+
+    sf::ConvexShape diamond(4);
+    diamond.setPoint(0, {center.x, center.y - radius});
+    diamond.setPoint(1, {center.x + radius * 0.82f, center.y});
+    diamond.setPoint(2, {center.x, center.y + radius});
+    diamond.setPoint(3, {center.x - radius * 0.82f, center.y});
+
+    if (!unlocked) {
+        diamond.setFillColor(sf::Color(58, 54, 50));
+        diamond.setOutlineColor(sf::Color(35, 32, 28));
+    } else if (completed) {
+        diamond.setFillColor(sf::Color(210, 185, 95));
+        diamond.setOutlineColor(sf::Color(130, 100, 35));
+    } else {
+        diamond.setFillColor(sf::Color(150, 158, 168));
+        diamond.setOutlineColor(sf::Color(95, 100, 110));
+    }
+    diamond.setOutlineThickness(selected ? 3.0f : 2.0f);
+    window_.draw(diamond);
+
+    if (!unlocked) {
+        ui_.drawCenteredText(window_, "?", center.x, center.y - 14.0f, 24, sf::Color(110, 105, 100));
+    } else {
+        ui_.drawCenteredText(window_, std::to_string(index + 1), center.x, center.y - 14.0f, 22,
+            completed ? sf::Color(70, 45, 10) : sf::Color(35, 40, 48));
+        if (completed) {
+            ui_.drawCenteredText(window_, "*", center.x + radius + 8.0f, center.y - 10.0f, 18,
+                sf::Color(255, 230, 120));
+        }
+    }
+}
+
+void GameClient::drawLevelProgressMap() {
+    const sf::FloatRect mapArea = levelMapPanelRect();
+    const sf::FloatRect viewport = levelMapViewportRect();
+
+    sf::RectangleShape soil({mapArea.width, mapArea.height});
+    soil.setPosition(mapArea.left, mapArea.top);
+    soil.setFillColor(sf::Color(92, 68, 48));
+    soil.setOutlineThickness(3.0f);
+    soil.setOutlineColor(sf::Color(55, 40, 28));
+    window_.draw(soil);
+
+    sf::RectangleShape inner({mapArea.width - 24.0f, mapArea.height - 24.0f});
+    inner.setPosition(mapArea.left + 12.0f, mapArea.top + 12.0f);
+    inner.setFillColor(sf::Color(108, 82, 58, 220));
+    window_.draw(inner);
+
+    ui_.drawText(window_, text::lobbyMapTitle(), mapArea.left + 16.0f, mapArea.top + 10.0f, 22,
+        sf::Color(255, 235, 190));
+
+    sf::RectangleShape viewportBg({viewport.width, viewport.height});
+    viewportBg.setPosition(viewport.left, viewport.top);
+    viewportBg.setFillColor(sf::Color(88, 64, 44));
+    viewportBg.setOutlineThickness(2.0f);
+    viewportBg.setOutlineColor(sf::Color(60, 44, 30));
+    window_.draw(viewportBg);
+
+    if (levelMapMaxScroll() > 0.0f) {
+        ui_.drawText(window_, text::lobbyScrollHint(), mapArea.left + mapArea.width - 168.0f, mapArea.top + 12.0f,
+            13, sf::Color(220, 200, 160));
+    }
+
+    const sf::Vector2u winSize = window_.getSize();
+    const sf::View previousView = window_.getView();
+    sf::View contentView(sf::FloatRect(0.0f, levelMapScrollY_, viewport.width, viewport.height));
+    contentView.setViewport(sf::FloatRect(
+        viewport.left / static_cast<float>(winSize.x),
+        viewport.top / static_cast<float>(winSize.y),
+        viewport.width / static_cast<float>(winSize.x),
+        viewport.height / static_cast<float>(winSize.y)));
+    window_.setView(contentView);
+
+    const uint8_t levelCount = renderWorld_.levelCount;
+    for (uint8_t i = 0; i + 1 < levelCount; ++i) {
+        const bool pathUnlocked = isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(i + 1));
+        drawLevelPath(i, static_cast<uint8_t>(i + 1), pathUnlocked);
+    }
+
+    for (uint8_t i = 0; i < levelCount; ++i) {
+        const bool unlocked = isLevelUnlocked(renderWorld_.unlockedMask, i);
+        const bool completed = isLevelCompleted(renderWorld_.completedMask, i);
+        const bool selected = i == renderWorld_.levelIndex;
+        const bool hovered = static_cast<int>(i) == lobbyHoverNode_;
+        drawLevelNode(i, selected || hovered, unlocked, completed);
+    }
+
+    window_.setView(previousView);
+
+    if (levelMapMaxScroll() > 0.0f) {
+        const float trackX = mapArea.left + mapArea.width - 10.0f;
+        const float trackTop = viewport.top + 4.0f;
+        const float trackHeight = viewport.height - 8.0f;
+        sf::RectangleShape track({4.0f, trackHeight});
+        track.setPosition(trackX, trackTop);
+        track.setFillColor(sf::Color(50, 38, 28, 180));
+        window_.draw(track);
+
+        const float thumbHeight = std::max(24.0f, trackHeight * (viewport.height / levelMapContentHeight()));
+        const float scrollRatio = levelMapScrollY_ / levelMapMaxScroll();
+        sf::RectangleShape thumb({4.0f, thumbHeight});
+        thumb.setPosition(trackX, trackTop + (trackHeight - thumbHeight) * scrollRatio);
+        thumb.setFillColor(sf::Color(220, 190, 120, 220));
+        window_.draw(thumb);
+    }
+}
+
 void GameClient::renderLobbyScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
 
-    if (assets_.ready()) {
-        drawBackgroundSprite(window_, assets_.lobbyBackground());
+    const sf::FloatRect viewport = levelMapViewportRect();
+    const float nodeY = levelNodeLocalCenter(renderWorld_.levelIndex).y;
+    const float nodeTop = nodeY - kLevelNodeRadius - 8.0f;
+    const float nodeBottom = nodeY + kLevelNodeRadius + 8.0f;
+    if (nodeTop < levelMapScrollY_) {
+        levelMapScrollY_ = nodeTop;
     }
+    if (nodeBottom > levelMapScrollY_ + viewport.height) {
+        levelMapScrollY_ = nodeBottom - viewport.height;
+    }
+    levelMapScrollY_ = clampLevelMapScroll(levelMapScrollY_);
 
-    ui_.drawPanel(window_, {0.0f, 0.0f, w, 72.0f}, sf::Color(28, 36, 52, 200), 200.0f);
-    ui_.drawCenteredText(window_, "Forest Temple Online", w / 2.0f, 14.0f, 34, sf::Color(255, 230, 170));
-    ui_.drawCenteredText(window_, "Level Select Lobby", w / 2.0f, 48.0f, 18, sf::Color(180, 190, 210));
+    sf::RectangleShape backdrop({w, static_cast<float>(LOBBY_WINDOW_HEIGHT)});
+    backdrop.setFillColor(sf::Color(36, 28, 22));
+    window_.draw(backdrop);
 
-    const sf::FloatRect listPanel{32.0f, 88.0f, 420.0f, 420.0f};
-    ui_.drawPanel(window_, listPanel, sf::Color(24, 30, 44, 210), 210.0f);
-    ui_.drawText(window_, "LEVEL LIST", listPanel.left + 16.0f, listPanel.top + 12.0f, 20, sf::Color(220, 220, 220));
+    ui_.drawPanel(window_, {0.0f, 0.0f, w, 72.0f}, sf::Color(48, 36, 28, 220), 220.0f);
+    ui_.drawCenteredText(window_, text::forestTemple(), w / 2.0f, 12.0f, 34, sf::Color(255, 230, 170));
+    ui_.drawCenteredText(window_, text::lobbySelectHint(), w / 2.0f, 48.0f, 16, sf::Color(200, 190, 170));
+
+    drawLevelProgressMap();
+
+    const sf::FloatRect detailPanel{740.0f, 88.0f, 260.0f, 420.0f};
+    ui_.drawPanel(window_, detailPanel, sf::Color(36, 30, 24, 230), 230.0f);
 
     const LevelCatalog& catalog = LevelCatalog::instance();
-    const float rowHeight = 44.0f;
-    const float listTop = listPanel.top + 44.0f;
+    const LevelInfo& selectedInfo = catalog.at(renderWorld_.levelIndex);
+    const bool selectedUnlocked = isLevelUnlocked(renderWorld_.unlockedMask, renderWorld_.levelIndex);
+    const bool selectedCompleted = isLevelCompleted(renderWorld_.completedMask, renderWorld_.levelIndex);
 
-    for (uint8_t i = 0; i < renderWorld_.levelCount; ++i) {
-        const LevelInfo& info = catalog.at(i);
-        const float rowY = listTop + static_cast<float>(i) * rowHeight;
-        const bool selected = i == renderWorld_.levelIndex;
+    ui_.drawText(window_, "Level " + std::to_string(renderWorld_.levelIndex + 1), detailPanel.left + 16.0f,
+        detailPanel.top + 14.0f, 24, sf::Color(255, 230, 170));
+    ui_.drawText(window_, selectedInfo.title, detailPanel.left + 16.0f, detailPanel.top + 44.0f, 18,
+        sf::Color(230, 225, 210));
+    ui_.drawText(window_, selectedInfo.subtitle, detailPanel.left + 16.0f, detailPanel.top + 70.0f, 14,
+        sf::Color(180, 170, 155));
 
-        sf::FloatRect rowBox{listPanel.left + 10.0f, rowY, listPanel.width - 20.0f, rowHeight - 6.0f};
-        sf::RectangleShape row({rowBox.width, rowBox.height});
-        row.setPosition(rowBox.left, rowBox.top);
-        row.setFillColor(selected ? sf::Color(55, 95, 150) : sf::Color(35, 42, 58));
-        row.setOutlineThickness(selected ? 2.0f : 1.0f);
-        row.setOutlineColor(selected ? sf::Color(140, 200, 255) : sf::Color(70, 80, 100));
-        window_.draw(row);
-
-        const std::string title = std::to_string(i + 1) + ". " + info.title;
-        ui_.drawText(window_, title, rowBox.left + 12.0f, rowBox.top + 6.0f, 20,
-            selected ? sf::Color::White : sf::Color(200, 200, 200));
-        ui_.drawText(window_, info.subtitle, rowBox.left + 12.0f, rowBox.top + 24.0f, 14,
-            sf::Color(150, 160, 180));
+    if (!selectedUnlocked) {
+        ui_.drawText(window_, text::lobbyLockedHint(), detailPanel.left + 16.0f, detailPanel.top + 98.0f, 16,
+            sf::Color(255, 140, 100));
+    } else if (selectedCompleted) {
+        ui_.drawText(window_, text::lobbyClearedHint(), detailPanel.left + 16.0f, detailPanel.top + 98.0f, 16,
+            sf::Color(255, 220, 100));
     }
 
-    const sf::FloatRect previewPanel{472.0f, 88.0f, 520.0f, 420.0f};
-    ui_.drawPanel(window_, previewPanel, sf::Color(20, 26, 38, 210), 210.0f);
-    ui_.drawText(window_, "MAP PREVIEW", previewPanel.left + 16.0f, previewPanel.top + 12.0f, 20,
-        sf::Color(220, 220, 220));
-
     const sf::FloatRect previewArea{
-        previewPanel.left + kPreviewMargin,
-        previewPanel.top + 40.0f,
-        previewPanel.width - kPreviewMargin * 2.0f,
-        previewPanel.height - 52.0f
+        detailPanel.left + 12.0f,
+        detailPanel.top + 124.0f,
+        detailPanel.width - 24.0f,
+        detailPanel.height - 160.0f
     };
     sf::RectangleShape previewBg({previewArea.width, previewArea.height});
     previewBg.setPosition(previewArea.left, previewArea.top);
-    previewBg.setFillColor(sf::Color(12, 14, 20));
+    previewBg.setFillColor(sf::Color(18, 16, 14));
     window_.draw(previewBg);
-    drawMapPreview(window_, previewArea);
+    if (selectedUnlocked) {
+        drawMapPreview(window_, previewArea);
+    }
 
     const std::string detail = std::string(renderWorld_.levelName) + "  |  Gems: "
         + std::to_string(renderWorld_.totalGems);
-    ui_.drawCenteredText(window_, detail, previewPanel.left + previewPanel.width / 2.0f,
-        previewPanel.top + previewPanel.height - 28.0f, 18, sf::Color(255, 220, 120));
+    ui_.drawCenteredText(window_, detail, detailPanel.left + detailPanel.width / 2.0f,
+        detailPanel.top + detailPanel.height - 28.0f, 16, sf::Color(255, 220, 120));
 
-    const sf::FloatRect statusPanel{32.0f, 524.0f, 960.0f, 96.0f};
-    ui_.drawPanel(window_, statusPanel, sf::Color(26, 32, 48, 210), 210.0f);
+    const sf::FloatRect statusPanel{24.0f, 524.0f, 976.0f, 96.0f};
+    ui_.drawPanel(window_, statusPanel, sf::Color(36, 30, 24, 220), 220.0f);
 
     const std::string roleLine = std::string("You: ") + roleDisplayName() + "     Players: "
         + std::to_string(renderWorld_.connectedCount) + "/2";
@@ -785,20 +996,16 @@ void GameClient::renderLobbyScreen() {
     ui_.drawText(window_, std::string("Water: ") + (waterReady ? "Ready" : "Waiting"), statusPanel.left + 180.0f,
         statusPanel.top + 42.0f, 18, waterReady ? sf::Color(100, 180, 255) : sf::Color(150, 150, 150));
 
-    ui_.drawText(window_, "[Up/Down] or [1-8] Select   [Enter] Ready   [Esc] Cancel ready",
-        statusPanel.left + 360.0f, statusPanel.top + 42.0f, 16, sf::Color(160, 170, 190));
+    ui_.drawText(window_, text::lobbyControlsHint(), statusPanel.left + 360.0f, statusPanel.top + 42.0f, 16,
+        sf::Color(180, 170, 150));
 
     const sf::FloatRect playArea{760.0f, statusPanel.top + 8.0f, 220.0f, 72.0f};
     if (assets_.hasButtons()) {
-        if (renderWorld_.connectedCount < 2) {
-            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), text::waitPartner(), false, false);
-        } else if (!localReady_) {
+        if (!localReady_) {
             ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), "[Enter] Start", true, true);
         } else {
             ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), "Ready! [Esc]", true, true);
         }
-    } else if (renderWorld_.connectedCount < 2) {
-        ui_.drawButton(window_, playArea, "Wait Partner", false, sf::Color(120, 90, 40));
     } else if (!localReady_) {
         ui_.drawButton(window_, playArea, "ENTER - Start", true, sf::Color(60, 130, 210));
     } else {
@@ -899,7 +1106,54 @@ void GameClient::drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& a
     }
 }
 
+void GameClient::drawDynamicTiles(sf::RenderWindow& window) const {
+    for (int y = 0; y < map_.height(); ++y) {
+        for (int x = 0; x < map_.width(); ++x) {
+            const TileType type = map_.tileAt(x, y);
+            if (type == TileType::Empty) {
+                continue;
+            }
+            if (type == TileType::FireDoor && renderWorld_.fireDoorOpen) {
+                continue;
+            }
+            if (type == TileType::WaterDoor && renderWorld_.waterDoorOpen) {
+                continue;
+            }
+
+            const float tileSize = TILE_SIZE - 1.0f;
+            const float px = x * TILE_SIZE;
+            const float py = y * TILE_SIZE;
+
+            if (type == TileType::Gem && assets_.ready()) {
+                const sf::Texture& gemTex = ((x + y) % 2 == 0) ? assets_.gemRed() : assets_.gemBlue();
+                sf::Sprite gem(gemTex);
+                const float gemScale = tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
+                gem.setScale(gemScale, gemScale);
+                gem.setPosition(px + (tileSize - gemTex.getSize().x * gemScale) / 2.0f,
+                    py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
+                window.draw(gem);
+                continue;
+            }
+
+            if (type == TileType::FireDoor || type == TileType::WaterDoor
+                || type == TileType::FireExit || type == TileType::WaterExit
+                || type == TileType::Button) {
+                sf::RectangleShape tile({tileSize, tileSize});
+                tile.setPosition(px, py);
+                tile.setFillColor(tileColor(type));
+                window.draw(tile);
+            }
+        }
+    }
+}
+
 void GameClient::drawMap(sf::RenderWindow& window) const {
+    if (tiledMap_.ready()) {
+        tiledMap_.drawStatic(window);
+        drawDynamicTiles(window);
+        return;
+    }
+
     for (int y = 0; y < map_.height(); ++y) {
         for (int x = 0; x < map_.width(); ++x) {
             TileType type = map_.tileAt(x, y);
@@ -1089,7 +1343,8 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     const float btnH = 52.0f;
     const float gap = 28.0f;
     const float rowY = mapH / 2.0f + 130.0f;
-    const bool hasNextLevel = victory && renderWorld_.levelIndex + 1 < renderWorld_.levelCount;
+    const bool hasNextLevel = victory && renderWorld_.levelIndex + 1 < renderWorld_.levelCount
+        && isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(renderWorld_.levelIndex + 1));
 
     if (assets_.hasButtons()) {
         if (hasNextLevel) {

@@ -7,3 +7,5 @@
 # 忽略以下文件
 *.iml
 .DS_Store
+*.msi
+__pycache__/

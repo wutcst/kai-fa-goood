@@ -3,6 +3,7 @@
 #include "AssetManager.hpp"
 #include "Map.hpp"
 #include "Protocol.hpp"
+#include "TiledMapRenderer.hpp"
 #include "UiHelper.hpp"
 
 #include <SFML/Audio.hpp>
@@ -56,9 +57,17 @@ private:
     void renderHelpOverlay();
     void renderCreditsOverlay();
     void renderLobbyScreen();
+    void drawLevelProgressMap();
+    void drawLevelNode(uint8_t index, bool selected, bool unlocked, bool completed);
+    void drawLevelPath(uint8_t fromIndex, uint8_t toIndex, bool unlocked);
+    void handleLobbyMouseClick(const sf::Event& event);
+    void handleLobbyMouseWheel(const sf::Event& event);
+    int levelNodeAtPosition(float x, float y) const;
+    void trySelectLevel(uint8_t index);
     void renderGameScreen();
     void drawBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawMap(sf::RenderWindow& window) const;
+    void drawDynamicTiles(sf::RenderWindow& window) const;
     void drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;
     void drawPlayer(sf::RenderWindow& window, const PlayerState& player) const;
     void drawHud(sf::RenderWindow& window) const;
@@ -72,6 +81,7 @@ private:
     sf::UdpSocket socket_;
     sf::RenderWindow window_;
     GameMap map_;
+    TiledMapRenderer tiledMap_;
     UiHelper ui_;
     AssetManager assets_;
     sf::Music lobbyMusic_;
@@ -85,6 +95,8 @@ private:
     int titleMenuIndex_ = 0;
     bool connectRequested_ = false;
     int titleHoverIndex_ = -1;
+    int lobbyHoverNode_ = -1;
+    float levelMapScrollY_ = 0.0f;
 
     std::string host_;
     sf::IpAddress serverAddress_;

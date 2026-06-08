@@ -31,6 +31,8 @@ public:
 private:
     void selectLevel(uint8_t index);
     void applyLevelMetadata();
+    void syncProgressToWorld();
+    bool isLevelUnlocked(uint8_t index) const;
     void reloadMap();
     void resetWorld();
     void syncConnectedCount();
@@ -53,6 +55,8 @@ private:
     GameMap map_;
     std::string mapPath_;
     uint8_t selectedLevelIndex_ = 0;
+    uint8_t unlockedMask_ = INITIAL_UNLOCKED_LEVEL_MASK;
+    uint8_t completedMask_ = 0;
     WorldState world_{};
     std::array<ClientSlot, 2> clients_{};
     bool running_ = false;

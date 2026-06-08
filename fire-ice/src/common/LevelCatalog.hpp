@@ -9,6 +9,7 @@ namespace fireice {
 struct LevelInfo {
     uint8_t id = 0;
     const char* fileName = "";
+    const char* visualFileName = nullptr;
     const char* title = "";
     const char* subtitle = "";
 };
@@ -21,6 +22,7 @@ public:
     const LevelInfo& at(uint8_t index) const;
     std::string resolvePath(uint8_t index) const;
     std::string resolvePathByFile(const char* fileName) const;
+    std::string resolveVisualPath(uint8_t index) const;
 
 private:
     LevelCatalog();

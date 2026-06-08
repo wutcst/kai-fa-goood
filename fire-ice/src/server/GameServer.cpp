@@ -1,5 +1,6 @@
 #include "GameServer.hpp"
 
+#include "LevelProgress.hpp"
 #include "LevelCatalog.hpp"
 #include "Physics.hpp"
 
@@ -13,7 +14,6 @@ namespace fireice {
 namespace {
 
 constexpr float COUNTDOWN_SECONDS = 3.0f;
-constexpr uint8_t kRequiredPlayers = 2;
 
 } // namespace
 
@@ -38,6 +38,12 @@ void GameServer::selectLevel(uint8_t index) {
     const LevelCatalog& catalog = LevelCatalog::instance();
     if (index >= catalog.count()) {
         index = 0;
+    }
+
+    if (!isLevelUnlocked(index)) {
+        std::cout << "[Server] Level " << static_cast<int>(index + 1) << " is locked" << std::endl;
+        broadcastState();
+        return;
     }
 
     selectedLevelIndex_ = index;
@@ -71,6 +77,16 @@ void GameServer::applyLevelMetadata() {
     world_.levelCount = catalog.count();
     world_.totalGems = static_cast<uint8_t>(std::min(255, map_.countGems()));
     std::snprintf(world_.levelName, MAX_LEVEL_NAME, "%s", info.title);
+    syncProgressToWorld();
+}
+
+void GameServer::syncProgressToWorld() {
+    world_.unlockedMask = unlockedMask_;
+    world_.completedMask = completedMask_;
+}
+
+bool GameServer::isLevelUnlocked(uint8_t index) const {
+    return fireice::isLevelUnlocked(unlockedMask_, index);
 }
 
 void GameServer::reloadMap() {
@@ -171,7 +187,7 @@ bool GameServer::allConnectedReady() const {
         }
     }
 
-    return connected >= kRequiredPlayers && ready >= kRequiredPlayers;
+    return connected >= MIN_PLAYERS_TO_START && ready >= connected && ready > 0;
 }
 
 void GameServer::run() {
@@ -285,21 +301,25 @@ void GameServer::handleAction(uint8_t slot, PlayerAction action, uint8_t value) 
         }
 
         if (action == PlayerAction::PrevLevel) {
-            if (selectedLevelIndex_ > 0) {
-                selectLevel(static_cast<uint8_t>(selectedLevelIndex_ - 1));
+            const uint8_t prev = findPrevUnlockedLevel(unlockedMask_, selectedLevelIndex_);
+            if (prev != selectedLevelIndex_) {
+                selectLevel(prev);
             }
             return;
         }
 
         if (action == PlayerAction::NextLevel) {
-            if (selectedLevelIndex_ + 1 < catalog.count()) {
-                selectLevel(static_cast<uint8_t>(selectedLevelIndex_ + 1));
+            const uint8_t next = findNextUnlockedLevel(unlockedMask_, selectedLevelIndex_, catalog.count());
+            if (next != selectedLevelIndex_) {
+                selectLevel(next);
             }
             return;
         }
 
         if (action == PlayerAction::SelectLevel) {
-            selectLevel(value);
+            if (value < catalog.count()) {
+                selectLevel(value);
+            }
             return;
         }
 
@@ -327,8 +347,9 @@ void GameServer::handleAction(uint8_t slot, PlayerAction action, uint8_t value) 
     }
 
     if (action == PlayerAction::NextLevel && world_.phase == GamePhase::Victory) {
-        if (selectedLevelIndex_ + 1 < catalog.count()) {
-            selectLevel(static_cast<uint8_t>(selectedLevelIndex_ + 1));
+        const uint8_t next = static_cast<uint8_t>(selectedLevelIndex_ + 1);
+        if (next < catalog.count() && isLevelUnlocked(next)) {
+            selectLevel(next);
         } else {
             returnToLobby();
         }
@@ -395,9 +416,28 @@ void GameServer::updatePhase() {
 
     const bool fireDone = world_.players[0].atExit;
     const bool waterDone = world_.players[1].atExit;
-    if (fireDone && waterDone) {
+    const bool fireConnected = clients_[0].connected;
+    const bool waterConnected = clients_[1].connected;
+
+    bool allAtExit = false;
+    if (world_.connectedCount == 0) {
+        allAtExit = false;
+    } else if (fireConnected && waterConnected) {
+        allAtExit = fireDone && waterDone;
+    } else if (fireConnected) {
+        allAtExit = fireDone;
+    } else if (waterConnected) {
+        allAtExit = waterDone;
+    }
+
+    if (allAtExit) {
         world_.phase = GamePhase::Victory;
         world_.levelComplete = true;
+        completedMask_ |= static_cast<uint8_t>(1u << selectedLevelIndex_);
+        if (selectedLevelIndex_ + 1 < LevelCatalog::instance().count()) {
+            unlockedMask_ |= static_cast<uint8_t>(1u << (selectedLevelIndex_ + 1));
+        }
+        syncProgressToWorld();
         std::cout << "[Server] Level complete" << std::endl;
     }
 }

@@ -47,10 +47,13 @@ add_executable(fireice_client
     src/client/GameClient.cpp
     src/client/UiHelper.cpp
     src/client/AssetManager.cpp
+    src/client/tiled/TmxUtil.cpp
+    src/client/tiled/TiledMapRenderer.cpp
     src/client/main.cpp
 )
 target_include_directories(fireice_client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/client/tiled
 )
 target_link_libraries(fireice_client PRIVATE fireice_common sfml-graphics sfml-window sfml-network sfml-system sfml-audio)
 if(MSVC)
@@ -93,4 +96,12 @@ add_custom_command(TARGET fireice_client POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/assets/textures"
         "$<TARGET_FILE_DIR:fireice_client>/textures"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:fireice_client>/maps"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets/maps"
+        "$<TARGET_FILE_DIR:fireice_client>/maps"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:fireice_client>/tilesets"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets/tilesets"
+        "$<TARGET_FILE_DIR:fireice_client>/tilesets"
 )
