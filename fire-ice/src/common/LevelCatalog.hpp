@@ -11,6 +11,8 @@ struct LevelInfo {
     const char* fileName = "";
     const char* title = "";
     const char* subtitle = "";
+    uint8_t minPlayers = 1;
+    uint8_t maxPlayers = 2;
 };
 
 class LevelCatalog {
@@ -18,6 +20,9 @@ public:
     static const LevelCatalog& instance();
 
     uint8_t count() const { return static_cast<uint8_t>(levels_.size()); }
+    uint8_t countForPlayerCount(uint8_t playerCount) const;
+    uint8_t globalIndexToFilteredIndex(uint8_t globalIndex, uint8_t playerCount) const;
+    uint8_t filteredIndexToGlobalIndex(uint8_t filteredIndex, uint8_t playerCount) const;
     const LevelInfo& at(uint8_t index) const;
     std::string resolvePath(uint8_t index) const;
     std::string resolvePathByFile(const char* fileName) const;

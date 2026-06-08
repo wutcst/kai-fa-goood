@@ -26,7 +26,8 @@ public:
     void setTile(int x, int y, TileType type);
 
     bool isSolid(TileType type) const;
-    bool blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bool waterDoorOpen) const;
+    bool blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bool waterDoorOpen,
+                      bool poisonDoorOpen = false) const;
     bool isHazardFor(TileType type, PlayerRole role) const;
     bool isExitFor(TileType type, PlayerRole role) const;
 

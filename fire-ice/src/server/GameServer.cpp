@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <thread>
 
@@ -13,7 +15,16 @@ namespace fireice {
 namespace {
 
 constexpr float COUNTDOWN_SECONDS = 3.0f;
-constexpr uint8_t kRequiredPlayers = 2;
+
+std::string generateRoomCode() {
+    static const char kChars[] = "0123456789";
+    std::string code;
+    code.reserve(6);
+    for (int i = 0; i < 6; ++i) {
+        code.push_back(kChars[std::rand() % 10]);
+    }
+    return code;
+}
 
 } // namespace
 
@@ -24,12 +35,18 @@ bool GameServer::start(uint8_t initialLevel) {
     }
 
     socket_.setBlocking(false);
+
+    std::srand(static_cast<unsigned>(std::time(nullptr)));
+    const std::string code = generateRoomCode();
+    std::snprintf(roomCode_, MAX_ROOM_CODE, "%s", code.c_str());
+    std::snprintf(world_.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
+
     selectLevel(initialLevel);
     running_ = true;
     lastTick_ = std::chrono::steady_clock::now();
     lastBroadcast_ = lastTick_;
 
-    std::cout << "[Server] Listening on port " << SERVER_PORT << std::endl;
+    std::cout << "[Server] Room code: " << roomCode_ << "  Listening on port " << SERVER_PORT << std::endl;
     std::cout << "[Server] Levels loaded: " << static_cast<int>(LevelCatalog::instance().count()) << std::endl;
     return true;
 }
@@ -67,8 +84,9 @@ void GameServer::applyLevelMetadata() {
     const LevelCatalog& catalog = LevelCatalog::instance();
     const LevelInfo& info = catalog.at(selectedLevelIndex_);
 
-    world_.levelIndex = selectedLevelIndex_;
-    world_.levelCount = catalog.count();
+    const uint8_t playerCount = std::max(uint8_t{1}, world_.connectedCount);
+    world_.levelIndex = catalog.globalIndexToFilteredIndex(selectedLevelIndex_, playerCount);
+    world_.levelCount = catalog.countForPlayerCount(playerCount);
     world_.totalGems = static_cast<uint8_t>(std::min(255, map_.countGems()));
     std::snprintf(world_.levelName, MAX_LEVEL_NAME, "%s", info.title);
 }
@@ -84,6 +102,7 @@ void GameServer::resetWorld() {
     world_.tick = 0;
     world_.fireDoorOpen = false;
     world_.waterDoorOpen = false;
+    world_.poisonDoorOpen = false;
     world_.levelComplete = false;
 
     for (PlayerState& player : world_.players) {
@@ -91,16 +110,21 @@ void GameServer::resetWorld() {
     }
 
     for (const SpawnPoint& spawn : map_.spawns()) {
-        if (spawn.role == PlayerRole::Fire) {
+        if (spawn.role == PlayerRole::Fire && clients_[0].connected) {
             world_.players[0].role = PlayerRole::Fire;
             world_.players[0].x = spawn.x;
             world_.players[0].y = spawn.y;
             world_.players[0].alive = true;
-        } else if (spawn.role == PlayerRole::Water) {
+        } else if (spawn.role == PlayerRole::Water && clients_[1].connected) {
             world_.players[1].role = PlayerRole::Water;
             world_.players[1].x = spawn.x;
             world_.players[1].y = spawn.y;
             world_.players[1].alive = true;
+        } else if (spawn.role == PlayerRole::Poison && clients_[2].connected) {
+            world_.players[2].role = PlayerRole::Poison;
+            world_.players[2].x = spawn.x;
+            world_.players[2].y = spawn.y;
+            world_.players[2].alive = true;
         }
     }
 }
@@ -111,12 +135,14 @@ void GameServer::syncConnectedCount() {
 
     for (std::size_t i = 0; i < clients_.size(); ++i) {
         if (!clients_[i].connected) {
+            world_.playerNames[i][0] = '\0';
             continue;
         }
         ++count;
         if (clients_[i].ready) {
             readyMask |= static_cast<uint8_t>(1u << i);
         }
+        std::snprintf(world_.playerNames[i], MAX_PLAYER_NAME, "%s", clients_[i].name.c_str());
     }
 
     world_.connectedCount = count;
@@ -171,7 +197,7 @@ bool GameServer::allConnectedReady() const {
         }
     }
 
-    return connected >= kRequiredPlayers && ready >= kRequiredPlayers;
+    return connected > 0 && ready >= connected;
 }
 
 void GameServer::run() {
@@ -275,6 +301,8 @@ void GameServer::handleAction(uint8_t slot, PlayerAction action, uint8_t value) 
     }
 
     const LevelCatalog& catalog = LevelCatalog::instance();
+    const uint8_t playerCount = std::max(uint8_t{1}, world_.connectedCount);
+    const uint8_t filteredCount = catalog.countForPlayerCount(playerCount);
 
     if (world_.phase == GamePhase::Lobby) {
         if (action == PlayerAction::ReturnToLobby) {
@@ -284,22 +312,22 @@ void GameServer::handleAction(uint8_t slot, PlayerAction action, uint8_t value) 
             return;
         }
 
-        if (action == PlayerAction::PrevLevel) {
-            if (selectedLevelIndex_ > 0) {
-                selectLevel(static_cast<uint8_t>(selectedLevelIndex_ - 1));
+        if (action == PlayerAction::PrevLevel || action == PlayerAction::NextLevel) {
+            const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex_, playerCount);
+            uint8_t newFiltered = currentFiltered;
+            if (action == PlayerAction::PrevLevel && currentFiltered > 0) {
+                newFiltered = currentFiltered - 1;
+            } else if (action == PlayerAction::NextLevel && currentFiltered + 1 < filteredCount) {
+                newFiltered = currentFiltered + 1;
             }
-            return;
-        }
-
-        if (action == PlayerAction::NextLevel) {
-            if (selectedLevelIndex_ + 1 < catalog.count()) {
-                selectLevel(static_cast<uint8_t>(selectedLevelIndex_ + 1));
+            if (newFiltered != currentFiltered) {
+                selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount));
             }
             return;
         }
 
         if (action == PlayerAction::SelectLevel) {
-            selectLevel(value);
+            selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
             return;
         }
 
@@ -327,8 +355,9 @@ void GameServer::handleAction(uint8_t slot, PlayerAction action, uint8_t value) 
     }
 
     if (action == PlayerAction::NextLevel && world_.phase == GamePhase::Victory) {
-        if (selectedLevelIndex_ + 1 < catalog.count()) {
-            selectLevel(static_cast<uint8_t>(selectedLevelIndex_ + 1));
+        const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex_, playerCount);
+        if (currentFiltered + 1 < filteredCount) {
+            selectLevel(catalog.filteredIndexToGlobalIndex(currentFiltered + 1, playerCount));
         } else {
             returnToLobby();
         }
@@ -393,9 +422,18 @@ void GameServer::updatePhase() {
         return;
     }
 
-    const bool fireDone = world_.players[0].atExit;
-    const bool waterDone = world_.players[1].atExit;
-    if (fireDone && waterDone) {
+    bool allDone = true;
+    for (std::size_t i = 0; i < clients_.size(); ++i) {
+        if (!clients_[i].connected) {
+            continue;
+        }
+        if (!world_.players[i].atExit) {
+            allDone = false;
+            break;
+        }
+    }
+
+    if (allDone && world_.connectedCount > 0) {
         world_.phase = GamePhase::Victory;
         world_.levelComplete = true;
         std::cout << "[Server] Level complete" << std::endl;
@@ -451,7 +489,12 @@ std::optional<uint8_t> GameServer::findSlotByEndpoint(const sf::IpAddress& addre
 }
 
 PlayerRole GameServer::roleForSlot(uint8_t slot) const {
-    return slot == 0 ? PlayerRole::Fire : PlayerRole::Water;
+    switch (slot) {
+    case 0: return PlayerRole::Fire;
+    case 1: return PlayerRole::Water;
+    case 2: return PlayerRole::Poison;
+    default: return PlayerRole::None;
+    }
 }
 
 void GameServer::acceptClient(const sf::IpAddress& address, unsigned short port, const ConnectRequestPacket& request) {
@@ -469,9 +512,18 @@ void GameServer::acceptClient(const sf::IpAddress& address, unsigned short port,
         return;
     }
 
+    if (request.roomCode[0] != '\0') {
+        const std::string clientCode(request.roomCode);
+        const std::string serverCode(roomCode_);
+        if (clientCode != serverCode) {
+            rejectClient(address, port, "Room code mismatch");
+            return;
+        }
+    }
+
     const auto slot = findOpenSlot(request.preferredRole);
     if (!slot.has_value()) {
-        rejectClient(address, port, "Room is full (2/2)");
+        rejectClient(address, port, "Room is full");
         return;
     }
 
