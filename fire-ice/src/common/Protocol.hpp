@@ -29,7 +29,8 @@ struct PacketHeader {
 struct ConnectRequestPacket {
     PacketHeader header{PacketType::ConnectRequest, 1};
     PlayerRole preferredRole = PlayerRole::None;
-    char playerName[16]{};
+    char playerName[MAX_PLAYER_NAME]{};
+    char roomCode[MAX_ROOM_CODE]{};
 };
 
 struct ConnectAcceptPacket {
@@ -95,6 +96,7 @@ inline const char* roleName(PlayerRole role) {
     switch (role) {
     case PlayerRole::Fire: return "Fire";
     case PlayerRole::Water: return "Water";
+    case PlayerRole::Poison: return "Poison";
     default: return "None";
     }
 }

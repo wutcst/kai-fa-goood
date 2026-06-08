@@ -18,7 +18,8 @@ constexpr float STATE_BROADCAST_HZ = 20.0f;
 enum class PlayerRole : uint8_t {
     None = 0,
     Fire = 1,
-    Water = 2
+    Water = 2,
+    Poison = 3
 };
 
 enum class TileType : uint8_t {
@@ -31,7 +32,10 @@ enum class TileType : uint8_t {
     FireExit,
     WaterExit,
     Gem,
-    Button
+    Button,
+    Acid,
+    PoisonDoor,
+    PoisonExit
 };
 
 enum class GamePhase : uint8_t {
@@ -64,6 +68,9 @@ constexpr unsigned LOBBY_WINDOW_WIDTH = 1024;
 constexpr unsigned LOBBY_WINDOW_HEIGHT = 640;
 
 constexpr uint8_t MAX_LEVEL_NAME = 32;
+constexpr uint8_t MAX_PLAYER_NAME = 16;
+constexpr uint8_t MAX_PLAYERS = 3;
+constexpr uint8_t MAX_ROOM_CODE = 8;
 
 inline InputFlags operator|(InputFlags a, InputFlags b) {
     return static_cast<InputFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
@@ -134,9 +141,12 @@ struct WorldState {
     uint8_t levelCount = 0;
     uint8_t totalGems = 0;
     char levelName[MAX_LEVEL_NAME]{};
-    PlayerState players[2]{};
+    char playerNames[MAX_PLAYERS][MAX_PLAYER_NAME]{};
+    PlayerState players[MAX_PLAYERS]{};
+    char roomCode[MAX_ROOM_CODE]{};
     bool fireDoorOpen = false;
     bool waterDoorOpen = false;
+    bool poisonDoorOpen = false;
     bool levelComplete = false;
 };
 
