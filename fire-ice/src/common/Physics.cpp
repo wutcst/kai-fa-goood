@@ -9,7 +9,7 @@ namespace {
 
 bool tileBlocks(const GameMap& map, int tx, int ty, PlayerRole role, const WorldState& world) {
     const TileType type = map.tileAt(tx, ty);
-    return map.blocksPlayer(type, role, world.fireDoorOpen, world.waterDoorOpen);
+    return map.blocksPlayer(type, role, world.fireDoorOpen, world.waterDoorOpen, world.poisonDoorOpen);
 }
 
 void resolveAxis(PlayerState& player, const GameMap& map, const WorldState& world, bool horizontal) {
@@ -180,6 +180,7 @@ void collectGems(PlayerState& player, GameMap& map) {
 void updateButtons(const GameMap& map, WorldState& world) {
     bool firePressed = false;
     bool waterPressed = false;
+    bool poisonPressed = false;
 
     for (int y = 0; y < map.height(); ++y) {
         for (int x = 0; x < map.width(); ++x) {
@@ -199,6 +200,8 @@ void updateButtons(const GameMap& map, WorldState& world) {
                     firePressed = true;
                 } else if (player.role == PlayerRole::Water) {
                     waterPressed = true;
+                } else if (player.role == PlayerRole::Poison) {
+                    poisonPressed = true;
                 }
             }
         }
@@ -206,6 +209,7 @@ void updateButtons(const GameMap& map, WorldState& world) {
 
     world.fireDoorOpen = firePressed;
     world.waterDoorOpen = waterPressed;
+    world.poisonDoorOpen = poisonPressed;
 }
 
 } // namespace fireice

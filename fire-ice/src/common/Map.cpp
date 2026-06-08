@@ -18,8 +18,12 @@ TileType GameMap::charToTile(char c) const {
     case 'X': return TileType::WaterExit;
     case 'G': return TileType::Gem;
     case 'B': return TileType::Button;
+    case 'A': return TileType::Acid;
+    case 'D': return TileType::PoisonDoor;
+    case 'P': return TileType::PoisonExit;
     case 'f':
     case 'w':
+    case 'p':
         return TileType::Empty;
     default:
         return TileType::Solid;
@@ -36,6 +40,9 @@ char GameMap::tileToChar(TileType type) const {
     case TileType::WaterDoor: return 'I';
     case TileType::FireExit: return 'E';
     case TileType::WaterExit: return 'X';
+    case TileType::Acid: return 'A';
+    case TileType::PoisonDoor: return 'D';
+    case TileType::PoisonExit: return 'P';
     case TileType::Gem: return 'G';
     case TileType::Button: return 'B';
     default: return '#';
@@ -94,6 +101,10 @@ bool GameMap::loadFromText(const std::string& text) {
                 spawns_.push_back({PlayerRole::Water,
                     x * TILE_SIZE + TILE_SIZE * 0.25f,
                     y * TILE_SIZE + TILE_SIZE * 0.25f});
+            } else if (c == 'p') {
+                spawns_.push_back({PlayerRole::Poison,
+                    x * TILE_SIZE + TILE_SIZE * 0.25f,
+                    y * TILE_SIZE + TILE_SIZE * 0.25f});
             }
         }
     }
@@ -125,7 +136,8 @@ bool GameMap::isSolid(TileType type) const {
     return type == TileType::Solid;
 }
 
-bool GameMap::blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bool waterDoorOpen) const {
+bool GameMap::blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bool waterDoorOpen,
+                           bool poisonDoorOpen) const {
     (void)role;
     if (type == TileType::Solid) {
         return true;
@@ -136,15 +148,21 @@ bool GameMap::blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bo
     if (type == TileType::WaterDoor) {
         return !waterDoorOpen;
     }
+    if (type == TileType::PoisonDoor) {
+        return !poisonDoorOpen;
+    }
     return false;
 }
 
 bool GameMap::isHazardFor(TileType type, PlayerRole role) const {
     if (type == TileType::Lava) {
-        return role == PlayerRole::Water;
+        return role != PlayerRole::Fire;
     }
     if (type == TileType::Water) {
-        return role == PlayerRole::Fire;
+        return role != PlayerRole::Water;
+    }
+    if (type == TileType::Acid) {
+        return role != PlayerRole::Poison;
     }
     return false;
 }
@@ -155,6 +173,9 @@ bool GameMap::isExitFor(TileType type, PlayerRole role) const {
     }
     if (type == TileType::WaterExit) {
         return role == PlayerRole::Water;
+    }
+    if (type == TileType::PoisonExit) {
+        return role == PlayerRole::Poison;
     }
     return false;
 }

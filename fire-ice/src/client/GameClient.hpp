@@ -23,6 +23,8 @@ enum class ClientScreen : uint8_t {
     Help,
     Credits,
     Connecting,
+    Room,
+    JoinRoom,
 };
 
 class GameClient {
@@ -64,6 +66,10 @@ private:
     void handleLobbyMouseWheel(const sf::Event& event);
     int levelNodeAtPosition(float x, float y) const;
     void trySelectLevel(uint8_t index);
+    void renderRoomScreen();
+    void renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH,
+                               int playerSlot, PlayerRole expectedRole);
+    void renderJoinRoomScreen();
     void renderGameScreen();
     void drawBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawMap(sf::RenderWindow& window) const;
@@ -107,6 +113,9 @@ private:
     bool localReady_ = false;
     uint8_t slot_ = 0;
     PlayerRole role_ = PlayerRole::None;
+    std::string playerName_;
+    std::string typedRoomCode_;
+    float roomAnimTimer_ = 0.0f;
 
     InputFlags currentInput_ = InputFlags::None;
     uint32_t inputTick_ = 0;

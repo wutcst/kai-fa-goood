@@ -58,7 +58,8 @@ private:
     uint8_t unlockedMask_ = INITIAL_UNLOCKED_LEVEL_MASK;
     uint8_t completedMask_ = 0;
     WorldState world_{};
-    std::array<ClientSlot, 2> clients_{};
+    std::array<ClientSlot, MAX_PLAYERS> clients_{};
+    char roomCode_[MAX_ROOM_CODE]{};
     bool running_ = false;
     float countdownTimer_ = 0.0f;
     std::chrono::steady_clock::time_point lastTick_;

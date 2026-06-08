@@ -12,6 +12,9 @@ fireice::PlayerRole parseRole(const std::string& text) {
     if (text == "water" || text == "w" || text == "2") {
         return fireice::PlayerRole::Water;
     }
+    if (text == "poison" || text == "p" || text == "3") {
+        return fireice::PlayerRole::Poison;
+    }
     return fireice::PlayerRole::Fire;
 }
 

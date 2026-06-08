@@ -10,14 +10,14 @@ const LevelCatalog& LevelCatalog::instance() {
 
 LevelCatalog::LevelCatalog() {
     levels_ = {
-        {1, "level01_collision.txt", "level01.tmx", "Forest Entrance", "Tutorial - gems and exits"},
-        {2, "level02_twin_pools.txt", nullptr, "Twin Pools", "Separate lava and water paths"},
-        {3, "level03_temple_gates.txt", nullptr, "Temple Gates", "Buttons open elemental doors"},
-        {4, "level04_gem_grotto.txt", nullptr, "Gem Grotto", "Collect every diamond"},
-        {5, "level05_vertical_shaft.txt", nullptr, "Vertical Shaft", "Climb up together"},
-        {6, "level06_coop_bridge.txt", nullptr, "Co-op Bridge", "Help each other cross"},
-        {7, "level07_element_maze.txt", nullptr, "Element Maze", "Classic hazard maze"},
-        {8, "level08_forest_shrine.txt", nullptr, "Forest Shrine", "Final shrine challenge"},
+        {1, "level01_collision.txt", "level01.tmx", "Forest Entrance", "Tutorial - gems and exits", 1, 2},
+        {2, "level02_twin_pools.txt", nullptr, "Twin Pools", "Separate lava and water paths", 1, 2},
+        {3, "level03_temple_gates.txt", nullptr, "Temple Gates", "Buttons open elemental doors", 2, 2},
+        {4, "level04_gem_grotto.txt", nullptr, "Gem Grotto", "Collect every diamond", 2, 2},
+        {5, "level05_vertical_shaft.txt", nullptr, "Vertical Shaft", "Climb up together", 1, 3},
+        {6, "level06_coop_bridge.txt", nullptr, "Co-op Bridge", "Help each other cross", 1, 3},
+        {7, "level07_element_maze.txt", nullptr, "Element Maze", "Classic hazard maze", 1, 3},
+        {8, "level08_forest_shrine.txt", nullptr, "Forest Shrine", "Final shrine challenge", 2, 3},
     };
 }
 
@@ -42,6 +42,39 @@ std::string LevelCatalog::resolveVisualPath(uint8_t index) const {
         return {};
     }
     return resolveAssetPath(std::string("maps/") + info.visualFileName);
+}
+
+uint8_t LevelCatalog::countForPlayerCount(uint8_t playerCount) const {
+    uint8_t count = 0;
+    for (const LevelInfo& info : levels_) {
+        if (playerCount >= info.minPlayers && playerCount <= info.maxPlayers) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+uint8_t LevelCatalog::globalIndexToFilteredIndex(uint8_t globalIndex, uint8_t playerCount) const {
+    uint8_t filtered = 0;
+    for (uint8_t i = 0; i < globalIndex && i < levels_.size(); ++i) {
+        if (playerCount >= levels_[i].minPlayers && playerCount <= levels_[i].maxPlayers) {
+            ++filtered;
+        }
+    }
+    return filtered;
+}
+
+uint8_t LevelCatalog::filteredIndexToGlobalIndex(uint8_t filteredIndex, uint8_t playerCount) const {
+    uint8_t filtered = 0;
+    for (uint8_t i = 0; i < levels_.size(); ++i) {
+        if (playerCount >= levels_[i].minPlayers && playerCount <= levels_[i].maxPlayers) {
+            if (filtered == filteredIndex) {
+                return i;
+            }
+            ++filtered;
+        }
+    }
+    return 0;
 }
 
 } // namespace fireice
