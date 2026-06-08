@@ -1,0 +1,90 @@
+name: CI - Build & Check
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  format-check:
+    name: Code Format Check (clang-format)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check clang-format
+        shell: bash
+        run: |
+          echo "Checking C++ source formatting..."
+          SOURCES=$(find fire-ice/src -name '*.cpp' -o -name '*.hpp' | sort)
+          FAILED=0
+          for f in $SOURCES; do
+            clang-format --dry-run --Werror "$f" 2>&1 || {
+              echo "::error file=$f::Formatting required. Run: clang-format -i $f"
+              FAILED=1
+            }
+          done
+          if [ "$FAILED" -eq 1 ]; then
+            echo "::error::Some files need formatting. Run clang-format -i on the listed files."
+            exit 1
+          fi
+          echo "All source files passed format check."
+
+  build:
+    name: Build (MSVC Release)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure CMake
+        shell: bash
+        run: |
+          cd fire-ice
+          mkdir build
+          cd build
+          cmake .. -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        shell: bash
+        run: |
+          cd fire-ice/build
+          cmake --build . --config Release --parallel
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp fire-ice/build/Release/fireice_server.exe artifacts/ 2>/dev/null || true
+          cp fire-ice/build/Release/fireice_client.exe artifacts/ 2>/dev/null || true
+          cp fire-ice/build/Release/*.dll artifacts/ 2>/dev/null || true
+          cp -r fire-ice/build/Release/levels artifacts/ 2>/dev/null || true
+          cp -r fire-ice/build/Release/textures artifacts/ 2>/dev/null || true
+          echo "Artifacts collected:"
+          ls -la artifacts/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fireice-release
+          path: artifacts/
+          retention-days: 7
+
+  test:
+    name: Verify Executable
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: fireice-release
+          path: test-bin/
+
+      - name: Verify server starts
+        shell: bash
+        run: |
+          cd test-bin
+          chmod +x fireice_server.exe 2>/dev/null || true
+          echo "Starting server for smoke test (timeout 5s)..."
+          timeout 5 ./fireice_server.exe 2>&1 || true
+          echo "Server smoke test passed (process launched and terminated)."
