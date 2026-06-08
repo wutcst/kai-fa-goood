@@ -21,6 +21,10 @@ void printUsage(const char* program) {
               << "Examples:\n"
               << "  " << program << "                  # localhost, fire boy\n"
               << "  " << program << " 127.0.0.1 water  # localhost, water girl\n\n"
+              << "Title screen:\n"
+              << "  Up/Down         Select menu item\n"
+              << "  Enter           Confirm\n"
+              << "  Mouse           Click menu item\n\n"
               << "Lobby:\n"
               << "  Up/Down or 1-8  Select level\n"
               << "  ENTER           Ready / cancel ready\n\n"
@@ -50,7 +54,7 @@ int main(int argc, char* argv[]) {
     }
 
     fireice::GameClient client;
-    if (!client.connect(host, role)) {
+    if (!client.initialize(host, role)) {
         return 1;
     }
 

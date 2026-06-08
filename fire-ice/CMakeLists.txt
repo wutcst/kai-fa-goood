@@ -13,7 +13,7 @@ else()
 endif()
 
 include(FetchContent)
-set(SFML_BUILD_AUDIO OFF CACHE BOOL "" FORCE)
+set(SFML_BUILD_AUDIO ON CACHE BOOL "" FORCE)
 set(SFML_BUILD_NETWORK ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     SFML
@@ -46,12 +46,16 @@ target_link_libraries(fireice_server PRIVATE fireice_common sfml-network sfml-sy
 add_executable(fireice_client
     src/client/GameClient.cpp
     src/client/UiHelper.cpp
+    src/client/AssetManager.cpp
     src/client/main.cpp
 )
 target_include_directories(fireice_client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
 )
-target_link_libraries(fireice_client PRIVATE fireice_common sfml-graphics sfml-window sfml-network sfml-system)
+target_link_libraries(fireice_client PRIVATE fireice_common sfml-graphics sfml-window sfml-network sfml-system sfml-audio)
+if(MSVC)
+    target_compile_options(fireice_client PRIVATE /utf-8)
+endif()
 
 # Windows: 将 SFML 动态库复制到可执行文件目录，便于直接运行
 if(WIN32)
@@ -67,6 +71,10 @@ if(WIN32)
             $<TARGET_FILE:sfml-window>
             $<TARGET_FILE:sfml-network>
             $<TARGET_FILE:sfml-system>
+            $<TARGET_FILE:sfml-audio>
+            $<TARGET_FILE_DIR:fireice_client>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_BINARY_DIR}/_deps/sfml-src/extlibs/bin/x64/openal32.dll"
             $<TARGET_FILE_DIR:fireice_client>
     )
 endif()
@@ -80,3 +88,9 @@ foreach(target_name fireice_server fireice_client)
             "$<TARGET_FILE_DIR:${target_name}>/levels"
     )
 endforeach()
+add_custom_command(TARGET fireice_client POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:fireice_client>/textures"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets/textures"
+        "$<TARGET_FILE_DIR:fireice_client>/textures"
+)
