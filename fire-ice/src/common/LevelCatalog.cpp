@@ -69,4 +69,4 @@ uint8_t LevelCatalog::filteredIndexToGlobalIndex(uint8_t filteredIndex, uint8_t 
     return 0;
 }
 
-} // namespace fireice
+}  // namespace fireice

@@ -50,4 +50,4 @@ private:
     bool buttonsReady_ = false;
 };
 
-} // namespace fireice
+}  // namespace fireice

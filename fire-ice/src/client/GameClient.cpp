@@ -15,7 +15,7 @@ constexpr float kTitleCenterX = 512.0f;
 constexpr float kMenuStartY = 300.0f;
 constexpr float kMenuItemStep = 52.0f;
 
-} // namespace
+}  // namespace
 
 bool GameClient::initialize(const std::string& host, PlayerRole preferredRole) {
     host_ = host;
@@ -129,38 +129,38 @@ std::vector<sf::FloatRect> GameClient::titleMenuHitAreas() const {
 
 void GameClient::handleTitleMenuSelect(int index) {
     switch (index) {
-    case 0:
-        typedRoomCode_.clear();
-        beginConnect();
-        break;
-    case 1:
-        typedRoomCode_.clear();
-        clientScreen_ = ClientScreen::JoinRoom;
-        break;
-    case 2:
-        clientScreen_ = ClientScreen::Help;
-        break;
-    case 3:
-        if (preferredRole_ == PlayerRole::Fire) {
-            preferredRole_ = PlayerRole::Water;
-        } else if (preferredRole_ == PlayerRole::Water) {
-            preferredRole_ = PlayerRole::Poison;
-        } else {
-            preferredRole_ = PlayerRole::Fire;
-        }
-        role_ = preferredRole_;
-        playerName_ = preferredRole_ == PlayerRole::Fire ? "FireBoy"
-                    : preferredRole_ == PlayerRole::Water ? "WaterGirl"
-                    : "PoisonKid";
-        break;
-    case 4:
-        clientScreen_ = ClientScreen::Credits;
-        break;
-    case 5:
-        window_.close();
-        break;
-    default:
-        break;
+        case 0:
+            typedRoomCode_.clear();
+            beginConnect();
+            break;
+        case 1:
+            typedRoomCode_.clear();
+            clientScreen_ = ClientScreen::JoinRoom;
+            break;
+        case 2:
+            clientScreen_ = ClientScreen::Help;
+            break;
+        case 3:
+            if (preferredRole_ == PlayerRole::Fire) {
+                preferredRole_ = PlayerRole::Water;
+            } else if (preferredRole_ == PlayerRole::Water) {
+                preferredRole_ = PlayerRole::Poison;
+            } else {
+                preferredRole_ = PlayerRole::Fire;
+            }
+            role_ = preferredRole_;
+            playerName_ = preferredRole_ == PlayerRole::Fire    ? "FireBoy"
+                          : preferredRole_ == PlayerRole::Water ? "WaterGirl"
+                                                                : "PoisonKid";
+            break;
+        case 4:
+            clientScreen_ = ClientScreen::Credits;
+            break;
+        case 5:
+            window_.close();
+            break;
+        default:
+            break;
     }
 }
 
@@ -375,56 +375,56 @@ void GameClient::pollNetwork() {
 
         const auto* header = reinterpret_cast<const PacketHeader*>(buffer.data());
         switch (header->type) {
-        case PacketType::ConnectAccept: {
-            ConnectAcceptPacket packet{};
-            if (!unpackPacket(buffer.data(), received, packet)) {
+            case PacketType::ConnectAccept: {
+                ConnectAcceptPacket packet{};
+                if (!unpackPacket(buffer.data(), received, packet)) {
+                    break;
+                }
+                connected_ = true;
+                connectRequested_ = false;
+                clientScreen_ = ClientScreen::Room;
+                slot_ = packet.slot;
+                role_ = packet.role;
+                preferredRole_ = packet.role;
+                localReady_ = false;
+                roomAnimTimer_ = 0.0f;
+                useLobbyLayout();
+                updateMusic(GamePhase::Lobby);
+                std::cout << "[Client] Connected as " << roleName(role_) << " (slot " << static_cast<int>(slot_) << ")"
+                          << std::endl;
                 break;
             }
-            connected_ = true;
-            connectRequested_ = false;
-            clientScreen_ = ClientScreen::Room;
-            slot_ = packet.slot;
-            role_ = packet.role;
-            preferredRole_ = packet.role;
-            localReady_ = false;
-            roomAnimTimer_ = 0.0f;
-            useLobbyLayout();
-            updateMusic(GamePhase::Lobby);
-            std::cout << "[Client] Connected as " << roleName(role_) << " (slot " << static_cast<int>(slot_) << ")"
-                      << std::endl;
-            break;
-        }
-        case PacketType::ConnectReject: {
-            ConnectRejectPacket packet{};
-            if (!unpackPacket(buffer.data(), received, packet)) {
+            case PacketType::ConnectReject: {
+                ConnectRejectPacket packet{};
+                if (!unpackPacket(buffer.data(), received, packet)) {
+                    break;
+                }
+                connectRequested_ = false;
+                clientScreen_ = ClientScreen::Title;
+                std::cerr << "[Client] Rejected: " << packet.reason << std::endl;
                 break;
             }
-            connectRequested_ = false;
-            clientScreen_ = ClientScreen::Title;
-            std::cerr << "[Client] Rejected: " << packet.reason << std::endl;
-            break;
-        }
-        case PacketType::State: {
-            StatePacket packet{};
-            if (!unpackPacket(buffer.data(), received, packet)) {
+            case PacketType::State: {
+                StatePacket packet{};
+                if (!unpackPacket(buffer.data(), received, packet)) {
+                    break;
+                }
+
+                const GamePhase previousPhase = world_.phase;
+                if (packet.world.levelIndex != loadedLevelIndex_) {
+                    handleLevelChange(packet.world.levelIndex, !lobbyLayout_);
+                }
+
+                world_ = packet.world;
+                renderWorld_ = packet.world;
+
+                if (previousPhase != renderWorld_.phase) {
+                    onPhaseChanged(previousPhase, renderWorld_.phase);
+                }
                 break;
             }
-
-            const GamePhase previousPhase = world_.phase;
-            if (packet.world.levelIndex != loadedLevelIndex_) {
-                handleLevelChange(packet.world.levelIndex, !lobbyLayout_);
-            }
-
-            world_ = packet.world;
-            renderWorld_ = packet.world;
-
-            if (previousPhase != renderWorld_.phase) {
-                onPhaseChanged(previousPhase, renderWorld_.phase);
-            }
-            break;
-        }
-        default:
-            break;
+            default:
+                break;
         }
     }
 }
@@ -573,20 +573,23 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         return;
     }
 
-    if (event.key.code == sf::Keyboard::Escape && renderWorld_.phase != GamePhase::Lobby && clientScreen_ != ClientScreen::Room) {
+    if (event.key.code == sf::Keyboard::Escape && renderWorld_.phase != GamePhase::Lobby &&
+        clientScreen_ != ClientScreen::Room) {
         localReady_ = false;
         sendAction(PlayerAction::ReturnToLobby);
         return;
     }
 
     if (clientScreen_ == ClientScreen::Room) {
-        if ((event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::Up
-             || event.key.code == sf::Keyboard::Q) && !localReady_) {
+        if ((event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::Up ||
+             event.key.code == sf::Keyboard::Q) &&
+            !localReady_) {
             sendAction(PlayerAction::PrevLevel);
             return;
         }
-        if ((event.key.code == sf::Keyboard::Right || event.key.code == sf::Keyboard::Down
-             || event.key.code == sf::Keyboard::E) && !localReady_) {
+        if ((event.key.code == sf::Keyboard::Right || event.key.code == sf::Keyboard::Down ||
+             event.key.code == sf::Keyboard::E) &&
+            !localReady_) {
             sendAction(PlayerAction::NextLevel);
             return;
         }
@@ -595,8 +598,8 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
             int level = -1;
             if (keyCode >= static_cast<int>(sf::Keyboard::Num1) && keyCode <= static_cast<int>(sf::Keyboard::Num8)) {
                 level = keyCode - static_cast<int>(sf::Keyboard::Num1);
-            } else if (keyCode >= static_cast<int>(sf::Keyboard::Numpad1)
-                       && keyCode <= static_cast<int>(sf::Keyboard::Numpad8)) {
+            } else if (keyCode >= static_cast<int>(sf::Keyboard::Numpad1) &&
+                       keyCode <= static_cast<int>(sf::Keyboard::Numpad8)) {
                 level = keyCode - static_cast<int>(sf::Keyboard::Numpad1);
             }
             if (level >= 0 && static_cast<uint8_t>(level) < renderWorld_.levelCount && !localReady_) {
@@ -618,13 +621,15 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
     }
 
     if (renderWorld_.phase == GamePhase::Lobby) {
-        if ((event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::Up
-             || event.key.code == sf::Keyboard::Q) && !localReady_) {
+        if ((event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::Up ||
+             event.key.code == sf::Keyboard::Q) &&
+            !localReady_) {
             sendAction(PlayerAction::PrevLevel);
             return;
         }
-        if ((event.key.code == sf::Keyboard::Right || event.key.code == sf::Keyboard::Down
-             || event.key.code == sf::Keyboard::E) && !localReady_) {
+        if ((event.key.code == sf::Keyboard::Right || event.key.code == sf::Keyboard::Down ||
+             event.key.code == sf::Keyboard::E) &&
+            !localReady_) {
             sendAction(PlayerAction::NextLevel);
             return;
         }
@@ -648,8 +653,7 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
     }
 
     if (renderWorld_.phase == GamePhase::Victory) {
-        if (event.key.code == sf::Keyboard::N
-            && renderWorld_.levelIndex + 1 < renderWorld_.levelCount) {
+        if (event.key.code == sf::Keyboard::N && renderWorld_.levelIndex + 1 < renderWorld_.levelCount) {
             localReady_ = false;
             sendAction(PlayerAction::NextLevel);
             return;
@@ -770,7 +774,7 @@ void GameClient::renderTitleCharacters() {
     const float fireScale = 3.2f;
     fireBoy.setScale(-fireScale, fireScale);
     fireBoy.setPosition(static_cast<float>(LOBBY_WINDOW_WIDTH) - 48.0f,
-        static_cast<float>(LOBBY_WINDOW_HEIGHT) - fireTex.getSize().y * fireScale - 36.0f);
+                        static_cast<float>(LOBBY_WINDOW_HEIGHT) - fireTex.getSize().y * fireScale - 36.0f);
     window_.draw(fireBoy);
 }
 
@@ -787,18 +791,18 @@ void GameClient::renderTitleScreen() {
     renderTitleCharacters();
 
     ui_.drawOutlinedCenteredText(window_, text::fireBoy(), kTitleCenterX - 118.0f, 72.0f, 46, sf::Color(255, 90, 40),
-        sf::Color(120, 30, 10), 3.0f);
+                                 sf::Color(120, 30, 10), 3.0f);
     ui_.drawOutlinedCenteredText(window_, "&", kTitleCenterX, 72.0f, 40, sf::Color(255, 230, 80),
-        sf::Color(100, 70, 10), 3.0f);
+                                 sf::Color(100, 70, 10), 3.0f);
     ui_.drawOutlinedCenteredText(window_, text::waterGirl(), kTitleCenterX + 118.0f, 72.0f, 46, sf::Color(80, 180, 255),
-        sf::Color(20, 60, 120), 3.0f);
+                                 sf::Color(20, 60, 120), 3.0f);
     ui_.drawOutlinedCenteredText(window_, text::venture(), kTitleCenterX, 132.0f, 54, sf::Color(255, 230, 70),
-        sf::Color(100, 70, 10), 3.5f);
+                                 sf::Color(100, 70, 10), 3.5f);
     ui_.drawOutlinedCenteredText(window_, text::forestTemple(), kTitleCenterX, 188.0f, 58, sf::Color(90, 210, 90),
-        sf::Color(30, 90, 30), 4.0f);
+                                 sf::Color(30, 90, 30), 4.0f);
 
     ui_.drawOutlinedCenteredText(window_, "Forest Temple Online", kTitleCenterX, 248.0f, 18, sf::Color(210, 220, 200),
-        sf::Color(40, 50, 40), 1.5f);
+                                 sf::Color(40, 50, 40), 1.5f);
 
     const auto& menuItems = text::titleMenuItems();
     const int activeIndex = titleHoverIndex_ >= 0 ? titleHoverIndex_ : titleMenuIndex_;
@@ -807,12 +811,11 @@ void GameClient::renderTitleScreen() {
         ui_.drawTitleMenuItem(window_, menuItems[i], kTitleCenterX, y, 34, static_cast<int>(i) == activeIndex);
     }
 
-    const std::string roleLine = text::currentRolePrefix() + roleChineseName()
-        + "     " + text::serverPrefix() + host_;
+    const std::string roleLine = text::currentRolePrefix() + roleChineseName() + "     " + text::serverPrefix() + host_;
     ui_.drawCenteredText(window_, roleLine, kTitleCenterX, 548.0f, 18, sf::Color(220, 230, 210));
     ui_.drawCenteredText(window_, text::titleControlsHint(), kTitleCenterX, 578.0f, 15, sf::Color(180, 190, 170));
     ui_.drawCenteredText(window_, "WHUT SEPT 2026  Forest Temple Co-op", kTitleCenterX, 610.0f, 14,
-        sf::Color(140, 150, 130));
+                         sf::Color(140, 150, 130));
 }
 
 void GameClient::renderHelpOverlay() {
@@ -823,7 +826,7 @@ void GameClient::renderHelpOverlay() {
     const sf::FloatRect panel{172.0f, 96.0f, 680.0f, 448.0f};
     ui_.drawPanel(window_, panel, sf::Color(24, 34, 28), 235.0f);
     ui_.drawOutlinedCenteredText(window_, text::helpTitle(), kTitleCenterX, panel.top + 24.0f, 36,
-        sf::Color(255, 230, 100), sf::Color(80, 50, 10), 3.0f);
+                                 sf::Color(255, 230, 100), sf::Color(80, 50, 10), 3.0f);
 
     const float textX = panel.left + 36.0f;
     float y = panel.top + 88.0f;
@@ -837,7 +840,7 @@ void GameClient::renderHelpOverlay() {
     }
 
     ui_.drawCenteredText(window_, text::backToTitleHint(), kTitleCenterX, panel.top + panel.height - 36.0f, 18,
-        sf::Color(255, 220, 120));
+                         sf::Color(255, 220, 120));
 }
 
 void GameClient::renderCreditsOverlay() {
@@ -848,7 +851,7 @@ void GameClient::renderCreditsOverlay() {
     const sf::FloatRect panel{192.0f, 110.0f, 640.0f, 420.0f};
     ui_.drawPanel(window_, panel, sf::Color(24, 34, 28), 235.0f);
     ui_.drawOutlinedCenteredText(window_, text::creditsTitle(), kTitleCenterX, panel.top + 24.0f, 36,
-        sf::Color(255, 230, 100), sf::Color(80, 50, 10), 3.0f);
+                                 sf::Color(255, 230, 100), sf::Color(80, 50, 10), 3.0f);
 
     const float textX = panel.left + 40.0f;
     float y = panel.top + 96.0f;
@@ -862,15 +865,19 @@ void GameClient::renderCreditsOverlay() {
     }
 
     ui_.drawCenteredText(window_, text::backToTitleHint(), kTitleCenterX, panel.top + panel.height - 36.0f, 18,
-        sf::Color(255, 220, 120));
+                         sf::Color(255, 220, 120));
 }
 
 const char* GameClient::roleChineseName() const {
     switch (preferredRole_) {
-    case PlayerRole::Fire: return "火娃";
-    case PlayerRole::Water: return "冰娃";
-    case PlayerRole::Poison: return "毒娃";
-    default: return "未知";
+        case PlayerRole::Fire:
+            return "火娃";
+        case PlayerRole::Water:
+            return "冰娃";
+        case PlayerRole::Poison:
+            return "毒娃";
+        default:
+            return "未知";
     }
 }
 
@@ -885,9 +892,8 @@ void GameClient::drawBackgroundSprite(sf::RenderWindow& window, const sf::Textur
     const float scaleY = static_cast<float>(winSize.y) / static_cast<float>(texture.getSize().y);
     const float scale = std::max(scaleX, scaleY);
     sprite.setScale(scale, scale);
-    sprite.setPosition(
-        (static_cast<float>(winSize.x) - static_cast<float>(texture.getSize().x) * scale) / 2.0f,
-        (static_cast<float>(winSize.y) - static_cast<float>(texture.getSize().y) * scale) / 2.0f);
+    sprite.setPosition((static_cast<float>(winSize.x) - static_cast<float>(texture.getSize().x) * scale) / 2.0f,
+                       (static_cast<float>(winSize.y) - static_cast<float>(texture.getSize().y) * scale) / 2.0f);
     window.draw(sprite);
 }
 
@@ -911,10 +917,9 @@ void GameClient::renderJoinRoomScreen() {
     // Center dialog
     const sf::FloatRect dialog{w / 2.0f - 240.0f, h / 2.0f - 150.0f, 480.0f, 300.0f};
     ui_.drawPanel(window_, dialog, sf::Color(20, 28, 44, 240), 240.0f);
-    ui_.drawOutlinedCenteredText(window_, "加入房间", w / 2.0f, dialog.top + 24.0f, 32,
-        sf::Color(255, 230, 100), sf::Color(80, 50, 10), 3.0f);
-    ui_.drawCenteredText(window_, "请输入6位房间号码", w / 2.0f, dialog.top + 70.0f, 18,
-        sf::Color(180, 190, 210));
+    ui_.drawOutlinedCenteredText(window_, "加入房间", w / 2.0f, dialog.top + 24.0f, 32, sf::Color(255, 230, 100),
+                                 sf::Color(80, 50, 10), 3.0f);
+    ui_.drawCenteredText(window_, "请输入6位房间号码", w / 2.0f, dialog.top + 70.0f, 18, sf::Color(180, 190, 210));
 
     // Room code input box
     const float boxW = 280.0f;
@@ -936,10 +941,11 @@ void GameClient::renderJoinRoomScreen() {
         } else {
             displayCode.push_back('_');
         }
-        if (i < 5) displayCode.push_back(' ');
+        if (i < 5)
+            displayCode.push_back(' ');
     }
-    ui_.drawOutlinedCenteredText(window_, displayCode, w / 2.0f, boxY + 10.0f, 28,
-        sf::Color(255, 255, 255), sf::Color(40, 40, 80), 2.0f);
+    ui_.drawOutlinedCenteredText(window_, displayCode, w / 2.0f, boxY + 10.0f, 28, sf::Color(255, 255, 255),
+                                 sf::Color(40, 40, 80), 2.0f);
 
     // Blinking cursor
     if (static_cast<int>(roomAnimTimer_ * 2.0f) % 2 == 0 && typedRoomCode_.size() < 6) {
@@ -950,16 +956,16 @@ void GameClient::renderJoinRoomScreen() {
         window_.draw(cursor);
     }
 
-    ui_.drawCenteredText(window_, "[数字键] 输入  [Enter] 确认  [Esc] 返回",
-        w / 2.0f, dialog.top + 180.0f, 16, sf::Color(160, 170, 190));
+    ui_.drawCenteredText(window_, "[数字键] 输入  [Enter] 确认  [Esc] 返回", w / 2.0f, dialog.top + 180.0f, 16,
+                         sf::Color(160, 170, 190));
 
     if (!typedRoomCode_.empty() && typedRoomCode_.size() < 6) {
-        ui_.drawCenteredText(window_, "还需输入 " + std::to_string(6 - typedRoomCode_.size()) + " 位",
-            w / 2.0f, dialog.top + 210.0f, 15, sf::Color(200, 170, 100));
+        ui_.drawCenteredText(window_, "还需输入 " + std::to_string(6 - typedRoomCode_.size()) + " 位", w / 2.0f,
+                             dialog.top + 210.0f, 15, sf::Color(200, 170, 100));
     }
 
-    ui_.drawCenteredText(window_, "Server: " + host_ + ":" + std::to_string(SERVER_PORT),
-        w / 2.0f, dialog.top + 250.0f, 14, sf::Color(140, 150, 170));
+    ui_.drawCenteredText(window_, "Server: " + host_ + ":" + std::to_string(SERVER_PORT), w / 2.0f, dialog.top + 250.0f,
+                         14, sf::Color(140, 150, 170));
 }
 
 void GameClient::renderRoomScreen() {
@@ -977,17 +983,18 @@ void GameClient::renderRoomScreen() {
 
     // Top header bar
     ui_.drawPanel(window_, {0.0f, 0.0f, w, 68.0f}, sf::Color(16, 22, 40, 230), 230.0f);
-    ui_.drawOutlinedCenteredText(window_, "Fire & Ice 森林神殿", w / 2.0f, 8.0f, 28,
-        sf::Color(255, 230, 100), sf::Color(80, 50, 10), 2.5f);
+    ui_.drawOutlinedCenteredText(window_, "Fire & Ice 森林神殿", w / 2.0f, 8.0f, 28, sf::Color(255, 230, 100),
+                                 sf::Color(80, 50, 10), 2.5f);
     ui_.drawCenteredText(window_, "在线联机房", w / 2.0f, 42.0f, 16, sf::Color(180, 195, 220));
 
     // Room code display (prominent)
-    const std::string roomCodeStr = renderWorld_.roomCode[0]
-        ? std::string("房间号: ") + std::string(renderWorld_.roomCode)
-        : "房间号: ------";
-    ui_.drawOutlinedCenteredText(window_, roomCodeStr, w - 180.0f, 14.0f, 18,
-        sf::Color(100, 255, 140), sf::Color(20, 60, 20), 2.0f);
-    ui_.drawCenteredText(window_, std::string("在线: ") + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS),
+    const std::string roomCodeStr =
+        renderWorld_.roomCode[0] ? std::string("房间号: ") + std::string(renderWorld_.roomCode) : "房间号: ------";
+    ui_.drawOutlinedCenteredText(window_, roomCodeStr, w - 180.0f, 14.0f, 18, sf::Color(100, 255, 140),
+                                 sf::Color(20, 60, 20), 2.0f);
+    ui_.drawCenteredText(
+        window_,
+        std::string("在线: ") + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS),
         w - 180.0f, 42.0f, 13, sf::Color(160, 200, 140));
 
     // --- Player panels ---
@@ -1012,10 +1019,9 @@ void GameClient::renderRoomScreen() {
     if (renderWorld_.connectedCount == 2) {
         const float vsCenterX = w / 2.0f;
         const float vsY = panelY + panelH / 2.0f - 8.0f;
-        const sf::Color pulseCol(
-            255,
-            static_cast<sf::Uint8>(200 + static_cast<int>(55.0 * std::sin(roomAnimTimer_ * 2.5))),
-            static_cast<sf::Uint8>(50 + static_cast<int>(50.0 * std::sin(roomAnimTimer_ * 2.5))));
+        const sf::Color pulseCol(255,
+                                 static_cast<sf::Uint8>(200 + static_cast<int>(55.0 * std::sin(roomAnimTimer_ * 2.5))),
+                                 static_cast<sf::Uint8>(50 + static_cast<int>(50.0 * std::sin(roomAnimTimer_ * 2.5))));
         ui_.drawOutlinedCenteredText(window_, "VS", vsCenterX, vsY, 38, pulseCol, sf::Color(80, 40, 10), 3.0f);
     }
 
@@ -1028,10 +1034,8 @@ void GameClient::renderRoomScreen() {
     ui_.drawPanel(window_, previewPanel, sf::Color(18, 24, 36, 210), 210.0f);
 
     // Map preview content
-    const sf::FloatRect previewArea{
-        previewPanel.left + 16.0f, previewPanel.top + 40.0f,
-        previewPanel.width - 32.0f, previewPanel.height - 56.0f
-    };
+    const sf::FloatRect previewArea{previewPanel.left + 16.0f, previewPanel.top + 40.0f, previewPanel.width - 32.0f,
+                                    previewPanel.height - 56.0f};
     sf::RectangleShape previewBg({previewArea.width, previewArea.height});
     previewBg.setPosition(previewArea.left, previewArea.top);
     previewBg.setFillColor(sf::Color(8, 10, 18));
@@ -1039,13 +1043,13 @@ void GameClient::renderRoomScreen() {
     drawMapPreview(window_, previewArea);
 
     ui_.drawOutlinedCenteredText(window_, "地图预览", previewPanel.left + previewPanel.width / 2.0f,
-        previewPanel.top + 8.0f, 18, sf::Color(200, 220, 255), sf::Color(30, 50, 80), 1.5f);
+                                 previewPanel.top + 8.0f, 18, sf::Color(200, 220, 255), sf::Color(30, 50, 80), 1.5f);
 
-    const std::string previewDetail = std::string(renderWorld_.levelName) + "  |  Gems: "
-        + std::to_string(renderWorld_.totalGems) + "  |  Size: "
-        + std::to_string(map_.width()) + "x" + std::to_string(map_.height());
+    const std::string previewDetail =
+        std::string(renderWorld_.levelName) + "  |  Gems: " + std::to_string(renderWorld_.totalGems) +
+        "  |  Size: " + std::to_string(map_.width()) + "x" + std::to_string(map_.height());
     ui_.drawCenteredText(window_, previewDetail, previewPanel.left + previewPanel.width / 2.0f,
-        previewArea.top + previewArea.height + 12.0f, 15, sf::Color(200, 200, 180));
+                         previewArea.top + previewArea.height + 12.0f, 15, sf::Color(200, 200, 180));
 
     // --- Level selector bar ---
     const float levelBarX = 148.0f;
@@ -1056,21 +1060,21 @@ void GameClient::renderRoomScreen() {
 
     // Level navigation arrows
     ui_.drawCenteredText(window_, "\xe2\x97\x80", levelBarX + 20.0f, levelBarY + 4.0f, 28, sf::Color(180, 200, 240));
-    ui_.drawCenteredText(window_, "\xe2\x96\xb6", levelBarX + levelBarW - 20.0f, levelBarY + 4.0f, 28, sf::Color(180, 200, 240));
+    ui_.drawCenteredText(window_, "\xe2\x96\xb6", levelBarX + levelBarW - 20.0f, levelBarY + 4.0f, 28,
+                         sf::Color(180, 200, 240));
 
     const LevelCatalog& catalog = LevelCatalog::instance();
-    const std::string levelTitle = "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": "
-        + catalog.at(renderWorld_.levelIndex).title;
+    const std::string levelTitle =
+        "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + catalog.at(renderWorld_.levelIndex).title;
     ui_.drawOutlinedCenteredText(window_, levelTitle, levelBarX + levelBarW / 2.0f, levelBarY + 8.0f, 22,
-        sf::Color(255, 240, 180), sf::Color(60, 40, 10), 2.0f);
+                                 sf::Color(255, 240, 180), sf::Color(60, 40, 10), 2.0f);
 
     // Level dots
     const float dotStartX = levelBarX + levelBarW / 2.0f - (renderWorld_.levelCount * 16.0f) / 2.0f;
     for (uint8_t i = 0; i < renderWorld_.levelCount; ++i) {
         sf::CircleShape dot(4.0f);
         dot.setPosition(dotStartX + i * 16.0f, levelBarY + levelBarH - 14.0f);
-        dot.setFillColor(i == renderWorld_.levelIndex
-            ? sf::Color(255, 220, 80) : sf::Color(100, 110, 130));
+        dot.setFillColor(i == renderWorld_.levelIndex ? sf::Color(255, 220, 80) : sf::Color(100, 110, 130));
         window_.draw(dot);
     }
 
@@ -1093,13 +1097,13 @@ void GameClient::renderRoomScreen() {
     const std::string waterName = renderWorld_.playerNames[1][0] ? renderWorld_.playerNames[1] : "---";
     const std::string poisonName = renderWorld_.playerNames[2][0] ? renderWorld_.playerNames[2] : "---";
 
-    auto drawStatus = [&](float x, const std::string& label, const std::string& name,
-                          bool connected, bool ready, sf::Color roleColor) {
+    auto drawStatus = [&](float x, const std::string& label, const std::string& name, bool connected, bool ready,
+                          sf::Color roleColor) {
         sf::Color color = connected ? (ready ? roleColor : sf::Color(200, 180, 160)) : sf::Color(100, 100, 100);
         ui_.drawText(window_, label + ": " + name, x, statusY + 40.0f, 15, color);
         const std::string state = connected ? (ready ? " [已准备]" : " [等待中]") : " [未连接]";
-        sf::Color stateCol = connected ? (ready ? sf::Color(120, 255, 140) : sf::Color(180, 180, 180))
-                                       : sf::Color(140, 80, 80);
+        sf::Color stateCol =
+            connected ? (ready ? sf::Color(120, 255, 140) : sf::Color(180, 180, 180)) : sf::Color(140, 80, 80);
         ui_.drawText(window_, state, x + 120.0f, statusY + 40.0f, 14, stateCol);
     };
 
@@ -1108,14 +1112,15 @@ void GameClient::renderRoomScreen() {
     drawStatus(548.0f, "毒娃", poisonName, poisonConnected, poisonReady, sf::Color(80, 200, 80));
 
     // Map info line
-    const std::string mapLine = "当前地图: " + std::to_string(renderWorld_.levelIndex + 1) + "/"
-        + std::to_string(renderWorld_.levelCount) + "  宝石: " + std::to_string(renderWorld_.totalGems)
-        + "   尺寸: " + std::to_string(map_.width()) + "x" + std::to_string(map_.height());
+    const std::string mapLine = "当前地图: " + std::to_string(renderWorld_.levelIndex + 1) + "/" +
+                                std::to_string(renderWorld_.levelCount) +
+                                "  宝石: " + std::to_string(renderWorld_.totalGems) +
+                                "   尺寸: " + std::to_string(map_.width()) + "x" + std::to_string(map_.height());
     ui_.drawText(window_, mapLine, 52.0f, statusY + 72.0f, 15, sf::Color(170, 180, 200));
 
     // Controls hint
-    ui_.drawText(window_, "[↑↓] 或 [1-8] 选关   [Enter] 准备 / 取消准备   [Esc] 返回",
-        52.0f, statusY + 100.0f, 14, sf::Color(140, 150, 170));
+    ui_.drawText(window_, "[↑↓] 或 [1-8] 选关   [Enter] 准备 / 取消准备   [Esc] 返回", 52.0f, statusY + 100.0f, 14,
+                 sf::Color(140, 150, 170));
 
     // --- Right side buttons ---
     const float btnX = w - 172.0f;
@@ -1126,11 +1131,9 @@ void GameClient::renderRoomScreen() {
 
     if (assets_.hasButtons()) {
         if (!localReady_) {
-            ui_.drawImageButtonWithHint(window_, readyArea, assets_.playButton(),
-                "[Enter] 准备", true, true);
+            ui_.drawImageButtonWithHint(window_, readyArea, assets_.playButton(), "[Enter] 准备", true, true);
         } else {
-            ui_.drawImageButtonWithHint(window_, readyArea, assets_.playButton(),
-                "已准备! [Esc]", true, true);
+            ui_.drawImageButtonWithHint(window_, readyArea, assets_.playButton(), "已准备! [Esc]", true, true);
         }
     } else {
         if (!localReady_) {
@@ -1145,20 +1148,22 @@ void GameClient::renderRoomScreen() {
 
     // Waiting for players message (only when not all slots filled)
     if (renderWorld_.connectedCount < MAX_PLAYERS) {
-        const std::string waitMsg = "等待其他玩家加入房间... (当前 " + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS) + ")";
-        ui_.drawOutlinedCenteredText(window_, waitMsg, w / 2.0f, h - 28.0f, 17,
-            sf::Color(255, 220, 100), sf::Color(80, 50, 10), 2.0f);
+        const std::string waitMsg = "等待其他玩家加入房间... (当前 " + std::to_string(renderWorld_.connectedCount) +
+                                    "/" + std::to_string(MAX_PLAYERS) + ")";
+        ui_.drawOutlinedCenteredText(window_, waitMsg, w / 2.0f, h - 28.0f, 17, sf::Color(255, 220, 100),
+                                     sf::Color(80, 50, 10), 2.0f);
         const int dotCount = (static_cast<int>(roomAnimTimer_ * 2.0f) % 3) + 1;
         std::string dots;
-        for (int i = 0; i < dotCount; ++i) dots += ".";
+        for (int i = 0; i < dotCount; ++i)
+            dots += ".";
         ui_.drawText(window_, dots, w / 2.0f + 180.0f, h - 24.0f, 17, sf::Color(255, 220, 100));
     }
     const sf::FloatRect backArea{btnX, backBtnY, 140.0f, 36.0f};
     ui_.drawButton(window_, backArea, "离开房间", true, sf::Color(120, 60, 50));
 }
 
-void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH,
-                                       int playerSlot, PlayerRole expectedRole) {
+void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH, int playerSlot,
+                                       PlayerRole expectedRole) {
     const bool isConnected = renderWorld_.connectedCount > static_cast<uint8_t>(playerSlot);
     const bool isReady = (renderWorld_.readyMask & (1u << playerSlot)) != 0;
     const bool isSelf = (playerSlot == static_cast<int>(slot_)) && connected_;
@@ -1177,7 +1182,7 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
         panelHighlight = sf::Color(22, 52, 28, 230);
     }
     ui_.drawPanel(window_, {panelX, panelY, panelW, panelH}, isConnected ? panelHighlight : panelBase,
-        isConnected ? 230.0f : 180.0f);
+                  isConnected ? 230.0f : 180.0f);
 
     // Role title
     std::string roleTitle;
@@ -1197,7 +1202,7 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
         roleSub = "IJKL 操控";
     }
     ui_.drawOutlinedCenteredText(window_, roleTitle, panelX + panelW / 2.0f, panelY + 12.0f, 24,
-        isConnected ? roleColor : sf::Color(120, 120, 130), sf::Color(30, 20, 20), 2.0f);
+                                 isConnected ? roleColor : sf::Color(120, 120, 130), sf::Color(30, 20, 20), 2.0f);
 
     // Character portrait
     if (assets_.ready()) {
@@ -1242,13 +1247,13 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
     }
 
     // Player name
-    const std::string playerName = renderWorld_.playerNames[playerSlot][0]
-        ? renderWorld_.playerNames[playerSlot] : "---";
+    const std::string playerName =
+        renderWorld_.playerNames[playerSlot][0] ? renderWorld_.playerNames[playerSlot] : "---";
     ui_.drawCenteredText(window_, playerName, panelX + panelW / 2.0f, panelY + 152.0f, 16,
-        isConnected ? sf::Color(240, 240, 240) : sf::Color(120, 120, 120));
+                         isConnected ? sf::Color(240, 240, 240) : sf::Color(120, 120, 120));
 
     ui_.drawCenteredText(window_, roleSub, panelX + panelW / 2.0f, panelY + 174.0f, 13,
-        isConnected ? sf::Color(180, 180, 190) : sf::Color(100, 100, 110));
+                         isConnected ? sf::Color(180, 180, 190) : sf::Color(100, 100, 110));
 
     // Connection / Ready status
     std::string statusText;
@@ -1278,8 +1283,8 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
     ui_.drawCenteredText(window_, statusText, panelX + panelW / 2.0f, badgeY + 4.0f, 15, sf::Color::White);
 
     if (isReady) {
-        ui_.drawOutlinedCenteredText(window_, "\xe2\x9c\x93", panelX + panelW / 2.0f, panelY + 16.0f,
-            16, sf::Color(80, 255, 120), sf::Color(20, 60, 20), 1.5f);
+        ui_.drawOutlinedCenteredText(window_, "\xe2\x9c\x93", panelX + panelW / 2.0f, panelY + 16.0f, 16,
+                                     sf::Color(80, 255, 120), sf::Color(20, 60, 20), 1.5f);
     }
 }
 
@@ -1317,49 +1322,44 @@ void GameClient::renderLobbyScreen() {
 
         const std::string title = std::to_string(i + 1) + ". " + info.title;
         ui_.drawText(window_, title, rowBox.left + 12.0f, rowBox.top + 6.0f, 20,
-            selected ? sf::Color::White : sf::Color(200, 200, 200));
-        ui_.drawText(window_, info.subtitle, rowBox.left + 12.0f, rowBox.top + 24.0f, 14,
-            sf::Color(150, 160, 180));
+                     selected ? sf::Color::White : sf::Color(200, 200, 200));
+        ui_.drawText(window_, info.subtitle, rowBox.left + 12.0f, rowBox.top + 24.0f, 14, sf::Color(150, 160, 180));
     }
 
     const sf::FloatRect previewPanel{472.0f, 88.0f, 520.0f, 420.0f};
     ui_.drawPanel(window_, previewPanel, sf::Color(20, 26, 38, 210), 210.0f);
     ui_.drawText(window_, "MAP PREVIEW", previewPanel.left + 16.0f, previewPanel.top + 12.0f, 20,
-        sf::Color(220, 220, 220));
+                 sf::Color(220, 220, 220));
 
-    const sf::FloatRect previewArea{
-        previewPanel.left + kPreviewMargin,
-        previewPanel.top + 40.0f,
-        previewPanel.width - kPreviewMargin * 2.0f,
-        previewPanel.height - 52.0f
-    };
+    const sf::FloatRect previewArea{previewPanel.left + kPreviewMargin, previewPanel.top + 40.0f,
+                                    previewPanel.width - kPreviewMargin * 2.0f, previewPanel.height - 52.0f};
     sf::RectangleShape previewBg({previewArea.width, previewArea.height});
     previewBg.setPosition(previewArea.left, previewArea.top);
     previewBg.setFillColor(sf::Color(12, 14, 20));
     window_.draw(previewBg);
     drawMapPreview(window_, previewArea);
 
-    const std::string detail = std::string(renderWorld_.levelName) + "  |  Gems: "
-        + std::to_string(renderWorld_.totalGems);
+    const std::string detail =
+        std::string(renderWorld_.levelName) + "  |  Gems: " + std::to_string(renderWorld_.totalGems);
     ui_.drawCenteredText(window_, detail, previewPanel.left + previewPanel.width / 2.0f,
-        previewPanel.top + previewPanel.height - 28.0f, 18, sf::Color(255, 220, 120));
+                         previewPanel.top + previewPanel.height - 28.0f, 18, sf::Color(255, 220, 120));
 
     const sf::FloatRect statusPanel{32.0f, 524.0f, 960.0f, 96.0f};
     ui_.drawPanel(window_, statusPanel, sf::Color(26, 32, 48, 210), 210.0f);
 
-    const std::string roleLine = std::string("You: ") + roleDisplayName() + "     Players: "
-        + std::to_string(renderWorld_.connectedCount) + "/2";
+    const std::string roleLine = std::string("You: ") + roleDisplayName() +
+                                 "     Players: " + std::to_string(renderWorld_.connectedCount) + "/2";
     ui_.drawText(window_, roleLine, statusPanel.left + 20.0f, statusPanel.top + 14.0f, 20, sf::Color(220, 220, 220));
 
     const bool fireReady = (renderWorld_.readyMask & 0x01) != 0;
     const bool waterReady = (renderWorld_.readyMask & 0x02) != 0;
     ui_.drawText(window_, std::string("Fire: ") + (fireReady ? "Ready" : "Waiting"), statusPanel.left + 20.0f,
-        statusPanel.top + 42.0f, 18, fireReady ? sf::Color(255, 140, 80) : sf::Color(150, 150, 150));
+                 statusPanel.top + 42.0f, 18, fireReady ? sf::Color(255, 140, 80) : sf::Color(150, 150, 150));
     ui_.drawText(window_, std::string("Water: ") + (waterReady ? "Ready" : "Waiting"), statusPanel.left + 180.0f,
-        statusPanel.top + 42.0f, 18, waterReady ? sf::Color(100, 180, 255) : sf::Color(150, 150, 150));
+                 statusPanel.top + 42.0f, 18, waterReady ? sf::Color(100, 180, 255) : sf::Color(150, 150, 150));
 
-    ui_.drawText(window_, "[Up/Down] or [1-8] Select   [Enter] Ready   [Esc] Cancel ready",
-        statusPanel.left + 360.0f, statusPanel.top + 42.0f, 16, sf::Color(160, 170, 190));
+    ui_.drawText(window_, "[Up/Down] or [1-8] Select   [Enter] Ready   [Esc] Cancel ready", statusPanel.left + 360.0f,
+                 statusPanel.top + 42.0f, 16, sf::Color(160, 170, 190));
 
     const sf::FloatRect playArea{760.0f, statusPanel.top + 8.0f, 220.0f, 72.0f};
     if (assets_.hasButtons()) {
@@ -1395,8 +1395,8 @@ void GameClient::renderGameScreen() {
 
     drawMap(window_);
 
-    if (renderWorld_.phase == GamePhase::Playing || renderWorld_.phase == GamePhase::Victory
-        || renderWorld_.phase == GamePhase::GameOver) {
+    if (renderWorld_.phase == GamePhase::Playing || renderWorld_.phase == GamePhase::Victory ||
+        renderWorld_.phase == GamePhase::GameOver) {
         drawPlayer(window_, renderWorld_.players[0]);
         drawPlayer(window_, renderWorld_.players[1]);
     }
@@ -1405,17 +1405,17 @@ void GameClient::renderGameScreen() {
 
     const float centerX = static_cast<float>(window_.getSize().x) / 2.0f;
     switch (renderWorld_.phase) {
-    case GamePhase::Countdown:
-        drawCountdownOverlay(window_, centerX);
-        break;
-    case GamePhase::Victory:
-        drawResultOverlay(window_, centerX, true);
-        break;
-    case GamePhase::GameOver:
-        drawResultOverlay(window_, centerX, false);
-        break;
-    default:
-        break;
+        case GamePhase::Countdown:
+            drawCountdownOverlay(window_, centerX);
+            break;
+        case GamePhase::Victory:
+            drawResultOverlay(window_, centerX, true);
+            break;
+        case GamePhase::GameOver:
+            drawResultOverlay(window_, centerX, false);
+            break;
+        default:
+            break;
     }
 }
 
@@ -1425,9 +1425,9 @@ void GameClient::drawConnectingScreen(sf::RenderWindow& window) const {
 
     ui_.drawPanel(window, {w / 2.0f - 240.0f, h / 2.0f - 70.0f, 480.0f, 140.0f}, sf::Color(20, 30, 24, 220), 220.0f);
     ui_.drawOutlinedCenteredText(window, text::connectingTitle(), w / 2.0f, h / 2.0f - 36.0f, 30,
-        sf::Color(255, 240, 180), sf::Color(60, 40, 10), 2.5f);
+                                 sf::Color(255, 240, 180), sf::Color(60, 40, 10), 2.5f);
     ui_.drawCenteredText(window, host_ + "  |  " + text::rolePrefixConnecting() + roleChineseName(), w / 2.0f,
-        h / 2.0f + 8.0f, 18, sf::Color(200, 210, 190));
+                         h / 2.0f + 8.0f, 18, sf::Color(200, 210, 190));
     ui_.drawCenteredText(window, text::backToTitleHint(), w / 2.0f, h / 2.0f + 40.0f, 16, sf::Color(180, 190, 170));
 }
 
@@ -1459,7 +1459,7 @@ void GameClient::drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& a
                 const float gemScale = tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
                 gem.setScale(gemScale, gemScale);
                 gem.setPosition(px + (tileSize - gemTex.getSize().x * gemScale) / 2.0f,
-                    py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
+                                py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
                 window.draw(gem);
                 continue;
             }
@@ -1497,7 +1497,7 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
                 const float gemScale = tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
                 gem.setScale(gemScale, gemScale);
                 gem.setPosition(px + (tileSize - gemTex.getSize().x * gemScale) / 2.0f,
-                    py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
+                                py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
                 window.draw(gem);
                 continue;
             }
@@ -1561,21 +1561,20 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
     window.draw(hudBar);
 
     const int totalGems = renderWorld_.players[0].gems + renderWorld_.players[1].gems;
-    ui_.drawText(window,
-        "Gems: " + std::to_string(totalGems) + "/" + std::to_string(renderWorld_.totalGems),
-        16.0f, hudY + 16.0f, 20, sf::Color(255, 220, 80));
+    ui_.drawText(window, "Gems: " + std::to_string(totalGems) + "/" + std::to_string(renderWorld_.totalGems), 16.0f,
+                 hudY + 16.0f, 20, sf::Color(255, 220, 80));
 
-    const std::string levelLine = "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": "
-        + renderWorld_.levelName;
+    const std::string levelLine =
+        "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + renderWorld_.levelName;
     ui_.drawText(window, levelLine, 180.0f, hudY + 16.0f, 18, sf::Color(220, 220, 220));
 
     if (renderWorld_.phase == GamePhase::Playing) {
         const char* controlText = role_ == PlayerRole::Fire ? "WASD" : "Arrows";
-        ui_.drawText(window, std::string(roleDisplayName()) + " [" + controlText + "]",
-            500.0f, hudY + 16.0f, 18, sf::Color(180, 180, 180));
+        ui_.drawText(window, std::string(roleDisplayName()) + " [" + controlText + "]", 500.0f, hudY + 16.0f, 18,
+                     sf::Color(180, 180, 180));
         if (assets_.hasButtons()) {
             ui_.drawImageButton(window, {windowW - 168.0f, hudY + 6.0f, 152.0f, 48.0f}, assets_.menuButton(), true,
-                true);
+                                true);
             ui_.drawCenteredText(window, "[Esc] Lobby", windowW - 92.0f, hudY + 54.0f, 13, sf::Color(255, 200, 120));
         } else {
             ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
@@ -1585,7 +1584,7 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
     if (renderWorld_.phase == GamePhase::Countdown) {
         if (assets_.hasButtons()) {
             ui_.drawImageButton(window, {windowW - 168.0f, hudY + 6.0f, 152.0f, 48.0f}, assets_.menuButton(), true,
-                true);
+                                true);
             ui_.drawCenteredText(window, "[Esc] Lobby", windowW - 92.0f, hudY + 54.0f, 13, sf::Color(255, 200, 120));
         } else {
             ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
@@ -1612,53 +1611,53 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     window.draw(dim);
 
     if (assets_.ready()) {
-        const sf::Texture& screenTex = victory
-            ? ((renderWorld_.players[0].gems + renderWorld_.players[1].gems >= renderWorld_.totalGems
-                   && renderWorld_.totalGems > 0)
-                  ? assets_.winScreen()
-                  : assets_.winScreenPartial())
-            : assets_.loseScreen();
+        const sf::Texture& screenTex =
+            victory ? ((renderWorld_.players[0].gems + renderWorld_.players[1].gems >= renderWorld_.totalGems &&
+                        renderWorld_.totalGems > 0)
+                           ? assets_.winScreen()
+                           : assets_.winScreenPartial())
+                    : assets_.loseScreen();
 
         sf::Sprite screen(screenTex);
         const float targetW = 520.0f;
         const float targetH = 280.0f;
         const float scale = std::min(targetW / static_cast<float>(screenTex.getSize().x),
-            targetH / static_cast<float>(screenTex.getSize().y));
+                                     targetH / static_cast<float>(screenTex.getSize().y));
         screen.setScale(scale, scale);
-        screen.setPosition(centerX - screenTex.getSize().x * scale / 2.0f, mapH / 2.0f - screenTex.getSize().y * scale / 2.0f);
+        screen.setPosition(centerX - screenTex.getSize().x * scale / 2.0f,
+                           mapH / 2.0f - screenTex.getSize().y * scale / 2.0f);
         window.draw(screen);
     } else {
         const sf::Color panelColor = victory ? sf::Color(20, 60, 35) : sf::Color(70, 20, 20);
         ui_.drawPanel(window, {centerX - 260.0f, mapH / 2.0f - 140.0f, 520.0f, 280.0f}, panelColor, 235.0f);
     }
 
-    const std::string levelLine = "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": "
-        + renderWorld_.levelName;
+    const std::string levelLine =
+        "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + renderWorld_.levelName;
 
     if (victory) {
         ui_.drawCenteredText(window, "Level Complete!", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(140, 255, 170));
         ui_.drawCenteredText(window, levelLine, centerX, mapH / 2.0f - 48.0f, 22, sf::Color(220, 240, 220));
         ui_.drawCenteredText(window, "Both players reached the exit.", centerX, mapH / 2.0f - 16.0f, 20,
-            sf::Color(210, 230, 210));
+                             sf::Color(210, 230, 210));
     } else {
         ui_.drawCenteredText(window, "Game Over", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(255, 120, 120));
         ui_.drawCenteredText(window, levelLine, centerX, mapH / 2.0f - 48.0f, 22, sf::Color(240, 210, 210));
         if (!renderWorld_.players[0].alive && !renderWorld_.players[1].alive) {
             ui_.drawCenteredText(window, "Both players were eliminated.", centerX, mapH / 2.0f - 16.0f, 20,
-                sf::Color(240, 210, 210));
+                                 sf::Color(240, 210, 210));
         } else if (!renderWorld_.players[0].alive) {
             ui_.drawCenteredText(window, "Fire boy fell into danger.", centerX, mapH / 2.0f - 16.0f, 20,
-                sf::Color(240, 210, 210));
+                                 sf::Color(240, 210, 210));
         } else {
             ui_.drawCenteredText(window, "Water girl fell into danger.", centerX, mapH / 2.0f - 16.0f, 20,
-                sf::Color(240, 210, 210));
+                                 sf::Color(240, 210, 210));
         }
     }
 
     const int totalGems = renderWorld_.players[0].gems + renderWorld_.players[1].gems;
-    ui_.drawCenteredText(window,
-        "Gems: " + std::to_string(totalGems) + " / " + std::to_string(renderWorld_.totalGems),
-        centerX, mapH / 2.0f + 28.0f, 22, sf::Color(255, 220, 100));
+    ui_.drawCenteredText(window, "Gems: " + std::to_string(totalGems) + " / " + std::to_string(renderWorld_.totalGems),
+                         centerX, mapH / 2.0f + 28.0f, 22, sf::Color(255, 220, 100));
 
     const float btnW = 150.0f;
     const float btnH = 52.0f;
@@ -1672,52 +1671,69 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
             const float startX = centerX - totalW / 2.0f;
             ui_.drawImageButtonWithHint(window, {startX, rowY, btnW, btnH}, assets_.retryButton(), "[R] Retry");
             ui_.drawImageButtonWithHint(window, {startX + btnW + gap, rowY, btnW, btnH}, assets_.continueButton(),
-                "[N] Next");
-            ui_.drawImageButtonWithHint(window, {startX + (btnW + gap) * 2.0f, rowY, btnW, btnH},
-                assets_.menuButton(), "[Esc] Lobby");
+                                        "[N] Next");
+            ui_.drawImageButtonWithHint(window, {startX + (btnW + gap) * 2.0f, rowY, btnW, btnH}, assets_.menuButton(),
+                                        "[Esc] Lobby");
         } else {
             const float startX = centerX - btnW - gap / 2.0f;
             ui_.drawImageButtonWithHint(window, {startX, rowY, btnW, btnH}, assets_.retryButton(), "[R] Retry");
             ui_.drawImageButtonWithHint(window, {startX + btnW + gap, rowY, btnW, btnH}, assets_.menuButton(),
-                "[Esc] Lobby");
+                                        "[Esc] Lobby");
         }
     } else {
         ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 62.0f, 250.0f, 40.0f}, "R - Replay", true,
-            victory ? sf::Color(50, 130, 90) : sf::Color(170, 70, 70));
+                       victory ? sf::Color(50, 130, 90) : sf::Color(170, 70, 70));
         ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 110.0f, 250.0f, 40.0f}, "ESC - Lobby", true,
-            sf::Color(90, 90, 120));
+                       sf::Color(90, 90, 120));
         if (hasNextLevel) {
             ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 158.0f, 250.0f, 40.0f}, "N - Next Level", true,
-                sf::Color(60, 120, 200));
+                           sf::Color(60, 120, 200));
         }
     }
 }
 
 const char* GameClient::roleDisplayName() const {
     switch (role_) {
-    case PlayerRole::Fire: return "Fire Boy";
-    case PlayerRole::Water: return "Water Girl";
-    case PlayerRole::Poison: return "Poison Kid";
-    default: return "Unknown";
+        case PlayerRole::Fire:
+            return "Fire Boy";
+        case PlayerRole::Water:
+            return "Water Girl";
+        case PlayerRole::Poison:
+            return "Poison Kid";
+        default:
+            return "Unknown";
     }
 }
 
 sf::Color GameClient::tileColor(TileType type) const {
     switch (type) {
-    case TileType::Solid: return sf::Color(70, 55, 45);
-    case TileType::Lava: return sf::Color(220, 70, 30);
-    case TileType::Water: return sf::Color(40, 110, 220);
-    case TileType::FireDoor: return sf::Color(180, 60, 30);
-    case TileType::WaterDoor: return sf::Color(40, 90, 180);
-    case TileType::FireExit: return sf::Color(255, 140, 60);
-    case TileType::WaterExit: return sf::Color(100, 180, 255);
-    case TileType::Gem: return sf::Color(255, 220, 60);
-    case TileType::Acid: return sf::Color(34, 139, 34);
-    case TileType::PoisonDoor: return sf::Color(40, 120, 40);
-    case TileType::PoisonExit: return sf::Color(100, 200, 100);
-    case TileType::Button: return sf::Color(160, 160, 80);
-    default: return sf::Color::White;
+        case TileType::Solid:
+            return sf::Color(70, 55, 45);
+        case TileType::Lava:
+            return sf::Color(220, 70, 30);
+        case TileType::Water:
+            return sf::Color(40, 110, 220);
+        case TileType::FireDoor:
+            return sf::Color(180, 60, 30);
+        case TileType::WaterDoor:
+            return sf::Color(40, 90, 180);
+        case TileType::FireExit:
+            return sf::Color(255, 140, 60);
+        case TileType::WaterExit:
+            return sf::Color(100, 180, 255);
+        case TileType::Gem:
+            return sf::Color(255, 220, 60);
+        case TileType::Acid:
+            return sf::Color(34, 139, 34);
+        case TileType::PoisonDoor:
+            return sf::Color(40, 120, 40);
+        case TileType::PoisonExit:
+            return sf::Color(100, 200, 100);
+        case TileType::Button:
+            return sf::Color(160, 160, 80);
+        default:
+            return sf::Color::White;
     }
 }
 
-} // namespace fireice
+}  // namespace fireice

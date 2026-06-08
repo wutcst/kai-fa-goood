@@ -32,7 +32,7 @@ bool fileReadable(const std::filesystem::path& path) {
     return file.good();
 }
 
-} // namespace
+}  // namespace
 
 std::string resolveAssetPath(const std::string& path) {
     const std::filesystem::path requested(path);
@@ -52,4 +52,4 @@ std::string resolveAssetPath(const std::string& path) {
     return path;
 }
 
-} // namespace fireice
+}  // namespace fireice

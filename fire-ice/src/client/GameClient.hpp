@@ -59,8 +59,8 @@ private:
     void renderCreditsOverlay();
     void renderLobbyScreen();
     void renderRoomScreen();
-    void renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH,
-                               int playerSlot, PlayerRole expectedRole);
+    void renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH, int playerSlot,
+                               PlayerRole expectedRole);
     void renderJoinRoomScreen();
     void renderGameScreen();
     void drawBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
@@ -112,4 +112,4 @@ private:
     std::chrono::steady_clock::time_point lastConnectRetry_;
 };
 
-} // namespace fireice
+}  // namespace fireice

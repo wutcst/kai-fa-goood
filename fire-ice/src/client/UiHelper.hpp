@@ -14,14 +14,14 @@ public:
                   sf::Color color = sf::Color::White) const;
     void drawCenteredText(sf::RenderWindow& window, const std::string& text, float centerX, float y, unsigned size,
                           sf::Color color = sf::Color::White) const;
-    void drawButton(sf::RenderWindow& window, const sf::FloatRect& area, const std::string& label,
-                    bool highlighted, sf::Color accent) const;
+    void drawButton(sf::RenderWindow& window, const sf::FloatRect& area, const std::string& label, bool highlighted,
+                    sf::Color accent) const;
     void drawImageButton(sf::RenderWindow& window, const sf::FloatRect& area, const sf::Texture& texture,
                          bool enabled = true, bool highlighted = true) const;
     void drawImageButtonWithHint(sf::RenderWindow& window, const sf::FloatRect& area, const sf::Texture& texture,
                                  const std::string& hint, bool enabled = true, bool highlighted = true) const;
     void drawOutlinedText(sf::RenderWindow& window, const std::string& text, float x, float y, unsigned size,
-                            sf::Color fill, sf::Color outline, float outlineThickness = 2.0f) const;
+                          sf::Color fill, sf::Color outline, float outlineThickness = 2.0f) const;
     void drawOutlinedCenteredText(sf::RenderWindow& window, const std::string& text, float centerX, float y,
                                   unsigned size, sf::Color fill, sf::Color outline,
                                   float outlineThickness = 2.0f) const;
@@ -35,4 +35,4 @@ private:
     bool fontLoaded_ = false;
 };
 
-} // namespace fireice
+}  // namespace fireice

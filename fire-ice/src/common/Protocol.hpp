@@ -94,11 +94,15 @@ bool unpackPacket(const char* data, std::size_t size, T& packet) {
 
 inline const char* roleName(PlayerRole role) {
     switch (role) {
-    case PlayerRole::Fire: return "Fire";
-    case PlayerRole::Water: return "Water";
-    case PlayerRole::Poison: return "Poison";
-    default: return "None";
+        case PlayerRole::Fire:
+            return "Fire";
+        case PlayerRole::Water:
+            return "Water";
+        case PlayerRole::Poison:
+            return "Poison";
+        default:
+            return "None";
     }
 }
 
-} // namespace fireice
+}  // namespace fireice

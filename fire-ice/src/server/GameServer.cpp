@@ -26,7 +26,7 @@ std::string generateRoomCode() {
     return code;
 }
 
-} // namespace
+}  // namespace
 
 bool GameServer::start(uint8_t initialLevel) {
     if (socket_.bind(SERVER_PORT) != sf::Socket::Done) {
@@ -238,59 +238,60 @@ void GameServer::processPackets() {
 
         const auto* header = reinterpret_cast<const PacketHeader*>(buffer.data());
         switch (header->type) {
-        case PacketType::ConnectRequest: {
-            ConnectRequestPacket packet{};
-            if (!unpackPacket(buffer.data(), received, packet)) {
-                break;
-            }
-            acceptClient(sender, port, packet);
-            break;
-        }
-        case PacketType::Input: {
-            InputPacket packet{};
-            if (!unpackPacket(buffer.data(), received, packet)) {
-                break;
-            }
-            const auto slot = findSlotByEndpoint(sender, port);
-            if (!slot.has_value() || packet.slot != slot.value()) {
-                break;
-            }
-            if (world_.phase == GamePhase::Playing) {
-                clients_[slot.value()].pendingInput = static_cast<InputFlags>(packet.flags);
-            }
-            break;
-        }
-        case PacketType::Action: {
-            ActionPacket packet{};
-            if (!unpackPacket(buffer.data(), received, packet)) {
-                break;
-            }
-            const auto slot = findSlotByEndpoint(sender, port);
-            if (!slot.has_value() || packet.slot != slot.value()) {
-                break;
-            }
-            handleAction(slot.value(), packet.action, packet.value);
-            break;
-        }
-        case PacketType::Disconnect: {
-            DisconnectPacket packet{};
-            if (!unpackPacket(buffer.data(), received, packet)) {
-                break;
-            }
-            if (packet.slot < clients_.size()) {
-                clients_[packet.slot] = ClientSlot{};
-                syncConnectedCount();
-
-                if (world_.phase == GamePhase::Countdown || world_.phase == GamePhase::Playing) {
-                    returnToLobby();
+            case PacketType::ConnectRequest: {
+                ConnectRequestPacket packet{};
+                if (!unpackPacket(buffer.data(), received, packet)) {
+                    break;
                 }
-
-                std::cout << "[Server] Client slot " << static_cast<int>(packet.slot) << " disconnected" << std::endl;
+                acceptClient(sender, port, packet);
+                break;
             }
-            break;
-        }
-        default:
-            break;
+            case PacketType::Input: {
+                InputPacket packet{};
+                if (!unpackPacket(buffer.data(), received, packet)) {
+                    break;
+                }
+                const auto slot = findSlotByEndpoint(sender, port);
+                if (!slot.has_value() || packet.slot != slot.value()) {
+                    break;
+                }
+                if (world_.phase == GamePhase::Playing) {
+                    clients_[slot.value()].pendingInput = static_cast<InputFlags>(packet.flags);
+                }
+                break;
+            }
+            case PacketType::Action: {
+                ActionPacket packet{};
+                if (!unpackPacket(buffer.data(), received, packet)) {
+                    break;
+                }
+                const auto slot = findSlotByEndpoint(sender, port);
+                if (!slot.has_value() || packet.slot != slot.value()) {
+                    break;
+                }
+                handleAction(slot.value(), packet.action, packet.value);
+                break;
+            }
+            case PacketType::Disconnect: {
+                DisconnectPacket packet{};
+                if (!unpackPacket(buffer.data(), received, packet)) {
+                    break;
+                }
+                if (packet.slot < clients_.size()) {
+                    clients_[packet.slot] = ClientSlot{};
+                    syncConnectedCount();
+
+                    if (world_.phase == GamePhase::Countdown || world_.phase == GamePhase::Playing) {
+                        returnToLobby();
+                    }
+
+                    std::cout << "[Server] Client slot " << static_cast<int>(packet.slot) << " disconnected"
+                              << std::endl;
+                }
+                break;
+            }
+            default:
+                break;
         }
     }
 }
@@ -348,8 +349,8 @@ void GameServer::handleAction(uint8_t slot, PlayerAction action, uint8_t value) 
         return;
     }
 
-    if (action == PlayerAction::Restart
-        && (world_.phase == GamePhase::Victory || world_.phase == GamePhase::GameOver)) {
+    if (action == PlayerAction::Restart &&
+        (world_.phase == GamePhase::Victory || world_.phase == GamePhase::GameOver)) {
         returnToLobby();
         return;
     }
@@ -490,10 +491,14 @@ std::optional<uint8_t> GameServer::findSlotByEndpoint(const sf::IpAddress& addre
 
 PlayerRole GameServer::roleForSlot(uint8_t slot) const {
     switch (slot) {
-    case 0: return PlayerRole::Fire;
-    case 1: return PlayerRole::Water;
-    case 2: return PlayerRole::Poison;
-    default: return PlayerRole::None;
+        case 0:
+            return PlayerRole::Fire;
+        case 1:
+            return PlayerRole::Water;
+        case 2:
+            return PlayerRole::Poison;
+        default:
+            return PlayerRole::None;
     }
 }
 
@@ -551,8 +556,8 @@ void GameServer::acceptClient(const sf::IpAddress& address, unsigned short port,
     syncConnectedCount();
     broadcastState();
 
-    std::cout << "[Server] Client joined slot " << static_cast<int>(slot.value())
-              << " as " << roleName(role) << " from " << address << ":" << port << std::endl;
+    std::cout << "[Server] Client joined slot " << static_cast<int>(slot.value()) << " as " << roleName(role)
+              << " from " << address << ":" << port << std::endl;
 }
 
 void GameServer::rejectClient(const sf::IpAddress& address, unsigned short port, const char* reason) {
@@ -565,4 +570,4 @@ void GameServer::rejectClient(const sf::IpAddress& address, unsigned short port,
     socket_.send(buffer.data(), size, address, port);
 }
 
-} // namespace fireice
+}  // namespace fireice

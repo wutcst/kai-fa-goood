@@ -58,7 +58,7 @@ bool overlapsTile(const AABB& box, int tx, int ty) {
     return box.intersects(tileBox);
 }
 
-} // namespace
+}  // namespace
 
 AABB playerBounds(const PlayerState& player) {
     return {player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT};
@@ -88,7 +88,7 @@ void applyInput(PlayerState& player, InputFlags input, float dt) {
         player.vy = std::min(player.vy + GRAVITY * 2.0f * dt, MAX_FALL_SPEED);
     }
 
-    (void)dt;
+    (void) dt;
 }
 
 void integratePlayer(PlayerState& player, const GameMap& map, WorldState& world, float dt) {
@@ -111,7 +111,7 @@ void integratePlayer(PlayerState& player, const GameMap& map, WorldState& world,
 }
 
 bool sampleHazard(const GameMap& map, const PlayerState& player, const WorldState& world) {
-    (void)world;
+    (void) world;
     if (!player.alive) {
         return false;
     }
@@ -212,4 +212,4 @@ void updateButtons(const GameMap& map, WorldState& world) {
     world.poisonDoorOpen = poisonPressed;
 }
 
-} // namespace fireice
+}  // namespace fireice
