@@ -1,4 +1,4 @@
-# 火娃 & 冰娃 — 森林神庙会（Fire-Ice Online）
+# Fire-Ice Online — 联机协作平台游戏
 
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/u1xW62gh)
 
@@ -11,7 +11,7 @@
 
 玩家分别扮演 **火娃**、**冰娃**、**毒娃**，在关卡中跳跃、协作，抵达各自对应的出口即可过关。游戏包含完整的中文 UI 流程：主菜单 → 等待室 → 选关 → 倒计时 → 对局 → 结算。
 
-本项目 **不是** 对经典 Flash 游戏的简单复刻，而是在借鉴平台跳跃玩法的基础上，自行设计关卡结构与联机流程，作为独立实训作品持续迭代。
+本项目为小组原创的联机平台跳跃游戏，关卡结构与协作流程均为自行设计。
 
 ---
 
@@ -221,14 +221,14 @@ fireice_client.exe 127.0.0.1 poison
 
 | # | 碰撞文件 | 视觉文件 | 名称 | 人数 | 当前地图特点 |
 |---|----------|----------|------|------|--------------|
-| 1 | `level01_collision.txt` | `level01.tmx` | Forest Entrance | 1～3 | 教程关，侧轨 + 平台跳跃 |
-| 2 | `level02_collision.txt` | `level02.tmx` | Twin Pools | 1～3 | 左右对称阶梯，顶部汇合 |
-| 3 | `level03_collision.txt` | `level03.tmx` | Temple Gates | 1～3 | 中央错落平台 |
-| 4 | `level04_collision.txt` | `level04.tmx` | Gem Grotto | 1～3 | 踏脚石式斜向平台 |
-| 5 | `level05_collision.txt` | `level05.tmx` | Vertical Shaft | 1～3 | 三列短梯，底部汇合（含毒娃） |
-| 6 | `level06_collision.txt` | `level06.tmx` | Co-op Bridge | 1～3 | 上下长桥 + 中间踏脚石 |
-| 7 | `level07_collision.txt` | `level07.tmx` | Element Maze | 1～3 | 之字形左右交替上升 |
-| 8 | `level08_collision.txt` | `level08.tmx` | Forest Shrine | 1～3 | 终局对称上升，中央出口台 |
+| 1 | `level01_collision.txt` | `level01.tmx` | 入门试炼 | 1～3 | 教程关，侧轨 + 平台跳跃 |
+| 2 | `level02_collision.txt` | `level02.tmx` | 双梯汇合 | 1～3 | 左右对称阶梯，顶部汇合 |
+| 3 | `level03_collision.txt` | `level03.tmx` | 中央台阶 | 1～3 | 中央错落平台 |
+| 4 | `level04_collision.txt` | `level04.tmx` | 踏石穿越 | 1～3 | 踏脚石式斜向平台 |
+| 5 | `level05_collision.txt` | `level05.tmx` | 三岔合流 | 1～3 | 三列短梯，底部汇合（含毒娃） |
+| 6 | `level06_collision.txt` | `level06.tmx` | 协作天桥 | 1～3 | 上下长桥 + 中间踏脚石 |
+| 7 | `level07_collision.txt` | `level07.tmx` | 之字攀升 | 1～3 | 之字形左右交替上升 |
+| 8 | `level08_collision.txt` | `level08.tmx` | 终局高台 | 1～3 | 对称上升，中央出口台 |
 
 关卡注册位于 `fire-ice/src/common/LevelCatalog.cpp`。新增关卡后需同步修改该文件并重新编译。
 
@@ -286,9 +286,7 @@ python fire-ice/tools/import_tiled_level.py "你的Tiled文件夹路径" --level
 
 ## 致谢
 
-- 玩法灵感参考经典双人平台游戏 *Fireboy & Watergirl*  
-- 联机框架参考 [Class531 QT 冰火人项目](https://github.com)  
-- [SFML](https://www.sfml-dev.org/) · [Tiled](https://www.mapeditor.org/) · [CMake](https://cmake.org/)  
+- [SFML](https://www.sfml-dev.org/) · [Tiled](https://www.mapeditor.org/) · [CMake](https://cmake.org/)
 
 ---
 
