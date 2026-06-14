@@ -5,6 +5,10 @@ set "CMAKE_EXE=cmake"
 where cmake >nul 2>&1
 if errorlevel 1 set "CMAKE_EXE=C:\Program Files\CMake\bin\cmake.exe"
 
+echo Checking for running game processes...
+taskkill /F /IM fireice_client.exe >nul 2>&1
+taskkill /F /IM fireice_server.exe >nul 2>&1
+
 if not exist build mkdir build
 cd build
 
@@ -12,7 +16,11 @@ cd build
 if errorlevel 1 exit /b 1
 
 "%CMAKE_EXE%" --build . --config Release
-if errorlevel 1 exit /b 1
+if errorlevel 1 (
+    echo.
+    echo Build failed. If you see LNK1104, close all Fire-Ice windows and run build.bat again.
+    exit /b 1
+)
 
 echo.
 echo Build complete. Run:

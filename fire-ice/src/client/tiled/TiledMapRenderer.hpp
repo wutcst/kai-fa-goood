@@ -10,8 +10,9 @@ namespace fireice {
 class TiledMapRenderer {
 public:
     bool load(const std::string& tmxPath);
-    void bake();
+    void bake();   // 预渲染静态层到纹理，运行时只 draw 一次
     void drawStatic(sf::RenderWindow& window) const;
+    void drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const; // 选关缩略图
 
     bool ready() const { return isBaked_; }
     int mapWidth() const { return mapWidth_; }
@@ -31,15 +32,40 @@ private:
         std::vector<int> gids;
     };
 
+    struct ImageLayer {
+        sf::Texture texture;
+        int imageWidth = 0;
+        int imageHeight = 0;
+        bool repeatX = false;
+        bool repeatY = false;
+    };
+
+    struct ObjectTile {
+        int gid = 0;
+        float x = 0.0f;
+        float y = 0.0f;
+        float width = 0.0f;
+        float height = 0.0f;
+    };
+
     const TilesetRef* findTileset(int gid) const;
     void drawLayerToTarget(sf::RenderTexture& target, const Layer& layer) const;
+    void drawImageLayersToTarget(sf::RenderTexture& target) const;
+    void drawImageLayersToWindow(sf::RenderWindow& window) const;
+    void drawObjectTilesToTarget(sf::RenderTexture& target) const;
+    void drawGidSprite(sf::RenderTexture& target, int gid, float x, float y, float width, float height) const;
+    static bool isSpawnObjectName(const std::string& name);
+    static int decodeGid(int rawGid);
 
     int mapWidth_ = 0;
     int mapHeight_ = 0;
     int tileWidth_ = 32;
     int tileHeight_ = 32;
+    float mapScale_ = 1.0f; // TMX 16px 图块 → 游戏 32px 的缩放比
     std::vector<TilesetRef> tilesets_;
     std::vector<Layer> visualLayers_;
+    std::vector<ImageLayer> imageLayers_;
+    std::vector<ObjectTile> objectTiles_;
     sf::RenderTexture bakedTexture_;
     sf::Sprite bakedSprite_;
     bool isBaked_ = false;

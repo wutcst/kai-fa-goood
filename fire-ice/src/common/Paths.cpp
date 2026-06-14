@@ -37,24 +37,24 @@ bool fileReadable(const std::filesystem::path& path) {
 std::string resolveAssetPath(const std::string& path) {
     const std::filesystem::path requested(path);
     if (requested.is_absolute() && fileReadable(requested)) {
-        return requested.string();
+        return requested.lexically_normal().string();
     }
 
     if (fileReadable(requested)) {
-        return std::filesystem::absolute(requested).string();
+        return std::filesystem::absolute(requested).lexically_normal().string();
     }
 
     const std::filesystem::path besideExe = executableDirectory() / requested;
     if (fileReadable(besideExe)) {
-        return besideExe.string();
+        return besideExe.lexically_normal().string();
     }
 
     const std::filesystem::path besideExeFile = executableDirectory() / requested.filename();
     if (fileReadable(besideExeFile)) {
-        return besideExeFile.string();
+        return besideExeFile.lexically_normal().string();
     }
 
-    return path;
+    return requested.lexically_normal().string();
 }
 
 } // namespace fireice

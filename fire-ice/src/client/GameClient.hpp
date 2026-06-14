@@ -60,8 +60,8 @@ private:
     void renderCreditsOverlay();
     void renderLobbyScreen();
     void drawLevelProgressMap();
-    void drawLevelNode(uint8_t index, bool selected, bool unlocked, bool completed);
-    void drawLevelPath(uint8_t fromIndex, uint8_t toIndex, bool unlocked);
+    void drawLevelNode(uint8_t index, uint8_t levelCount, bool selected, bool unlocked, bool completed);
+    void drawLevelPath(uint8_t fromIndex, uint8_t toIndex, uint8_t levelCount, bool unlocked);
     void handleLobbyMouseClick(const sf::Event& event);
     void handleLobbyMouseWheel(const sf::Event& event);
     int levelNodeAtPosition(float x, float y) const;
@@ -83,6 +83,8 @@ private:
     sf::Color tileColor(TileType type) const;
     const char* roleDisplayName() const;
     const char* roleChineseName() const;
+    bool localWaitingReady() const;
+    bool allPlayersWaitingReady() const;
 
     sf::UdpSocket socket_;
     sf::RenderWindow window_;

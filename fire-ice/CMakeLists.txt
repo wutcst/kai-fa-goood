@@ -100,8 +100,4 @@ add_custom_command(TARGET fireice_client POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/assets/maps"
         "$<TARGET_FILE_DIR:fireice_client>/maps"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:fireice_client>/tilesets"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/assets/tilesets"
-        "$<TARGET_FILE_DIR:fireice_client>/tilesets"
 )

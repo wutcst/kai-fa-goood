@@ -13,6 +13,7 @@ bool tileBlocks(const GameMap& map, int tx, int ty, PlayerRole role, const World
 }
 
 void resolveAxis(PlayerState& player, const GameMap& map, const WorldState& world, bool horizontal) {
+    // 逐格检测 AABB 与 solid 重叠，沿单轴推出
     AABB box = playerBounds(player);
 
     const int minX = static_cast<int>(std::floor(box.left() / TILE_SIZE));
@@ -64,7 +65,8 @@ AABB playerBounds(const PlayerState& player) {
     return {player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT};
 }
 
-void applyInput(PlayerState& player, InputFlags input, float dt) {
+void applyInput(PlayerState& player, InputFlags input, float dt, bool jumpPressed, bool jumpHeld,
+    bool& airJumpUsedThisHold) {
     if (!player.alive) {
         return;
     }
@@ -79,9 +81,16 @@ void applyInput(PlayerState& player, InputFlags input, float dt) {
 
     player.vx = move * MOVE_SPEED;
 
-    if (hasFlag(input, InputFlags::Jump) && player.onGround) {
+    if (jumpPressed && player.onGround) {
         player.vy = -JUMP_SPEED;
         player.onGround = false;
+        player.airJumpsLeft = MAX_AIR_JUMPS;
+        airJumpUsedThisHold = false;
+    } else if (!player.onGround && player.airJumpsLeft > 0
+        && ((jumpPressed) || (jumpHeld && !airJumpUsedThisHold))) {
+        player.vy = -JUMP_SPEED;
+        --player.airJumpsLeft;
+        airJumpUsedThisHold = true;
     }
 
     if (hasFlag(input, InputFlags::Down) && !player.onGround) {
@@ -99,11 +108,16 @@ void integratePlayer(PlayerState& player, const GameMap& map, WorldState& world,
     player.onGround = false;
     player.vy = std::min(player.vy + GRAVITY * dt, MAX_FALL_SPEED);
 
+    // 先水平后垂直，分轴碰撞解析
     player.x += player.vx * dt;
     resolveAxis(player, map, world, true);
 
     player.y += player.vy * dt;
     resolveAxis(player, map, world, false);
+
+    if (player.onGround) {
+        player.airJumpsLeft = 0;
+    }
 
     if (player.y < -TILE_SIZE * 2.0f || player.y > map.height() * TILE_SIZE + TILE_SIZE * 4.0f) {
         player.alive = false;
@@ -178,6 +192,7 @@ void collectGems(PlayerState& player, GameMap& map) {
 }
 
 void updateButtons(const GameMap& map, WorldState& world) {
+    // 任意存活玩家站在按钮上即开门，离开则关
     bool firePressed = false;
     bool waterPressed = false;
     bool poisonPressed = false;

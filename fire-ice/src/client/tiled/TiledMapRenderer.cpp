@@ -2,8 +2,11 @@
 
 #include "Paths.hpp"
 #include "TmxUtil.hpp"
+#include "Types.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <filesystem>
 #include <iostream>
 
 namespace fireice {
@@ -61,12 +64,69 @@ bool loadTilesetFromTsx(const std::string& tsxPath, int firstGid, TilesetLoadDat
     return true;
 }
 
+bool loadTilesetFromTsj(const std::string& tsjPath, int firstGid, TilesetLoadData& out) {
+    const std::string json = tmx::readFile(tsjPath);
+    if (json.empty()) {
+        return false;
+    }
+
+    out.firstGid = firstGid;
+    if (const auto tw = tmx::jsonIntField(json, "tilewidth")) {
+        out.tileWidth = *tw;
+    }
+    if (const auto th = tmx::jsonIntField(json, "tileheight")) {
+        out.tileHeight = *th;
+    }
+    if (const auto columns = tmx::jsonIntField(json, "columns")) {
+        out.columns = *columns;
+    }
+
+    const auto image = tmx::jsonStringField(json, "image");
+    if (!image) {
+        return false;
+    }
+
+    const std::string imagePath = resolveAssetPath(tmx::joinPath(tmx::parentDirectory(tsjPath), *image));
+    if (!out.texture.loadFromFile(imagePath)) {
+        std::cerr << "[TiledMapRenderer] Failed to load tileset image: " << imagePath << std::endl;
+        return false;
+    }
+    if (out.columns <= 0) {
+        const unsigned texWidth = out.texture.getSize().x;
+        out.columns = static_cast<int>(texWidth / static_cast<unsigned>(out.tileWidth));
+    }
+    return true;
+}
+
+bool loadTilesetFromFile(const std::string& path, int firstGid, TilesetLoadData& out) {
+    if (path.size() >= 4 && path.substr(path.size() - 4) == ".tsj") {
+        return loadTilesetFromTsj(path, firstGid, out);
+    }
+    return loadTilesetFromTsx(path, firstGid, out);
+}
+
 } // namespace
+
+bool TiledMapRenderer::isSpawnObjectName(const std::string& name) {
+    std::string lower = name;
+    for (char& c : lower) {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    return lower == "player1" || lower == "player2" || lower == "player"
+        || lower == "fire_spawn" || lower == "water_spawn" || lower == "poison_spawn";
+}
+
+int TiledMapRenderer::decodeGid(int rawGid) {
+    return rawGid & 0x1FFFFFFF;
+}
 
 bool TiledMapRenderer::load(const std::string& tmxPath) {
     isBaked_ = false;
     tilesets_.clear();
     visualLayers_.clear();
+    imageLayers_.clear();
+    objectTiles_.clear();
+    mapScale_ = 1.0f;
 
     const std::string resolvedTmx = resolveAssetPath(tmxPath);
     const std::string xml = tmx::readFile(resolvedTmx);
@@ -93,6 +153,11 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
         tileHeight_ = std::stoi(*th);
     }
 
+    if (tileWidth_ > 0 && tileWidth_ != static_cast<int>(TILE_SIZE)) {
+        // 例如 TMX tilewidth=16，游戏逻辑 TILE_SIZE=32
+        mapScale_ = TILE_SIZE / static_cast<float>(tileWidth_);
+    }
+
     const std::string mapDir = tmx::parentDirectory(resolvedTmx);
     for (const std::string& tilesetTag : tmx::findTags(xml, "tileset")) {
         const auto source = tmx::attributeValue(tilesetTag, "source");
@@ -105,8 +170,8 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
         }
 
         TilesetLoadData loaded;
-        const std::string tsxPath = resolveAssetPath(tmx::joinPath(mapDir, *source));
-        if (!loadTilesetFromTsx(tsxPath, std::stoi(*firstGid), loaded)) {
+        const std::string tilesetPath = resolveAssetPath(tmx::joinPath(mapDir, *source));
+        if (!loadTilesetFromFile(tilesetPath, std::stoi(*firstGid), loaded)) {
             continue;
         }
         TilesetRef tileset;
@@ -121,20 +186,60 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
     std::sort(tilesets_.begin(), tilesets_.end(),
         [](const TilesetRef& a, const TilesetRef& b) { return a.firstGid < b.firstGid; });
 
-    static const char* kVisualLayers[] = {"Background", "Walls", "Decor"};
-    for (const char* layerName : kVisualLayers) {
-        const auto csv = tmx::findLayerData(xml, layerName);
-        if (!csv) {
+    for (const tmx::ImageLayerData& imageLayer : tmx::findAllImageLayers(xml)) {
+        const std::filesystem::path imagePath =
+            std::filesystem::path(mapDir) / std::filesystem::path(imageLayer.imageSource);
+        const std::string resolvedImage =
+            resolveAssetPath(imagePath.lexically_normal().string());
+        ImageLayer loaded;
+        loaded.imageWidth = imageLayer.imageWidth;
+        loaded.imageHeight = imageLayer.imageHeight;
+        loaded.repeatX = imageLayer.repeatX;
+        loaded.repeatY = imageLayer.repeatY;
+        if (!loaded.texture.loadFromFile(resolvedImage)) {
+            std::cerr << "[TiledMapRenderer] Failed to load image layer: " << resolvedImage << std::endl;
+            continue;
+        }
+        loaded.texture.setSmooth(false);
+        const sf::Vector2u texSize = loaded.texture.getSize();
+        if (loaded.imageWidth <= 0) {
+            loaded.imageWidth = static_cast<int>(texSize.x);
+        }
+        if (loaded.imageHeight <= 0) {
+            loaded.imageHeight = static_cast<int>(texSize.y);
+        }
+        imageLayers_.push_back(std::move(loaded));
+    }
+
+    for (const tmx::TileLayerData& tileLayer : tmx::findAllTileLayers(xml)) {
+        if (static_cast<int>(tileLayer.gids.size()) != mapWidth_ * mapHeight_) {
+            std::cerr << "[TiledMapRenderer] Layer size mismatch: " << tileLayer.name << std::endl;
             continue;
         }
         Layer layer;
-        layer.name = layerName;
-        layer.gids = tmx::parseCsvInts(*csv);
-        if (static_cast<int>(layer.gids.size()) != mapWidth_ * mapHeight_) {
-            std::cerr << "[TiledMapRenderer] Layer size mismatch: " << layerName << std::endl;
+        layer.name = tileLayer.name;
+        layer.gids = tileLayer.gids;
+        visualLayers_.push_back(std::move(layer));
+    }
+
+    for (const tmx::ObjectTileData& obj : tmx::findObjectTiles(xml)) {
+        // 出生点 object 由服务端 collision 决定，视觉层跳过
+        if (isSpawnObjectName(obj.name)) {
             continue;
         }
-        visualLayers_.push_back(std::move(layer));
+        ObjectTile tile;
+        tile.gid = obj.gid;
+        tile.x = obj.x;
+        tile.y = obj.y;
+        tile.width = obj.width;
+        tile.height = obj.height;
+        objectTiles_.push_back(std::move(tile));
+    }
+
+    if (visualLayers_.empty()) {
+        std::cerr << "[TiledMapRenderer] No tile layers found in map: " << resolvedTmx << std::endl;
+    } else if (tilesets_.empty()) {
+        std::cerr << "[TiledMapRenderer] No tilesets loaded for map: " << resolvedTmx << std::endl;
     }
 
     return !tilesets_.empty() && !visualLayers_.empty();
@@ -155,6 +260,39 @@ const TiledMapRenderer::TilesetRef* TiledMapRenderer::findTileset(int gid) const
     return chosen;
 }
 
+void TiledMapRenderer::drawGidSprite(sf::RenderTexture& target, int rawGid, float x, float y, float width,
+    float height) const {
+    const int gid = decodeGid(rawGid);
+    const TilesetRef* tileset = findTileset(gid);
+    if (tileset == nullptr) {
+        return;
+    }
+
+    const int localId = gid - tileset->firstGid;
+    if (localId < 0) {
+        return;
+    }
+
+    const int columns = std::max(1, tileset->columns);
+    const int sx = (localId % columns) * tileset->tileWidth;
+    const int sy = (localId / columns) * tileset->tileHeight;
+
+    const float drawWidth = width > 0.0f ? width : static_cast<float>(tileset->tileWidth);
+    const float drawHeight = height > 0.0f ? height : static_cast<float>(tileset->tileHeight);
+    const float drawX = x;
+    const float drawY = y - drawHeight;
+
+    sf::Sprite sprite(tileset->texture);
+    sprite.setTextureRect(sf::IntRect(sx, sy, tileset->tileWidth, tileset->tileHeight));
+    sprite.setPosition(drawX, drawY);
+    if (drawWidth != static_cast<float>(tileset->tileWidth)
+        || drawHeight != static_cast<float>(tileset->tileHeight)) {
+        sprite.setScale(drawWidth / static_cast<float>(tileset->tileWidth),
+            drawHeight / static_cast<float>(tileset->tileHeight));
+    }
+    target.draw(sprite);
+}
+
 void TiledMapRenderer::drawLayerToTarget(sf::RenderTexture& target, const Layer& layer) const {
     for (int y = 0; y < mapHeight_; ++y) {
         for (int x = 0; x < mapWidth_; ++x) {
@@ -162,27 +300,80 @@ void TiledMapRenderer::drawLayerToTarget(sf::RenderTexture& target, const Layer&
             if (gid <= 0) {
                 continue;
             }
-            const TilesetRef* tileset = findTileset(gid);
-            if (tileset == nullptr) {
-                continue;
-            }
-            const int localId = gid - tileset->firstGid;
-            if (localId < 0) {
-                continue;
-            }
-            const int columns = std::max(1, tileset->columns);
-            const int sx = (localId % columns) * tileset->tileWidth;
-            const int sy = (localId / columns) * tileset->tileHeight;
-
-            sf::Sprite sprite(tileset->texture);
-            sprite.setTextureRect(sf::IntRect(sx, sy, tileset->tileWidth, tileset->tileHeight));
-            sprite.setPosition(static_cast<float>(x * tileWidth_), static_cast<float>(y * tileHeight_));
-            target.draw(sprite);
+            drawGidSprite(target, gid, static_cast<float>(x * tileWidth_),
+                static_cast<float>((y + 1) * tileHeight_), static_cast<float>(tileWidth_),
+                static_cast<float>(tileHeight_));
         }
     }
 }
 
+void TiledMapRenderer::drawImageLayersToTarget(sf::RenderTexture& target) const {
+    const float mapPixelW = static_cast<float>(mapWidth_ * tileWidth_);
+    const float mapPixelH = static_cast<float>(mapHeight_ * tileHeight_);
+
+    for (const ImageLayer& layer : imageLayers_) {
+        const sf::Vector2u texSize = layer.texture.getSize();
+        if (texSize.x == 0 || texSize.y == 0) {
+            continue;
+        }
+
+        const float stampW = static_cast<float>(layer.imageWidth > 0 ? layer.imageWidth : static_cast<int>(texSize.x));
+        const float stampH =
+            static_cast<float>(layer.imageHeight > 0 ? layer.imageHeight : static_cast<int>(texSize.y));
+        const float endX = layer.repeatX ? mapPixelW : stampW;
+        const float endY = layer.repeatY ? mapPixelH : stampH;
+
+        for (float y = 0.0f; y < endY; y += stampH) {
+            for (float x = 0.0f; x < endX; x += stampW) {
+                sf::Sprite sprite(layer.texture);
+                if (stampW != static_cast<float>(texSize.x) || stampH != static_cast<float>(texSize.y)) {
+                    sprite.setScale(stampW / static_cast<float>(texSize.x),
+                        stampH / static_cast<float>(texSize.y));
+                }
+                sprite.setPosition(x, y);
+                target.draw(sprite);
+            }
+        }
+    }
+}
+
+void TiledMapRenderer::drawImageLayersToWindow(sf::RenderWindow& window) const {
+    const float mapPixelW = static_cast<float>(mapWidth_ * tileWidth_) * mapScale_;
+    const float mapPixelH = static_cast<float>(mapHeight_ * tileHeight_) * mapScale_;
+
+    for (const ImageLayer& layer : imageLayers_) {
+        const sf::Vector2u texSize = layer.texture.getSize();
+        if (texSize.x == 0 || texSize.y == 0) {
+            continue;
+        }
+
+        const float stampW = static_cast<float>(layer.imageWidth > 0 ? layer.imageWidth : static_cast<int>(texSize.x))
+            * mapScale_;
+        const float stampH =
+            static_cast<float>(layer.imageHeight > 0 ? layer.imageHeight : static_cast<int>(texSize.y)) * mapScale_;
+        const float endX = layer.repeatX ? mapPixelW : stampW;
+        const float endY = layer.repeatY ? mapPixelH : stampH;
+
+        for (float y = 0.0f; y < endY; y += stampH) {
+            for (float x = 0.0f; x < endX; x += stampW) {
+                sf::Sprite sprite(layer.texture);
+                sprite.setScale(stampW / static_cast<float>(texSize.x),
+                    stampH / static_cast<float>(texSize.y));
+                sprite.setPosition(x, y);
+                window.draw(sprite);
+            }
+        }
+    }
+}
+
+void TiledMapRenderer::drawObjectTilesToTarget(sf::RenderTexture& target) const {
+    for (const ObjectTile& obj : objectTiles_) {
+        drawGidSprite(target, obj.gid, obj.x, obj.y, obj.width, obj.height);
+    }
+}
+
 void TiledMapRenderer::bake() {
+    // 把所有 tile layer 画进 RenderTexture，避免每帧逐格绘制
     isBaked_ = false;
     if (mapWidth_ <= 0 || mapHeight_ <= 0 || visualLayers_.empty()) {
         return;
@@ -195,14 +386,16 @@ void TiledMapRenderer::bake() {
         return;
     }
 
-    bakedTexture_.clear(sf::Color(20, 30, 20));
+    bakedTexture_.clear(sf::Color::Transparent);
     for (const Layer& layer : visualLayers_) {
         drawLayerToTarget(bakedTexture_, layer);
     }
+    drawObjectTilesToTarget(bakedTexture_);
     bakedTexture_.display();
 
     bakedSprite_.setTexture(bakedTexture_.getTexture());
     bakedSprite_.setPosition(0.0f, 0.0f);
+    bakedSprite_.setScale(mapScale_, mapScale_);
     isBaked_ = true;
 }
 
@@ -210,7 +403,38 @@ void TiledMapRenderer::drawStatic(sf::RenderWindow& window) const {
     if (!isBaked_) {
         return;
     }
-    window.draw(bakedSprite_);
+    drawImageLayersToWindow(window); // 背景平铺层
+    window.draw(bakedSprite_);       // 地形烘焙层
+}
+
+void TiledMapRenderer::drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const {
+    // 等比缩放并居中，用于选关右侧面板
+    sf::RectangleShape backdrop({area.width, area.height});
+    backdrop.setPosition(area.left, area.top);
+    backdrop.setFillColor(sf::Color(24, 32, 28, 230));
+    backdrop.setOutlineThickness(2.0f);
+    backdrop.setOutlineColor(sf::Color(80, 70, 50));
+    window.draw(backdrop);
+
+    if (!isBaked_) {
+        return;
+    }
+
+    const sf::Vector2u texSize = bakedTexture_.getSize();
+    if (texSize.x == 0 || texSize.y == 0) {
+        return;
+    }
+
+    const float mapW = static_cast<float>(texSize.x);
+    const float mapH = static_cast<float>(texSize.y);
+    const float scale = std::min((area.width - 12.0f) / mapW, (area.height - 28.0f) / mapH);
+    const float drawW = mapW * scale;
+    const float drawH = mapH * scale;
+
+    sf::Sprite sprite(bakedTexture_.getTexture());
+    sprite.setScale(scale, scale);
+    sprite.setPosition(area.left + (area.width - drawW) / 2.0f, area.top + 20.0f + (area.height - 28.0f - drawH) / 2.0f);
+    window.draw(sprite);
 }
 
 } // namespace fireice

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SFML/Graphics.hpp>
+#include <array>
 #include <string>
 
 namespace fireice {
@@ -26,11 +27,16 @@ public:
     const sf::Texture& menuButton() const { return menuButton_; }
 
     bool hasButtons() const { return buttonsReady_; }
+    bool hasMapIcons() const { return mapIconsReady_; }
+
+    const sf::Texture& mapLevelIcon(uint8_t levelIndex, bool unlocked, bool completed) const;
+    const sf::Texture& mapBossIcon(bool unlocked, bool completed) const;
 
     std::string musicPath() const { return musicPath_; }
 
 private:
     bool loadTexture(sf::Texture& texture, const std::string& fileName);
+    bool loadMapIcons();
 
     sf::Texture fireBoy_;
     sf::Texture waterGirl_;
@@ -45,9 +51,16 @@ private:
     sf::Texture retryButton_;
     sf::Texture continueButton_;
     sf::Texture menuButton_;
+    std::array<sf::Texture, 7> mapLevelAvailable_{};
+    std::array<sf::Texture, 7> mapLevelLocked_{};
+    std::array<sf::Texture, 7> mapLevelCompleted_{};
+    sf::Texture mapBossAvailable_;
+    sf::Texture mapBossLocked_;
+    sf::Texture mapBossCompleted_;
     std::string musicPath_;
     bool ready_ = false;
     bool buttonsReady_ = false;
+    bool mapIconsReady_ = false;
 };
 
 } // namespace fireice

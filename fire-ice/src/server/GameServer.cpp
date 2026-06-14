@@ -58,12 +58,6 @@ void GameServer::selectLevel(uint8_t index) {
         index = 0;
     }
 
-    if (!isLevelUnlocked(index)) {
-        std::cout << "[Server] Level " << static_cast<int>(index + 1) << " is locked" << std::endl;
-        broadcastState();
-        return;
-    }
-
     selectedLevelIndex_ = index;
     mapPath_ = catalog.resolvePath(index);
     if (!map_.loadFromFile(mapPath_)) {
@@ -88,6 +82,7 @@ void GameServer::selectLevel(uint8_t index) {
 }
 
 void GameServer::applyLevelMetadata() {
+    // 把全局关卡 id 转成当前人数下的选关序号与宝石总数
     const LevelCatalog& catalog = LevelCatalog::instance();
     const LevelInfo& info = catalog.at(selectedLevelIndex_);
 
@@ -102,6 +97,59 @@ void GameServer::applyLevelMetadata() {
 void GameServer::syncProgressToWorld() {
     world_.unlockedMask = unlockedMask_;
     world_.completedMask = completedMask_;
+}
+
+void GameServer::syncWaitingReadyMask() {
+    // 每位连接玩家占 waitingReadyMask 的一位
+    uint8_t mask = 0;
+    for (std::size_t i = 0; i < clients_.size(); ++i) {
+        if (clients_[i].connected && clients_[i].waitingReady) {
+            mask |= static_cast<uint8_t>(1u << i);
+        }
+    }
+    world_.waitingReadyMask = mask;
+}
+
+bool GameServer::allConnectedWaitingReady() const {
+    uint8_t connected = 0;
+    uint8_t waitingReady = 0;
+
+    for (const ClientSlot& client : clients_) {
+        if (!client.connected) {
+            continue;
+        }
+        ++connected;
+        if (client.waitingReady) {
+            ++waitingReady;
+        }
+    }
+
+    return connected > 0 && waitingReady >= connected;
+}
+
+void GameServer::proceedToMapSelect() {
+    // 等待室全员准备后进入选关（lobbyStep: 0→1）
+    world_.lobbyStep = 1;
+    for (ClientSlot& client : clients_) {
+        client.waitingReady = false;
+        client.ready = false;
+    }
+    syncConnectedCount();
+    syncWaitingReadyMask();
+    broadcastState();
+    std::cout << "[Server] Lobby advanced to map select" << std::endl;
+}
+
+void GameServer::backToWaitingRoom() {
+    world_.lobbyStep = 0;
+    for (ClientSlot& client : clients_) {
+        client.waitingReady = false;
+        client.ready = false;
+    }
+    syncConnectedCount();
+    syncWaitingReadyMask();
+    broadcastState();
+    std::cout << "[Server] Returned to waiting room" << std::endl;
 }
 
 bool GameServer::isLevelUnlocked(uint8_t index) const {
@@ -126,7 +174,13 @@ void GameServer::resetWorld() {
         player = PlayerState{};
     }
 
+    for (ClientSlot& client : clients_) {
+        client.jumpHeld = false;
+        client.airJumpUsedThisHold = false;
+    }
+
     for (const SpawnPoint& spawn : map_.spawns()) {
+        // 按 collision 里的 f/w/p 标记重置各 slot 位置
         if (spawn.role == PlayerRole::Fire && clients_[0].connected) {
             world_.players[0].role = PlayerRole::Fire;
             world_.players[0].x = spawn.x;
@@ -188,15 +242,18 @@ void GameServer::beginPlaying() {
 void GameServer::returnToLobby() {
     resetWorld();
     world_.phase = GamePhase::Lobby;
+    world_.lobbyStep = 0;
     world_.countdown = 0;
     countdownTimer_ = 0.0f;
 
     for (ClientSlot& client : clients_) {
         client.ready = false;
+        client.waitingReady = false;
         client.pendingInput = InputFlags::None;
     }
 
     syncConnectedCount();
+    syncWaitingReadyMask();
     std::cout << "[Server] Returned to lobby" << std::endl;
 }
 
@@ -322,6 +379,36 @@ void GameServer::handleAction(uint8_t slot, PlayerAction action, uint8_t value) 
     const uint8_t filteredCount = catalog.countForPlayerCount(playerCount);
 
     if (world_.phase == GamePhase::Lobby) {
+        if (world_.lobbyStep == 0) {
+            // --- 等待室：准备 → 下一步进选关 ---
+            if (action == PlayerAction::ReturnToLobby) {
+                clients_[slot].waitingReady = false;
+                syncWaitingReadyMask();
+                broadcastState();
+                return;
+            }
+
+            if (action == PlayerAction::WaitingReady) {
+                clients_[slot].waitingReady = !clients_[slot].waitingReady;
+                syncWaitingReadyMask();
+                broadcastState();
+                return;
+            }
+
+            if (action == PlayerAction::ProceedToMapSelect && allConnectedWaitingReady()) {
+                proceedToMapSelect();
+                return;
+            }
+
+            return;
+        }
+
+        // --- 选关界面：切关 / 准备 / 开局 ---
+        if (action == PlayerAction::BackToWaitingRoom) {
+            backToWaitingRoom();
+            return;
+        }
+
         if (action == PlayerAction::ReturnToLobby) {
             clients_[slot].ready = false;
             syncConnectedCount();
@@ -407,7 +494,14 @@ void GameServer::simulateTick() {
         }
 
         PlayerState& player = world_.players[i];
-        applyInput(player, clients_[i].pendingInput, TICK_DT);
+        const bool jumpNow = hasFlag(clients_[i].pendingInput, InputFlags::Jump);
+        const bool jumpPressed = jumpNow && !clients_[i].jumpHeld;
+        if (!jumpNow) {
+            clients_[i].airJumpUsedThisHold = false;
+        }
+        clients_[i].jumpHeld = jumpNow;
+        applyInput(player, clients_[i].pendingInput, TICK_DT, jumpPressed, jumpNow,
+            clients_[i].airJumpUsedThisHold);
         integratePlayer(player, map_, world_, TICK_DT);
 
         if (sampleHazard(map_, player, world_)) {
@@ -423,6 +517,7 @@ void GameServer::simulateTick() {
 }
 
 void GameServer::updatePhase() {
+    // 任一存活玩家死亡 → GameOver；全部到达出口 → Victory
     bool anyDead = false;
     for (std::size_t i = 0; i < clients_.size(); ++i) {
         if (!clients_[i].connected) {

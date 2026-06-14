@@ -1,0 +1,3 @@
+Map node icons derived from Kenney.nl assets (CC0).
+Source packs: Game Icons, Game Icons Expansion, Tiny Dungeon.
+https://kenney.nl/assets

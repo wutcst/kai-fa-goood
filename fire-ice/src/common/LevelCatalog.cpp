@@ -9,15 +9,16 @@ const LevelCatalog& LevelCatalog::instance() {
 }
 
 LevelCatalog::LevelCatalog() {
+    // fileName 给服务端物理；visualFileName 给客户端 Tiled 渲染
     levels_ = {
-        {1, "level01_collision.txt", "level01.tmx", "Forest Entrance", "Tutorial - gems and exits", 1, 2},
-        {2, "level02_twin_pools.txt", nullptr, "Twin Pools", "Separate lava and water paths", 1, 2},
-        {3, "level03_temple_gates.txt", nullptr, "Temple Gates", "Buttons open elemental doors", 2, 2},
-        {4, "level04_gem_grotto.txt", nullptr, "Gem Grotto", "Collect every diamond", 2, 2},
-        {5, "level05_vertical_shaft.txt", nullptr, "Vertical Shaft", "Climb up together", 1, 3},
-        {6, "level06_coop_bridge.txt", nullptr, "Co-op Bridge", "Help each other cross", 1, 3},
-        {7, "level07_element_maze.txt", nullptr, "Element Maze", "Classic hazard maze", 1, 3},
-        {8, "level08_forest_shrine.txt", nullptr, "Forest Shrine", "Final shrine challenge", 2, 3},
+        {1, "level01_collision.txt", "level01.tmx", "Forest Entrance", "Learn the basics", 1, 3},
+        {2, "level02_collision.txt", "level02.tmx", "Twin Pools", "Separate lava and water paths", 1, 3},
+        {3, "level03_collision.txt", "level03.tmx", "Temple Gates", "Buttons open elemental doors", 1, 3},
+        {4, "level04_collision.txt", "level04.tmx", "Gem Grotto", "Collect every diamond", 1, 3},
+        {5, "level05_collision.txt", "level05.tmx", "Vertical Shaft", "Climb up together", 1, 3},
+        {6, "level06_collision.txt", "level06.tmx", "Co-op Bridge", "Help each other cross", 1, 3},
+        {7, "level07_collision.txt", "level07.tmx", "Element Maze", "Classic hazard maze", 1, 3},
+        {8, "level08_collision.txt", "level08.tmx", "Forest Shrine", "Final shrine challenge", 1, 3},
     };
 }
 
@@ -55,6 +56,7 @@ uint8_t LevelCatalog::countForPlayerCount(uint8_t playerCount) const {
 }
 
 uint8_t LevelCatalog::globalIndexToFilteredIndex(uint8_t globalIndex, uint8_t playerCount) const {
+    // 统计 globalIndex 之前有多少关符合当前人数
     uint8_t filtered = 0;
     for (uint8_t i = 0; i < globalIndex && i < levels_.size(); ++i) {
         if (playerCount >= levels_[i].minPlayers && playerCount <= levels_[i].maxPlayers) {

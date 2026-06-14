@@ -17,6 +17,31 @@ constexpr float kTitleCenterX = 512.0f;
 constexpr float kMenuStartY = 300.0f;
 constexpr float kMenuItemStep = 52.0f;
 
+constexpr float kRoomPanelW = 200.0f;
+constexpr float kRoomPanelH = 250.0f;
+constexpr float kRoomPanelY = 84.0f;
+constexpr float kRoomPanelGap = 12.0f;
+constexpr float kRoomBottomBarH = 64.0f;
+constexpr float kRoomActionBtnW = 180.0f;
+constexpr float kRoomActionBtnH = 44.0f;
+constexpr float kRoomActionBtnGap = 20.0f;
+
+float roomBottomBarY() {
+    return static_cast<float>(LOBBY_WINDOW_HEIGHT) - kRoomBottomBarH;
+}
+
+std::array<sf::FloatRect, 3> roomActionButtonAreas() {
+    const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+    const float totalW = kRoomActionBtnW * 3.0f + kRoomActionBtnGap * 2.0f;
+    const float startX = (w - totalW) / 2.0f;
+    const float btnY = roomBottomBarY() + (kRoomBottomBarH - kRoomActionBtnH) / 2.0f;
+    return {
+        sf::FloatRect{startX, btnY, kRoomActionBtnW, kRoomActionBtnH},
+        sf::FloatRect{startX + kRoomActionBtnW + kRoomActionBtnGap, btnY, kRoomActionBtnW, kRoomActionBtnH},
+        sf::FloatRect{startX + (kRoomActionBtnW + kRoomActionBtnGap) * 2.0f, btnY, kRoomActionBtnW, kRoomActionBtnH},
+    };
+}
+
 } // namespace
 
 bool GameClient::initialize(const std::string& host, PlayerRole preferredRole) {
@@ -39,11 +64,11 @@ bool GameClient::initialize(const std::string& host, PlayerRole preferredRole) {
         std::cerr << "[Client] Failed to load default level preview" << std::endl;
         return false;
     }
-    loadedLevelIndex_ = 0;
     renderWorld_.levelCount = LevelCatalog::instance().count();
     renderWorld_.levelIndex = 0;
     renderWorld_.totalGems = static_cast<uint8_t>(std::min(255, map_.countGems()));
     std::snprintf(renderWorld_.levelName, MAX_LEVEL_NAME, "%s", LevelCatalog::instance().at(0).title);
+    handleLevelChange(0, false);
 
     if (socket_.bind(sf::Socket::AnyPort) != sf::Socket::Done) {
         std::cerr << "[Client] Failed to bind local UDP port" << std::endl;
@@ -130,6 +155,7 @@ std::vector<sf::FloatRect> GameClient::titleMenuHitAreas() const {
 }
 
 void GameClient::handleTitleMenuSelect(int index) {
+    // 主菜单四项：创建房间 / 加入房间 / 帮助 / 退出
     switch (index) {
     case 0:
         typedRoomCode_.clear();
@@ -143,22 +169,6 @@ void GameClient::handleTitleMenuSelect(int index) {
         clientScreen_ = ClientScreen::Help;
         break;
     case 3:
-        if (preferredRole_ == PlayerRole::Fire) {
-            preferredRole_ = PlayerRole::Water;
-        } else if (preferredRole_ == PlayerRole::Water) {
-            preferredRole_ = PlayerRole::Poison;
-        } else {
-            preferredRole_ = PlayerRole::Fire;
-        }
-        role_ = preferredRole_;
-        playerName_ = preferredRole_ == PlayerRole::Fire ? "FireBoy"
-                    : preferredRole_ == PlayerRole::Water ? "WaterGirl"
-                    : "PoisonKid";
-        break;
-    case 4:
-        clientScreen_ = ClientScreen::Credits;
-        break;
-    case 5:
         window_.close();
         break;
     default:
@@ -276,23 +286,29 @@ void GameClient::useGameLayout() {
 }
 
 void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
-    if (levelIndex == loadedLevelIndex_) {
-        return;
+    const LevelCatalog& catalog = LevelCatalog::instance();
+    const uint8_t playerCount = std::max(uint8_t{1}, renderWorld_.connectedCount);
+    const uint8_t globalIndex = catalog.filteredIndexToGlobalIndex(levelIndex, playerCount);
+    const std::string visualPath = catalog.resolveVisualPath(globalIndex);
+    if (globalIndex == loadedLevelIndex_) {
+        if (visualPath.empty() || tiledMap_.ready()) {
+            return;
+        }
     }
 
-    const LevelCatalog& catalog = LevelCatalog::instance();
-    const std::string path = catalog.resolvePath(levelIndex);
+    const std::string path = catalog.resolvePath(globalIndex);
     if (!map_.loadFromFile(path)) {
         std::cerr << "[Client] Failed to load level preview: " << path << std::endl;
         return;
     }
 
-    const std::string visualPath = catalog.resolveVisualPath(levelIndex);
     if (!visualPath.empty() && tiledMap_.load(visualPath)) {
         tiledMap_.bake();
+    } else if (!visualPath.empty()) {
+        std::cerr << "[Client] Failed to load tiled visual map: " << visualPath << std::endl;
     }
 
-    loadedLevelIndex_ = levelIndex;
+    loadedLevelIndex_ = globalIndex;
     if (resizeWindow && !lobbyLayout_) {
         useGameLayout();
     }
@@ -301,6 +317,7 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
 void GameClient::onPhaseChanged(GamePhase previous, GamePhase current) {
     if (current == GamePhase::Lobby && previous != GamePhase::Lobby) {
         localReady_ = false;
+        levelMapScrollY_ = 0.0f;
         if (clientScreen_ == ClientScreen::Room) {
             useLobbyLayout();
         }
@@ -419,12 +436,25 @@ void GameClient::pollNetwork() {
             }
 
             const GamePhase previousPhase = world_.phase;
-            if (packet.world.levelIndex != loadedLevelIndex_) {
-                handleLevelChange(packet.world.levelIndex, !lobbyLayout_);
-            }
+            const uint8_t previousLobbyStep = world_.lobbyStep;
 
             world_ = packet.world;
             renderWorld_ = packet.world;
+
+            const LevelCatalog& catalog = LevelCatalog::instance();
+            const uint8_t globalLevelIndex = catalog.filteredIndexToGlobalIndex(
+                renderWorld_.levelIndex, std::max(uint8_t{1}, renderWorld_.connectedCount));
+            if (globalLevelIndex != loadedLevelIndex_) {
+                handleLevelChange(renderWorld_.levelIndex, !lobbyLayout_);
+            }
+
+            if (renderWorld_.lobbyStep == 0 && previousLobbyStep == 1) {
+                localReady_ = false;
+                levelMapScrollY_ = 0.0f;
+            }
+            if (renderWorld_.lobbyStep == 1 && previousLobbyStep == 0) {
+                levelMapScrollY_ = 0.0f;
+            }
 
             if (previousPhase != renderWorld_.phase) {
                 onPhaseChanged(previousPhase, renderWorld_.phase);
@@ -499,35 +529,28 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         return;
     }
 
-    if (event.type == sf::Event::MouseMoved && clientScreen_ == ClientScreen::Room) {
-        return;
-    }
-    if (event.type == sf::Event::MouseButtonPressed && clientScreen_ == ClientScreen::Room) {
+    if (event.type == sf::Event::MouseButtonPressed && connected_
+        && renderWorld_.phase == GamePhase::Lobby && renderWorld_.lobbyStep == 0) {
         if (event.mouseButton.button != sf::Mouse::Left) {
             return;
         }
         const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
-        const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+        const auto buttons = roomActionButtonAreas();
+        const sf::FloatRect& readyArea = buttons[0];
+        const sf::FloatRect& nextArea = buttons[1];
+        const sf::FloatRect& leaveArea = buttons[2];
 
-        // Ready / cancel ready button
-        const float btnX = w - 172.0f;
-        const float readyBtnW = 140.0f;
-        const sf::FloatRect readyArea{btnX, 554.0f, readyBtnW, 48.0f};
         if (readyArea.contains(mouse)) {
-            if (!localReady_) {
-                localReady_ = true;
-                sendAction(PlayerAction::Ready);
-            } else {
-                localReady_ = false;
-                sendAction(PlayerAction::ReturnToLobby);
-            }
+            sendAction(PlayerAction::WaitingReady);
             return;
         }
 
-        // Back / leave room button
-        const float backBtnY = renderWorld_.connectedCount >= 2 ? 610.0f : 590.0f;
-        const sf::FloatRect backArea{btnX, backBtnY, readyBtnW, 36.0f};
-        if (backArea.contains(mouse)) {
+        if (nextArea.contains(mouse) && allPlayersWaitingReady()) {
+            sendAction(PlayerAction::ProceedToMapSelect);
+            return;
+        }
+
+        if (leaveArea.contains(mouse)) {
             disconnect();
             connected_ = false;
             connectRequested_ = false;
@@ -536,42 +559,32 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
             updateMusic(GamePhase::Lobby);
             return;
         }
-
-        // Level selector bar: left/right arrows
-        const float levelBarX = 148.0f;
-        const float levelBarY = 344.0f;
-        const float levelBarW = w - levelBarX * 2.0f;
-        const float levelBarH = 48.0f;
-        const sf::FloatRect levelBar{levelBarX, levelBarY, levelBarW, levelBarH};
-        if (levelBar.contains(mouse) && !localReady_) {
-            const float relX = mouse.x - levelBarX;
-            const float arrowWidth = 36.0f;
-            if (relX < arrowWidth) {
-                sendAction(PlayerAction::PrevLevel);
-            } else if (relX > levelBarW - arrowWidth) {
-                sendAction(PlayerAction::NextLevel);
-            }
-            return;
-        }
-
-        // Level dots: direct level selection
-        const float dotStartX = levelBarX + levelBarW / 2.0f - (renderWorld_.levelCount * 16.0f) / 2.0f;
-        const float dotY = levelBarY + levelBarH - 14.0f;
-        for (uint8_t i = 0; i < renderWorld_.levelCount; ++i) {
-            const sf::FloatRect dotArea{dotStartX + i * 16.0f - 6.0f, dotY - 6.0f, 12.0f, 12.0f};
-            if (dotArea.contains(mouse) && !localReady_) {
-                sendAction(PlayerAction::SelectLevel, i);
-                return;
-            }
-        }
         return;
     }
 
-    if (renderWorld_.phase == GamePhase::Lobby) {
+    if (renderWorld_.phase == GamePhase::Lobby && renderWorld_.lobbyStep == 1) {
         if (event.type == sf::Event::MouseMoved) {
             lobbyHoverNode_ = levelNodeAtPosition(static_cast<float>(event.mouseMove.x),
                 static_cast<float>(event.mouseMove.y));
-        } else if (event.type == sf::Event::MouseButtonPressed) {
+        } else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+            const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
+            const sf::FloatRect playArea{740.0f, 576.0f, 260.0f, 48.0f};
+            if (playArea.contains(mouse)) {
+                if (!localReady_) {
+                    const LevelCatalog& catalog = LevelCatalog::instance();
+                    const uint8_t playerCount = std::max(uint8_t{1}, renderWorld_.connectedCount);
+                    const uint8_t globalSelected = catalog.filteredIndexToGlobalIndex(
+                        renderWorld_.levelIndex, playerCount);
+                    if (isLevelUnlocked(renderWorld_.unlockedMask, globalSelected)) {
+                        localReady_ = true;
+                        sendAction(PlayerAction::Ready);
+                    }
+                } else {
+                    localReady_ = false;
+                    sendAction(PlayerAction::ReturnToLobby);
+                }
+                return;
+            }
             handleLobbyMouseClick(event);
         } else if (event.type == sf::Event::MouseWheelScrolled) {
             handleLobbyMouseWheel(event);
@@ -582,7 +595,12 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         return;
     }
 
-    if (event.key.code == sf::Keyboard::Escape && clientScreen_ == ClientScreen::Room) {
+    if (event.key.code == sf::Keyboard::Escape && connected_ && renderWorld_.phase == GamePhase::Lobby) {
+        if (renderWorld_.lobbyStep == 1) {
+            localReady_ = false;
+            sendAction(PlayerAction::BackToWaitingRoom);
+            return;
+        }
         disconnect();
         connected_ = false;
         connectRequested_ = false;
@@ -592,51 +610,29 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         return;
     }
 
-    if (event.key.code == sf::Keyboard::Escape && renderWorld_.phase != GamePhase::Lobby && clientScreen_ != ClientScreen::Room) {
+    if (event.key.code == sf::Keyboard::Escape && renderWorld_.phase != GamePhase::Lobby) {
         localReady_ = false;
         sendAction(PlayerAction::ReturnToLobby);
         return;
     }
 
-    if (clientScreen_ == ClientScreen::Room) {
-        if ((event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::Up
-             || event.key.code == sf::Keyboard::Q) && !localReady_) {
-            sendAction(PlayerAction::PrevLevel);
+    if (connected_ && renderWorld_.phase == GamePhase::Lobby && renderWorld_.lobbyStep == 0) {
+        if (event.key.code == sf::Keyboard::Enter && !localWaitingReady()) {
+            sendAction(PlayerAction::WaitingReady);
             return;
         }
-        if ((event.key.code == sf::Keyboard::Right || event.key.code == sf::Keyboard::Down
-             || event.key.code == sf::Keyboard::E) && !localReady_) {
-            sendAction(PlayerAction::NextLevel);
+        if (event.key.code == sf::Keyboard::Enter && localWaitingReady() && allPlayersWaitingReady()) {
+            sendAction(PlayerAction::ProceedToMapSelect);
             return;
         }
-        {
-            const auto keyCode = static_cast<int>(event.key.code);
-            int level = -1;
-            if (keyCode >= static_cast<int>(sf::Keyboard::Num1) && keyCode <= static_cast<int>(sf::Keyboard::Num8)) {
-                level = keyCode - static_cast<int>(sf::Keyboard::Num1);
-            } else if (keyCode >= static_cast<int>(sf::Keyboard::Numpad1)
-                       && keyCode <= static_cast<int>(sf::Keyboard::Numpad8)) {
-                level = keyCode - static_cast<int>(sf::Keyboard::Numpad1);
-            }
-            if (level >= 0 && static_cast<uint8_t>(level) < renderWorld_.levelCount && !localReady_) {
-                sendAction(PlayerAction::SelectLevel, static_cast<uint8_t>(level));
-                return;
-            }
-        }
-        if (event.key.code == sf::Keyboard::Enter && !localReady_) {
-            localReady_ = true;
-            sendAction(PlayerAction::Ready);
-            return;
-        }
-        if (event.key.code == sf::Keyboard::Enter && localReady_) {
-            localReady_ = false;
-            sendAction(PlayerAction::ReturnToLobby);
+        if (event.key.code == sf::Keyboard::Enter && localWaitingReady() && !allPlayersWaitingReady()) {
+            sendAction(PlayerAction::WaitingReady);
             return;
         }
         return;
     }
 
-    if (renderWorld_.phase == GamePhase::Lobby) {
+    if (renderWorld_.phase == GamePhase::Lobby && renderWorld_.lobbyStep == 1) {
         if ((event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::Up
              || event.key.code == sf::Keyboard::Q) && !localReady_) {
             sendAction(PlayerAction::PrevLevel);
@@ -653,8 +649,14 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
             return;
         }
         if (event.key.code == sf::Keyboard::Enter && !localReady_) {
-            localReady_ = true;
-            sendAction(PlayerAction::Ready);
+            const LevelCatalog& catalog = LevelCatalog::instance();
+            const uint8_t playerCount = std::max(uint8_t{1}, renderWorld_.connectedCount);
+            const uint8_t globalSelected = catalog.filteredIndexToGlobalIndex(
+                renderWorld_.levelIndex, playerCount);
+            if (isLevelUnlocked(renderWorld_.unlockedMask, globalSelected)) {
+                localReady_ = true;
+                sendAction(PlayerAction::Ready);
+            }
             return;
         }
         if (event.key.code == sf::Keyboard::Enter && localReady_) {
@@ -733,7 +735,11 @@ InputFlags GameClient::readLocalInput() const {
 }
 
 void GameClient::render() {
-    window_.clear(sf::Color(12, 18, 14));
+    if (tiledMap_.ready() && connected_ && renderWorld_.phase != GamePhase::Lobby) {
+        window_.clear(sf::Color(216, 189, 155));
+    } else {
+        window_.clear(sf::Color(12, 18, 14));
+    }
 
     if (!connected_) {
         renderTitleScreen();
@@ -746,10 +752,12 @@ void GameClient::render() {
         } else if (clientScreen_ == ClientScreen::Connecting) {
             drawConnectingScreen(window_);
         }
-    } else if (clientScreen_ == ClientScreen::Room && renderWorld_.phase == GamePhase::Lobby) {
-        renderRoomScreen();
-    } else if (renderWorld_.phase == GamePhase::Lobby) {
-        renderLobbyScreen();
+    } else if (connected_ && renderWorld_.phase == GamePhase::Lobby) {
+        if (renderWorld_.lobbyStep == 0) {
+            renderRoomScreen();
+        } else {
+            renderLobbyScreen();
+        }
     } else {
         renderGameScreen();
     }
@@ -909,11 +917,26 @@ void GameClient::drawBackgroundSprite(sf::RenderWindow& window, const sf::Textur
     window.draw(sprite);
 }
 
+bool GameClient::localWaitingReady() const {
+    // waitingReadyMask：等待室准备状态（与选关 readyMask 分开）
+    return (renderWorld_.waitingReadyMask & (1u << slot_)) != 0;
+}
+
+bool GameClient::allPlayersWaitingReady() const {
+    if (renderWorld_.connectedCount == 0) {
+        return false;
+    }
+    uint8_t readyCount = 0;
+    for (uint8_t i = 0; i < renderWorld_.connectedCount; ++i) {
+        if ((renderWorld_.waitingReadyMask & (1u << i)) != 0) {
+            ++readyCount;
+        }
+    }
+    return readyCount >= renderWorld_.connectedCount;
+}
+
 void GameClient::trySelectLevel(uint8_t index) {
     if (localReady_ || index >= renderWorld_.levelCount) {
-        return;
-    }
-    if (!isLevelUnlocked(renderWorld_.unlockedMask, index)) {
         return;
     }
     sendAction(PlayerAction::SelectLevel, index);
@@ -930,7 +953,7 @@ int GameClient::levelNodeAtPosition(float x, float y) const {
     const sf::Vector2f local(localX, localY);
 
     for (uint8_t i = 0; i < renderWorld_.levelCount; ++i) {
-        if (levelNodeLocalHitArea(i).contains(local)) {
+        if (levelNodeLocalHitArea(i, renderWorld_.levelCount).contains(local)) {
             return static_cast<int>(i);
         }
     }
@@ -959,65 +982,77 @@ void GameClient::handleLobbyMouseClick(const sf::Event& event) {
     }
 }
 
-void GameClient::drawLevelPath(uint8_t fromIndex, uint8_t toIndex, bool unlocked) {
-    const sf::Vector2f from = levelNodeLocalCenter(fromIndex);
-    const sf::Vector2f to = levelNodeLocalCenter(toIndex);
-    const sf::Vector2f delta = to - from;
+void GameClient::drawLevelPath(uint8_t fromIndex, uint8_t toIndex, uint8_t levelCount, bool unlocked) {
+    const sf::Vector2f fromCenter = levelNodeLocalCenter(fromIndex);
+    const sf::Vector2f toCenter = levelNodeLocalCenter(toIndex);
+    const sf::Vector2f delta = toCenter - fromCenter;
     const float length = std::sqrt(delta.x * delta.x + delta.y * delta.y);
     if (length <= 1.0f) {
         return;
     }
 
-    sf::RectangleShape line({length, unlocked ? 9.0f : 6.0f});
+    const sf::Vector2f dir = delta / length;
+    const float fromRadius = levelNodeRadius(fromIndex, levelCount);
+    const float toRadius = levelNodeRadius(toIndex, levelCount);
+    const sf::Vector2f from = fromCenter + dir * fromRadius * 0.85f;
+    const sf::Vector2f to = toCenter - dir * toRadius * 0.85f;
+    const sf::Vector2f segment = to - from;
+    const float segmentLength = std::sqrt(segment.x * segment.x + segment.y * segment.y);
+    if (segmentLength <= 1.0f) {
+        return;
+    }
+
+    sf::RectangleShape line({segmentLength, unlocked ? 7.0f : 5.0f});
     line.setOrigin(0.0f, line.getSize().y / 2.0f);
     line.setPosition(from);
-    line.setRotation(std::atan2(delta.y, delta.x) * 180.0f / 3.14159265f);
-    line.setFillColor(unlocked ? sf::Color(196, 150, 72) : sf::Color(70, 62, 48, 180));
+    line.setRotation(std::atan2(segment.y, segment.x) * 180.0f / 3.14159265f);
+    line.setFillColor(unlocked ? sf::Color(170, 130, 72, 220) : sf::Color(70, 62, 48, 160));
     window_.draw(line);
 }
 
-void GameClient::drawLevelNode(uint8_t index, bool selected, bool unlocked, bool completed) {
+void GameClient::drawLevelNode(uint8_t index, uint8_t levelCount, bool selected, bool unlocked, bool completed) {
     const sf::Vector2f center = levelNodeLocalCenter(index);
-    const float radius = kLevelNodeRadius;
+    const bool isBoss = isFinalLevelNode(index, levelCount);
+    const float radius = levelNodeRadius(index, levelCount);
 
     if (selected) {
-        sf::CircleShape glow(radius + 12.0f);
-        glow.setOrigin(radius + 12.0f, radius + 12.0f);
+        const float glowPad = isBoss ? 22.0f : 14.0f;
+        sf::CircleShape glow(radius + glowPad);
+        glow.setOrigin(radius + glowPad, radius + glowPad);
         glow.setPosition(center);
-        glow.setFillColor(sf::Color(255, 220, 80, 70));
-        glow.setOutlineThickness(3.0f);
-        glow.setOutlineColor(sf::Color(255, 240, 120, 180));
+        glow.setFillColor(isBoss ? sf::Color(255, 180, 60, 90) : sf::Color(255, 220, 80, 75));
+        glow.setOutlineThickness(isBoss ? 4.0f : 3.0f);
+        glow.setOutlineColor(isBoss ? sf::Color(255, 210, 80, 210) : sf::Color(255, 240, 120, 190));
         window_.draw(glow);
     }
 
-    sf::ConvexShape diamond(4);
-    diamond.setPoint(0, {center.x, center.y - radius});
-    diamond.setPoint(1, {center.x + radius * 0.82f, center.y});
-    diamond.setPoint(2, {center.x, center.y + radius});
-    diamond.setPoint(3, {center.x - radius * 0.82f, center.y});
-
-    if (!unlocked) {
-        diamond.setFillColor(sf::Color(58, 54, 50));
-        diamond.setOutlineColor(sf::Color(35, 32, 28));
-    } else if (completed) {
-        diamond.setFillColor(sf::Color(210, 185, 95));
-        diamond.setOutlineColor(sf::Color(130, 100, 35));
-    } else {
-        diamond.setFillColor(sf::Color(150, 158, 168));
-        diamond.setOutlineColor(sf::Color(95, 100, 110));
+    if (assets_.hasMapIcons()) {
+        const sf::Texture& texture = isBoss ? assets_.mapBossIcon(unlocked, completed)
+                                            : assets_.mapLevelIcon(index, unlocked, completed);
+        sf::Sprite sprite(texture);
+        const sf::Vector2u texSize = texture.getSize();
+        const float targetSize = radius * 2.05f;
+        const float scale = targetSize / static_cast<float>(std::max(texSize.x, texSize.y));
+        sprite.setScale(scale, scale);
+        sprite.setOrigin(static_cast<float>(texSize.x) / 2.0f, static_cast<float>(texSize.y) / 2.0f);
+        sprite.setPosition(center);
+        window_.draw(sprite);
+        return;
     }
-    diamond.setOutlineThickness(selected ? 3.0f : 2.0f);
-    window_.draw(diamond);
+
+    sf::CircleShape body(radius);
+    body.setOrigin(radius, radius);
+    body.setPosition(center);
+    body.setFillColor(unlocked ? sf::Color(150, 158, 168) : sf::Color(58, 54, 50));
+    body.setOutlineColor(unlocked ? sf::Color(95, 100, 110) : sf::Color(35, 32, 28));
+    body.setOutlineThickness(selected ? 3.0f : 2.0f);
+    window_.draw(body);
 
     if (!unlocked) {
         ui_.drawCenteredText(window_, "?", center.x, center.y - 14.0f, 24, sf::Color(110, 105, 100));
     } else {
-        ui_.drawCenteredText(window_, std::to_string(index + 1), center.x, center.y - 14.0f, 22,
-            completed ? sf::Color(70, 45, 10) : sf::Color(35, 40, 48));
-        if (completed) {
-            ui_.drawCenteredText(window_, "*", center.x + radius + 8.0f, center.y - 10.0f, 18,
-                sf::Color(255, 230, 120));
-        }
+        ui_.drawCenteredText(window_, isBoss ? "终" : std::to_string(index + 1), center.x, center.y - 14.0f, 22,
+            sf::Color(35, 40, 48));
     }
 }
 
@@ -1062,18 +1097,22 @@ void GameClient::drawLevelProgressMap() {
         viewport.height / static_cast<float>(winSize.y)));
     window_.setView(contentView);
 
+    const LevelCatalog& catalog = LevelCatalog::instance();
+    const uint8_t playerCount = std::max(uint8_t{1}, renderWorld_.connectedCount);
     const uint8_t levelCount = renderWorld_.levelCount;
     for (uint8_t i = 0; i + 1 < levelCount; ++i) {
-        const bool pathUnlocked = isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(i + 1));
-        drawLevelPath(i, static_cast<uint8_t>(i + 1), pathUnlocked);
+        const uint8_t nextGlobal = catalog.filteredIndexToGlobalIndex(static_cast<uint8_t>(i + 1), playerCount);
+        const bool pathUnlocked = isLevelUnlocked(renderWorld_.unlockedMask, nextGlobal);
+        drawLevelPath(i, static_cast<uint8_t>(i + 1), levelCount, pathUnlocked);
     }
 
     for (uint8_t i = 0; i < levelCount; ++i) {
-        const bool unlocked = isLevelUnlocked(renderWorld_.unlockedMask, i);
-        const bool completed = isLevelCompleted(renderWorld_.completedMask, i);
+        const uint8_t globalIndex = catalog.filteredIndexToGlobalIndex(i, playerCount);
+        const bool unlocked = isLevelUnlocked(renderWorld_.unlockedMask, globalIndex);
+        const bool completed = isLevelCompleted(renderWorld_.completedMask, globalIndex);
         const bool selected = i == renderWorld_.levelIndex;
         const bool hovered = static_cast<int>(i) == lobbyHoverNode_;
-        drawLevelNode(i, selected || hovered, unlocked, completed);
+        drawLevelNode(i, levelCount, selected || hovered, unlocked, completed);
     }
 
     window_.setView(previousView);
@@ -1184,7 +1223,7 @@ void GameClient::renderRoomScreen() {
     ui_.drawPanel(window_, {0.0f, 0.0f, w, 68.0f}, sf::Color(16, 22, 40, 230), 230.0f);
     ui_.drawOutlinedCenteredText(window_, "Fire & Ice 森林神殿", w / 2.0f, 8.0f, 28,
         sf::Color(255, 230, 100), sf::Color(80, 50, 10), 2.5f);
-    ui_.drawCenteredText(window_, "在线联机房", w / 2.0f, 42.0f, 16, sf::Color(180, 195, 220));
+    ui_.drawCenteredText(window_, text::roomWaitingTitle(), w / 2.0f, 42.0f, 16, sf::Color(180, 195, 220));
 
     // Room code display (prominent)
     const std::string roomCodeStr = renderWorld_.roomCode[0]
@@ -1195,102 +1234,27 @@ void GameClient::renderRoomScreen() {
     ui_.drawCenteredText(window_, std::string("在线: ") + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS),
         w - 180.0f, 42.0f, 13, sf::Color(160, 200, 140));
 
-    // --- Player panels ---
-    const float panelW = 200.0f;
-    const float panelH = 250.0f;
-    const float panelY = 84.0f;
+    // --- Player panels (always reserve 3 slots) ---
+    const float totalPanelW = kRoomPanelW * 3.0f + kRoomPanelGap * 2.0f;
+    const float panelStartX = (w - totalPanelW) / 2.0f;
+    renderRoomPlayerPanel(panelStartX, kRoomPanelY, kRoomPanelW, kRoomPanelH, 0, PlayerRole::Fire);
+    renderRoomPlayerPanel(panelStartX + kRoomPanelW + kRoomPanelGap, kRoomPanelY, kRoomPanelW, kRoomPanelH, 1,
+        PlayerRole::Water);
+    renderRoomPlayerPanel(panelStartX + (kRoomPanelW + kRoomPanelGap) * 2.0f, kRoomPanelY, kRoomPanelW, kRoomPanelH, 2,
+        PlayerRole::Poison);
 
-    if (renderWorld_.connectedCount <= 1) {
-        renderRoomPlayerPanel(w / 2.0f - panelW / 2.0f, panelY, panelW, panelH, 0, PlayerRole::Fire);
-    } else if (renderWorld_.connectedCount == 2) {
-        renderRoomPlayerPanel(48.0f, panelY, panelW, panelH, 0, PlayerRole::Fire);
-        renderRoomPlayerPanel(w - 48.0f - panelW, panelY, panelW, panelH, 1, PlayerRole::Water);
-    } else {
-        const float totalW = panelW * 3.0f + 24.0f;
-        const float startX = (w - totalW) / 2.0f;
-        renderRoomPlayerPanel(startX, panelY, panelW, panelH, 0, PlayerRole::Fire);
-        renderRoomPlayerPanel(startX + panelW + 12.0f, panelY, panelW, panelH, 1, PlayerRole::Water);
-        renderRoomPlayerPanel(startX + (panelW + 12.0f) * 2.0f, panelY, panelW, panelH, 2, PlayerRole::Poison);
-    }
-
-    // VS divider (only when 2 players)
-    if (renderWorld_.connectedCount == 2) {
-        const float vsCenterX = w / 2.0f;
-        const float vsY = panelY + panelH / 2.0f - 8.0f;
-        const sf::Color pulseCol(
-            255,
-            static_cast<sf::Uint8>(200 + static_cast<int>(55.0 * std::sin(roomAnimTimer_ * 2.5))),
-            static_cast<sf::Uint8>(50 + static_cast<int>(50.0 * std::sin(roomAnimTimer_ * 2.5))));
-        ui_.drawOutlinedCenteredText(window_, "VS", vsCenterX, vsY, 38, pulseCol, sf::Color(80, 40, 10), 3.0f);
-    }
-
-    // --- Map preview in center ---
-    const float previewX = 172.0f;
-    const float previewY = 84.0f;
-    const float previewW = w - previewX * 2.0f;
-    const float previewH = 210.0f;
-    const sf::FloatRect previewPanel{previewX, previewY, previewW, previewH};
-    ui_.drawPanel(window_, previewPanel, sf::Color(18, 24, 36, 210), 210.0f);
-
-    // Map preview content
-    const sf::FloatRect previewArea{
-        previewPanel.left + 16.0f, previewPanel.top + 40.0f,
-        previewPanel.width - 32.0f, previewPanel.height - 56.0f
-    };
-    sf::RectangleShape previewBg({previewArea.width, previewArea.height});
-    previewBg.setPosition(previewArea.left, previewArea.top);
-    previewBg.setFillColor(sf::Color(8, 10, 18));
-    window_.draw(previewBg);
-    drawMapPreview(window_, previewArea);
-
-    ui_.drawOutlinedCenteredText(window_, "地图预览", previewPanel.left + previewPanel.width / 2.0f,
-        previewPanel.top + 8.0f, 18, sf::Color(200, 220, 255), sf::Color(30, 50, 80), 1.5f);
-
-    const std::string previewDetail = std::string(renderWorld_.levelName) + "  |  Gems: "
-        + std::to_string(renderWorld_.totalGems) + "  |  Size: "
-        + std::to_string(map_.width()) + "x" + std::to_string(map_.height());
-    ui_.drawCenteredText(window_, previewDetail, previewPanel.left + previewPanel.width / 2.0f,
-        previewArea.top + previewArea.height + 12.0f, 15, sf::Color(200, 200, 180));
-
-    // --- Level selector bar ---
-    const float levelBarX = 148.0f;
-    const float levelBarY = 344.0f;
-    const float levelBarW = w - levelBarX * 2.0f;
-    const float levelBarH = 48.0f;
-    ui_.drawPanel(window_, {levelBarX, levelBarY, levelBarW, levelBarH}, sf::Color(22, 28, 44, 220), 220.0f);
-
-    // Level navigation arrows
-    ui_.drawCenteredText(window_, "\xe2\x97\x80", levelBarX + 20.0f, levelBarY + 4.0f, 28, sf::Color(180, 200, 240));
-    ui_.drawCenteredText(window_, "\xe2\x96\xb6", levelBarX + levelBarW - 20.0f, levelBarY + 4.0f, 28, sf::Color(180, 200, 240));
-
-    const LevelCatalog& catalog = LevelCatalog::instance();
-    const std::string levelTitle = "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": "
-        + catalog.at(renderWorld_.levelIndex).title;
-    ui_.drawOutlinedCenteredText(window_, levelTitle, levelBarX + levelBarW / 2.0f, levelBarY + 8.0f, 22,
-        sf::Color(255, 240, 180), sf::Color(60, 40, 10), 2.0f);
-
-    // Level dots
-    const float dotStartX = levelBarX + levelBarW / 2.0f - (renderWorld_.levelCount * 16.0f) / 2.0f;
-    for (uint8_t i = 0; i < renderWorld_.levelCount; ++i) {
-        sf::CircleShape dot(4.0f);
-        dot.setPosition(dotStartX + i * 16.0f, levelBarY + levelBarH - 14.0f);
-        dot.setFillColor(i == renderWorld_.levelIndex
-            ? sf::Color(255, 220, 80) : sf::Color(100, 110, 130));
-        window_.draw(dot);
-    }
-
-    // --- Bottom status bar ---
-    const float statusY = 404.0f;
-    const float statusH = 248.0f;
-    ui_.drawPanel(window_, {32.0f, statusY, w - 64.0f, statusH - 16.0f}, sf::Color(20, 26, 44, 220), 220.0f);
+    // --- Middle status bar ---
+    const float statusY = kRoomPanelY + kRoomPanelH + 14.0f;
+    const float statusH = roomBottomBarY() - statusY - 8.0f;
+    ui_.drawPanel(window_, {32.0f, statusY, w - 64.0f, statusH}, sf::Color(20, 26, 44, 220), 220.0f);
 
     // Players connected status
     const bool fireConnected = renderWorld_.connectedCount >= 1;
     const bool waterConnected = renderWorld_.connectedCount >= 2;
     const bool poisonConnected = renderWorld_.connectedCount >= 3;
-    const bool fireReady = (renderWorld_.readyMask & 0x01) != 0;
-    const bool waterReady = (renderWorld_.readyMask & 0x02) != 0;
-    const bool poisonReady = (renderWorld_.readyMask & 0x04) != 0;
+    const bool fireReady = (renderWorld_.waitingReadyMask & 0x01) != 0;
+    const bool waterReady = (renderWorld_.waitingReadyMask & 0x02) != 0;
+    const bool poisonReady = (renderWorld_.waitingReadyMask & 0x04) != 0;
 
     ui_.drawText(window_, "玩家状态", 52.0f, statusY + 12.0f, 18, sf::Color(200, 210, 230));
 
@@ -1312,60 +1276,52 @@ void GameClient::renderRoomScreen() {
     drawStatus(300.0f, "冰娃", waterName, waterConnected, waterReady, sf::Color(100, 180, 255));
     drawStatus(548.0f, "毒娃", poisonName, poisonConnected, poisonReady, sf::Color(80, 200, 80));
 
-    // Map info line
-    const std::string mapLine = "当前地图: " + std::to_string(renderWorld_.levelIndex + 1) + "/"
-        + std::to_string(renderWorld_.levelCount) + "  宝石: " + std::to_string(renderWorld_.totalGems)
-        + "   尺寸: " + std::to_string(map_.width()) + "x" + std::to_string(map_.height());
-    ui_.drawText(window_, mapLine, 52.0f, statusY + 72.0f, 15, sf::Color(170, 180, 200));
+    ui_.drawText(window_, text::roomWaitingHint(), 52.0f, statusY + 72.0f, 14, sf::Color(140, 150, 170));
 
-    // Controls hint
-    ui_.drawText(window_, "[↑↓] 或 [1-8] 选关   [Enter] 准备 / 取消准备   [Esc] 返回",
-        52.0f, statusY + 100.0f, 14, sf::Color(140, 150, 170));
+    const bool waitingReady = localWaitingReady();
+    const bool canProceed = allPlayersWaitingReady();
+    const float waitMsgY = roomBottomBarY() - 30.0f;
 
-    // --- Right side buttons ---
-    const float btnX = w - 172.0f;
-
-    // Ready / Start button
-    const float readyBtnY = 554.0f;
-    const sf::FloatRect readyArea{btnX, readyBtnY, 140.0f, 48.0f};
-
-    if (assets_.hasButtons()) {
-        if (!localReady_) {
-            ui_.drawImageButtonWithHint(window_, readyArea, assets_.playButton(),
-                "[Enter] 准备", true, true);
-        } else {
-            ui_.drawImageButtonWithHint(window_, readyArea, assets_.playButton(),
-                "已准备! [Esc]", true, true);
-        }
-    } else {
-        if (!localReady_) {
-            ui_.drawButton(window_, readyArea, "准备游戏", true, sf::Color(60, 130, 210));
-        } else {
-            ui_.drawButton(window_, readyArea, "已准备 (Esc取消)", true, sf::Color(50, 160, 90));
-        }
-    }
-
-    // Back button
-    const float backBtnY = renderWorld_.connectedCount >= 2 ? 610.0f : 590.0f;
-
-    // Waiting for players message (only when not all slots filled)
     if (renderWorld_.connectedCount < MAX_PLAYERS) {
-        const std::string waitMsg = "等待其他玩家加入房间... (当前 " + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS) + ")";
-        ui_.drawOutlinedCenteredText(window_, waitMsg, w / 2.0f, h - 28.0f, 17,
+        const std::string waitMsg = "等待其他玩家加入房间... (当前 " + std::to_string(renderWorld_.connectedCount)
+            + "/" + std::to_string(MAX_PLAYERS) + ")";
+        ui_.drawOutlinedCenteredText(window_, waitMsg, w / 2.0f, waitMsgY, 17,
             sf::Color(255, 220, 100), sf::Color(80, 50, 10), 2.0f);
         const int dotCount = (static_cast<int>(roomAnimTimer_ * 2.0f) % 3) + 1;
         std::string dots;
-        for (int i = 0; i < dotCount; ++i) dots += ".";
-        ui_.drawText(window_, dots, w / 2.0f + 180.0f, h - 24.0f, 17, sf::Color(255, 220, 100));
+        for (int i = 0; i < dotCount; ++i) {
+            dots += ".";
+        }
+        ui_.drawText(window_, dots, w / 2.0f + 180.0f, waitMsgY + 4.0f, 17, sf::Color(255, 220, 100));
+    } else if (canProceed) {
+        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击下一步选择关卡", w / 2.0f, waitMsgY, 17,
+            sf::Color(255, 220, 100), sf::Color(80, 50, 10), 2.0f);
     }
-    const sf::FloatRect backArea{btnX, backBtnY, 140.0f, 36.0f};
-    ui_.drawButton(window_, backArea, "离开房间", true, sf::Color(120, 60, 50));
+
+    // --- Bottom action bar ---
+    const float bottomBarY = roomBottomBarY();
+    ui_.drawPanel(window_, {0.0f, bottomBarY, w, kRoomBottomBarH}, sf::Color(16, 22, 40, 240), 240.0f);
+
+    const auto buttons = roomActionButtonAreas();
+    const sf::FloatRect& readyArea = buttons[0];
+    const sf::FloatRect& nextArea = buttons[1];
+    const sf::FloatRect& leaveArea = buttons[2];
+
+    if (waitingReady) {
+        ui_.drawButton(window_, readyArea, text::roomCancelReady(), true, sf::Color(50, 160, 90));
+    } else {
+        ui_.drawButton(window_, readyArea, text::roomWaitingReady(), true, sf::Color(60, 130, 210));
+    }
+
+    ui_.drawButton(window_, nextArea, text::roomNextStep(), canProceed,
+        canProceed ? sf::Color(210, 150, 50) : sf::Color(80, 80, 90));
+    ui_.drawButton(window_, leaveArea, "离开房间", true, sf::Color(120, 60, 50));
 }
 
 void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH,
                                        int playerSlot, PlayerRole expectedRole) {
     const bool isConnected = renderWorld_.connectedCount > static_cast<uint8_t>(playerSlot);
-    const bool isReady = (renderWorld_.readyMask & (1u << playerSlot)) != 0;
+    const bool isReady = (renderWorld_.waitingReadyMask & (1u << playerSlot)) != 0;
     const bool isSelf = (playerSlot == static_cast<int>(slot_)) && connected_;
 
     // Panel background
@@ -1493,8 +1449,9 @@ void GameClient::renderLobbyScreen() {
 
     const sf::FloatRect viewport = levelMapViewportRect();
     const float nodeY = levelNodeLocalCenter(renderWorld_.levelIndex).y;
-    const float nodeTop = nodeY - kLevelNodeRadius - 8.0f;
-    const float nodeBottom = nodeY + kLevelNodeRadius + 8.0f;
+    const float nodeRadius = levelNodeRadius(renderWorld_.levelIndex, renderWorld_.levelCount);
+    const float nodeTop = nodeY - nodeRadius - 8.0f;
+    const float nodeBottom = nodeY + nodeRadius + 8.0f;
     if (nodeTop < levelMapScrollY_) {
         levelMapScrollY_ = nodeTop;
     }
@@ -1509,80 +1466,57 @@ void GameClient::renderLobbyScreen() {
 
     ui_.drawPanel(window_, {0.0f, 0.0f, w, 72.0f}, sf::Color(48, 36, 28, 220), 220.0f);
     ui_.drawCenteredText(window_, text::forestTemple(), w / 2.0f, 12.0f, 34, sf::Color(255, 230, 170));
-    ui_.drawCenteredText(window_, text::lobbySelectHint(), w / 2.0f, 48.0f, 16, sf::Color(200, 190, 170));
+    ui_.drawCenteredText(window_, text::levelSelectTitle(), w / 2.0f, 48.0f, 16, sf::Color(200, 190, 170));
 
     drawLevelProgressMap();
 
-    const sf::FloatRect detailPanel{740.0f, 88.0f, 260.0f, 420.0f};
-    ui_.drawPanel(window_, detailPanel, sf::Color(36, 30, 24, 230), 230.0f);
-
-    const LevelCatalog& catalog = LevelCatalog::instance();
-    const LevelInfo& selectedInfo = catalog.at(renderWorld_.levelIndex);
-    const bool selectedUnlocked = isLevelUnlocked(renderWorld_.unlockedMask, renderWorld_.levelIndex);
-    const bool selectedCompleted = isLevelCompleted(renderWorld_.completedMask, renderWorld_.levelIndex);
-
-    ui_.drawText(window_, "Level " + std::to_string(renderWorld_.levelIndex + 1), detailPanel.left + 16.0f,
-        detailPanel.top + 14.0f, 24, sf::Color(255, 230, 170));
-    ui_.drawText(window_, selectedInfo.title, detailPanel.left + 16.0f, detailPanel.top + 44.0f, 18,
-        sf::Color(230, 225, 210));
-    ui_.drawText(window_, selectedInfo.subtitle, detailPanel.left + 16.0f, detailPanel.top + 70.0f, 14,
-        sf::Color(180, 170, 155));
-
-    if (!selectedUnlocked) {
-        ui_.drawText(window_, text::lobbyLockedHint(), detailPanel.left + 16.0f, detailPanel.top + 98.0f, 16,
-            sf::Color(255, 140, 100));
-    } else if (selectedCompleted) {
-        ui_.drawText(window_, text::lobbyClearedHint(), detailPanel.left + 16.0f, detailPanel.top + 98.0f, 16,
-            sf::Color(255, 220, 100));
-    }
-
-    const sf::FloatRect previewArea{
-        detailPanel.left + 12.0f,
-        detailPanel.top + 124.0f,
-        detailPanel.width - 24.0f,
-        detailPanel.height - 160.0f
-    };
-    sf::RectangleShape previewBg({previewArea.width, previewArea.height});
-    previewBg.setPosition(previewArea.left, previewArea.top);
-    previewBg.setFillColor(sf::Color(18, 16, 14));
-    window_.draw(previewBg);
-    if (selectedUnlocked) {
+    const sf::FloatRect previewArea{676.0f, 136.0f, 308.0f, 408.0f};
+    ui_.drawPanel(window_, previewArea, sf::Color(28, 24, 20, 220), 220.0f);
+    ui_.drawText(window_, "地图预览", previewArea.left + 12.0f, previewArea.top + 8.0f, 16,
+        sf::Color(255, 230, 170));
+    if (tiledMap_.ready()) {
+        tiledMap_.drawPreview(window_, previewArea);
+    } else {
+        // 无 TMX 时回退为 collision 色块预览
         drawMapPreview(window_, previewArea);
     }
 
-    const std::string detail = std::string(renderWorld_.levelName) + "  |  Gems: "
-        + std::to_string(renderWorld_.totalGems);
-    ui_.drawCenteredText(window_, detail, detailPanel.left + detailPanel.width / 2.0f,
-        detailPanel.top + detailPanel.height - 28.0f, 16, sf::Color(255, 220, 120));
+    const LevelCatalog& catalog = LevelCatalog::instance();
+    const uint8_t playerCount = std::max(uint8_t{1}, renderWorld_.connectedCount);
+    const uint8_t globalSelected = catalog.filteredIndexToGlobalIndex(renderWorld_.levelIndex, playerCount);
+    const LevelInfo& selectedInfo = catalog.at(globalSelected);
+    const bool selectedUnlocked = isLevelUnlocked(renderWorld_.unlockedMask, globalSelected);
+    const bool selectedCompleted = isLevelCompleted(renderWorld_.completedMask, globalSelected);
 
-    const sf::FloatRect statusPanel{24.0f, 524.0f, 976.0f, 96.0f};
+    const sf::FloatRect statusPanel{24.0f, 576.0f, 700.0f, 48.0f};
     ui_.drawPanel(window_, statusPanel, sf::Color(36, 30, 24, 220), 220.0f);
 
-    const std::string roleLine = std::string("You: ") + roleDisplayName() + "     Players: "
-        + std::to_string(renderWorld_.connectedCount) + "/2";
-    ui_.drawText(window_, roleLine, statusPanel.left + 20.0f, statusPanel.top + 14.0f, 20, sf::Color(220, 220, 220));
+    std::string levelLine = "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + selectedInfo.title;
+    if (!selectedUnlocked) {
+        levelLine += "  [" + text::lobbyLockedHint() + "]";
+    } else if (selectedCompleted) {
+        levelLine += "  [" + text::lobbyClearedHint() + "]";
+    }
+    levelLine += "  |  Gems: " + std::to_string(renderWorld_.totalGems);
+    ui_.drawText(window_, levelLine, statusPanel.left + 20.0f, statusPanel.top + 14.0f, 18, sf::Color(255, 230, 170));
 
-    const bool fireReady = (renderWorld_.readyMask & 0x01) != 0;
-    const bool waterReady = (renderWorld_.readyMask & 0x02) != 0;
-    ui_.drawText(window_, std::string("Fire: ") + (fireReady ? "Ready" : "Waiting"), statusPanel.left + 20.0f,
-        statusPanel.top + 42.0f, 18, fireReady ? sf::Color(255, 140, 80) : sf::Color(150, 150, 150));
-    ui_.drawText(window_, std::string("Water: ") + (waterReady ? "Ready" : "Waiting"), statusPanel.left + 180.0f,
-        statusPanel.top + 42.0f, 18, waterReady ? sf::Color(100, 180, 255) : sf::Color(150, 150, 150));
-
-    ui_.drawText(window_, text::lobbyControlsHint(), statusPanel.left + 360.0f, statusPanel.top + 42.0f, 16,
+    ui_.drawText(window_, text::lobbyControlsHint(), statusPanel.left + 360.0f, statusPanel.top + 16.0f, 14,
         sf::Color(180, 170, 150));
 
-    const sf::FloatRect playArea{760.0f, statusPanel.top + 8.0f, 220.0f, 72.0f};
+    const sf::FloatRect playArea{740.0f, 576.0f, 260.0f, 48.0f};
+    const bool canStart = selectedUnlocked && !localReady_;
     if (assets_.hasButtons()) {
         if (!localReady_) {
-            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), "[Enter] Start", true, true);
+            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(),
+                canStart ? "[Enter] 准备" : text::lobbyLockedHint(), canStart, canStart);
         } else {
-            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), "Ready! [Esc]", true, true);
+            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), "已准备", true, true);
         }
     } else if (!localReady_) {
-        ui_.drawButton(window_, playArea, "ENTER - Start", true, sf::Color(60, 130, 210));
+        ui_.drawButton(window_, playArea, canStart ? "准备游戏" : text::lobbyLockedHint(), canStart,
+            canStart ? sf::Color(60, 130, 210) : sf::Color(80, 80, 90));
     } else {
-        ui_.drawButton(window_, playArea, "Ready! (Esc cancel)", true, sf::Color(50, 140, 90));
+        ui_.drawButton(window_, playArea, "已准备", true, sf::Color(50, 140, 90));
     }
 }
 
@@ -1590,7 +1524,13 @@ void GameClient::renderGameScreen() {
     const float mapW = static_cast<float>(map_.width()) * TILE_SIZE;
     const float mapH = static_cast<float>(map_.height()) * TILE_SIZE;
 
-    if (assets_.ready()) {
+    const LevelCatalog& catalog = LevelCatalog::instance();
+    const uint8_t playerCount = std::max(uint8_t{1}, renderWorld_.connectedCount);
+    const uint8_t globalIndex = catalog.filteredIndexToGlobalIndex(renderWorld_.levelIndex, playerCount);
+    const LevelInfo& levelInfo = catalog.at(globalIndex);
+    const bool hasTiledVisual = levelInfo.visualFileName != nullptr && levelInfo.visualFileName[0] != '\0';
+
+    if (assets_.ready() && !hasTiledVisual) {
         sf::Sprite bg(assets_.gameBackground());
         const sf::Vector2u texSize = assets_.gameBackground().getSize();
         if (texSize.x > 0 && texSize.y > 0) {
@@ -1722,8 +1662,8 @@ void GameClient::drawDynamicTiles(sf::RenderWindow& window) const {
 
 void GameClient::drawMap(sf::RenderWindow& window) const {
     if (tiledMap_.ready()) {
+        // TMX 已含完整地形，不再叠加 drawDynamicTiles 色块
         tiledMap_.drawStatic(window);
-        drawDynamicTiles(window);
         return;
     }
 
@@ -1866,6 +1806,7 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     window.draw(dim);
 
     if (assets_.ready()) {
+        // 图片已带标题文字，下方只补充关卡名/宝石等，避免重复叠字
         const sf::Texture& screenTex = victory
             ? ((renderWorld_.players[0].gems + renderWorld_.players[1].gems >= renderWorld_.totalGems
                    && renderWorld_.totalGems > 0)
@@ -1890,12 +1831,16 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
         + renderWorld_.levelName;
 
     if (victory) {
-        ui_.drawCenteredText(window, "Level Complete!", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(140, 255, 170));
+        if (!assets_.ready()) {
+            ui_.drawCenteredText(window, "Level Complete!", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(140, 255, 170));
+        }
         ui_.drawCenteredText(window, levelLine, centerX, mapH / 2.0f - 48.0f, 22, sf::Color(220, 240, 220));
         ui_.drawCenteredText(window, "Both players reached the exit.", centerX, mapH / 2.0f - 16.0f, 20,
             sf::Color(210, 230, 210));
     } else {
-        ui_.drawCenteredText(window, "Game Over", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(255, 120, 120));
+        if (!assets_.ready()) {
+            ui_.drawCenteredText(window, "Game Over", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(255, 120, 120));
+        }
         ui_.drawCenteredText(window, levelLine, centerX, mapH / 2.0f - 48.0f, 22, sf::Color(240, 210, 210));
         if (!renderWorld_.players[0].alive && !renderWorld_.players[1].alive) {
             ui_.drawCenteredText(window, "Both players were eliminated.", centerX, mapH / 2.0f - 16.0f, 20,

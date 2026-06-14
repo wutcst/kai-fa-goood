@@ -15,10 +15,13 @@ namespace fireice {
 struct ClientSlot {
     bool connected = false;
     bool ready = false;
+    bool waitingReady = false;
     PlayerRole role = PlayerRole::None;
     sf::IpAddress address;
     unsigned short port = 0;
     InputFlags pendingInput = InputFlags::None;
+    bool jumpHeld = false;
+    bool airJumpUsedThisHold = false;
     std::string name;
 };
 
@@ -40,6 +43,10 @@ private:
     void beginPlaying();
     void returnToLobby();
     bool allConnectedReady() const;
+    bool allConnectedWaitingReady() const;
+    void syncWaitingReadyMask();
+    void proceedToMapSelect();
+    void backToWaitingRoom();
     void processPackets();
     void handleAction(uint8_t slot, PlayerAction action, uint8_t value);
     void simulateTick();

@@ -1,4 +1,5 @@
 #include "Map.hpp"
+#include "Physics.hpp"
 
 #include <algorithm>
 #include <fstream>
@@ -7,6 +8,7 @@
 namespace fireice {
 
 TileType GameMap::charToTile(char c) const {
+    // collision.txt 字符 → 逻辑瓦片；f/w/p 为出生点，解析后当空地
     switch (c) {
     case '.': return TileType::Empty;
     case '#': return TileType::Solid;
@@ -94,17 +96,18 @@ bool GameMap::loadFromText(const std::string& text) {
             tiles_[static_cast<std::size_t>(y * width_ + x)] = charToTile(c);
 
             if (c == 'f') {
+                // 出生点：脚底对齐平台顶面
                 spawns_.push_back({PlayerRole::Fire,
-                    x * TILE_SIZE + TILE_SIZE * 0.25f,
-                    y * TILE_SIZE + TILE_SIZE * 0.25f});
+                    x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
+                    y * TILE_SIZE + TILE_SIZE - PLAYER_HEIGHT});
             } else if (c == 'w') {
                 spawns_.push_back({PlayerRole::Water,
-                    x * TILE_SIZE + TILE_SIZE * 0.25f,
-                    y * TILE_SIZE + TILE_SIZE * 0.25f});
+                    x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
+                    y * TILE_SIZE + TILE_SIZE - PLAYER_HEIGHT});
             } else if (c == 'p') {
                 spawns_.push_back({PlayerRole::Poison,
-                    x * TILE_SIZE + TILE_SIZE * 0.25f,
-                    y * TILE_SIZE + TILE_SIZE * 0.25f});
+                    x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
+                    y * TILE_SIZE + TILE_SIZE - PLAYER_HEIGHT});
             }
         }
     }
@@ -142,6 +145,7 @@ bool GameMap::blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bo
     if (type == TileType::Solid) {
         return true;
     }
+    // 门：对应角色踩按钮后暂时可通过
     if (type == TileType::FireDoor) {
         return !fireDoorOpen;
     }
@@ -155,6 +159,7 @@ bool GameMap::blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bo
 }
 
 bool GameMap::isHazardFor(TileType type, PlayerRole role) const {
+    // 各角色免疫自己的元素，其余视为伤害区
     if (type == TileType::Lava) {
         return role != PlayerRole::Fire;
     }
