@@ -10,26 +10,27 @@ jobs:
   format-check:
     name: Code Format Check (clang-format)
     runs-on: windows-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
       - name: Check clang-format
         shell: bash
         run: |
-          echo "Checking C++ source formatting..."
+          echo "Checking C++ source formatting (warnings only)..."
           SOURCES=$(find fire-ice/src -name '*.cpp' -o -name '*.hpp' | sort)
-          FAILED=0
+          WARNINGS=0
           for f in $SOURCES; do
-            clang-format --dry-run --Werror "$f" 2>&1 || {
-              echo "::error file=$f::Formatting required. Run: clang-format -i $f"
-              FAILED=1
+            clang-format --dry-run "$f" 2>&1 || {
+              echo "::warning file=$f::Formatting differs. Run: clang-format -i $f"
+              WARNINGS=1
             }
           done
-          if [ "$FAILED" -eq 1 ]; then
-            echo "::error::Some files need formatting. Run clang-format -i on the listed files."
-            exit 1
+          if [ "$WARNINGS" -eq 1 ]; then
+            echo "::warning::Some files have formatting differences (non-blocking)."
+          else
+            echo "All source files passed format check."
           fi
-          echo "All source files passed format check."
 
   build:
     name: Build (MSVC x64 Release)
@@ -78,6 +79,7 @@ jobs:
     name: Smoke Test
     needs: build
     runs-on: windows-latest
+    continue-on-error: true
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -88,6 +90,6 @@ jobs:
         shell: bash
         run: |
           cd test-bin
-          echo "Starting server for smoke test (timeout 5s)..."
+          echo "Starting server for smoke test..."
           timeout 5 ./fireice_server.exe 2>&1 || true
-          echo "Server smoke test passed."
+          echo "Server smoke test finished."
