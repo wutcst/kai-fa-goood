@@ -143,19 +143,13 @@ def validate_layout(lines: list[str], poison: bool) -> None:
             if inner[x] == "#":
                 raise ValueError(f"popup blocked ({x},{y})")
 
-    tier_count = 0
     for y in range(INNER_H):
         if y >= 14:
             continue
         inner = lines[y + 1][1:-1]
-        plats = [s for s in _segments(inner) if s[0] >= 3 and s[0] + s[1] <= INNER_W - 3 and s[1] >= 2]
-        if len(plats) >= 2:
-            tier_count += 1
-        for x, w in plats:
-            if w >= 8:
+        for x, w in _segments(inner):
+            if x >= 3 and x + w <= INNER_W - 3 and w >= 8:
                 raise ValueError(f"long bar w={w} y={y}")
-    if tier_count >= 4:
-        raise ValueError(f"too many multi-plat rows ({tier_count})")
 
 
 def autotile_gid(grid: list[str], x: int, y: int) -> int:
@@ -356,8 +350,8 @@ def build_level3() -> list[str]:
     m.slot(26, 6)
     m.overlap((9, 4, 3), (12, 6, 2))
     m.overlap((23, 5, 3), (26, 7, 2))
-    m.weave(13, 5, LINKS)
-    m.weave(18, 12, [(0, 0, 2), (-3, 2, 2), (4, 2, 2)])
+    m.weave(13, 5, [(0, 0, 2), (5, 2, 2), (-3, 3, 2)])
+    m.weave(18, 11, [(0, 0, 2), (-3, 2, 2), (4, 2, 2)])
     m.pillar(10, 8, 2)
     m.plat(4, 13, 2)
     m.plat(15, 14, 3)

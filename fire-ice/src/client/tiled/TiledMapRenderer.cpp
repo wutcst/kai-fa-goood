@@ -403,8 +403,14 @@ void TiledMapRenderer::drawStatic(sf::RenderWindow& window) const {
     if (!isBaked_) {
         return;
     }
-    drawImageLayersToWindow(window); // 背景平铺层
-    window.draw(bakedSprite_);       // 地形烘焙层
+    // 纯黑背景（不再平铺米色 background.png）
+    const float mapPixelW = static_cast<float>(mapWidth_) * TILE_SIZE;
+    const float mapPixelH = static_cast<float>(mapHeight_) * TILE_SIZE;
+    sf::RectangleShape bg({mapPixelW, mapPixelH});
+    bg.setPosition(0.0f, 0.0f);
+    bg.setFillColor(sf::Color::Black);
+    window.draw(bg);
+    window.draw(bakedSprite_);
 }
 
 void TiledMapRenderer::drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const {
