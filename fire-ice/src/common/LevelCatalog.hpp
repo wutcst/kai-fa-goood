@@ -35,4 +35,4 @@ private:
     std::vector<LevelInfo> levels_;
 };
 
-} // namespace fireice
+}  // namespace fireice

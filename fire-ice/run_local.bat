@@ -1,37 +1,30 @@
 @echo off
 setlocal
-
 cd /d "%~dp0"
 
 set "BIN=%~dp0build\Release"
 
-if not exist "%BIN%\fireice_server.exe" (
+if not exist "%BIN%\fireice_client.exe" (
     echo Please run build.bat first.
     exit /b 1
 )
 
-if not exist "%BIN%\fireice_client.exe" (
-    echo fireice_client.exe not found. Please run build.bat first.
-    exit /b 1
-)
-
-if not exist "%BIN%\levels\level01_collision.txt" (
-    echo Level files missing in %BIN%\levels
-    echo Please run build.bat to copy assets.
-    exit /b 1
-)
-
-echo Closing previous game instances...
-taskkill /F /IM fireice_client.exe >nul 2>&1
-taskkill /F /IM fireice_server.exe >nul 2>&1
-ping -n 2 127.0.0.1 >nul
-
-start "FireIce Server" /D "%BIN%" "%BIN%\fireice_server.exe"
-ping -n 2 127.0.0.1 >nul
-start "Fire-Ice Client" /D "%BIN%" "%BIN%\fireice_client.exe" 127.0.0.1 fire
-
-echo Started server and one client from %BIN%
+echo === Fire & Ice 联机测试 ===
 echo.
-echo In the client window: select create room and press Enter to connect.
-echo To play co-op, open another client manually:
-echo   %BIN%\fireice_client.exe 127.0.0.1 water
+echo [左侧窗口] 主机 - 点击"创建房间"
+echo [右侧窗口] 加入方 - 点击"加入房间"，会自动扫描到主机
+echo.
+
+start "FireIce-Host" /D "%BIN%" "%BIN%\fireice_client.exe"
+ping -n 4 127.0.0.1 >nul
+start "FireIce-Guest" /D "%BIN%" "%BIN%\fireice_client.exe"
+
+echo.
+echo 使用说明:
+echo   主机:  点击 [创建房间] → 房间号和IP显示在左上角
+echo   加入方: 点击 [加入房间] → 自动扫描局域网 → 选择房间 → Enter 加入
+echo.
+echo 两台电脑联机（同一WiFi/局域网）:
+echo   两台电脑都运行 fireice_client.exe
+echo   一台创建房间，另一台加入房间即可自动发现
+echo.

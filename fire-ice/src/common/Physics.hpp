@@ -18,4 +18,4 @@ bool sampleExit(const GameMap& map, const PlayerState& player);
 void collectGems(PlayerState& player, GameMap& map);
 void updateButtons(const GameMap& map, WorldState& world);
 
-} // namespace fireice
+}  // namespace fireice

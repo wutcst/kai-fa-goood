@@ -10,44 +10,71 @@ namespace fireice {
 TileType GameMap::charToTile(char c) const {
     // collision.txt 字符 → 逻辑瓦片；f/w/p 为出生点，解析后当空地
     switch (c) {
-    case '.': return TileType::Empty;
-    case '#': return TileType::Solid;
-    case 'L': return TileType::Lava;
-    case 'W': return TileType::Water;
-    case 'F': return TileType::FireDoor;
-    case 'I': return TileType::WaterDoor;
-    case 'E': return TileType::FireExit;
-    case 'X': return TileType::WaterExit;
-    case 'G': return TileType::Gem;
-    case 'B': return TileType::Button;
-    case 'A': return TileType::Acid;
-    case 'D': return TileType::PoisonDoor;
-    case 'P': return TileType::PoisonExit;
-    case 'f':
-    case 'w':
-    case 'p':
-        return TileType::Empty;
-    default:
-        return TileType::Solid;
+        case '.':
+            return TileType::Empty;
+        case '#':
+            return TileType::Solid;
+        case 'L':
+            return TileType::Lava;
+        case 'W':
+            return TileType::Water;
+        case 'F':
+            return TileType::FireDoor;
+        case 'I':
+            return TileType::WaterDoor;
+        case 'E':
+            return TileType::FireExit;
+        case 'X':
+            return TileType::WaterExit;
+        case 'G':
+            return TileType::Gem;
+        case 'B':
+            return TileType::Button;
+        case 'A':
+            return TileType::Acid;
+        case 'D':
+            return TileType::PoisonDoor;
+        case 'P':
+            return TileType::PoisonExit;
+        case 'f':
+        case 'w':
+        case 'p':
+            return TileType::Empty;
+        default:
+            return TileType::Solid;
     }
 }
 
 char GameMap::tileToChar(TileType type) const {
     switch (type) {
-    case TileType::Empty: return '.';
-    case TileType::Solid: return '#';
-    case TileType::Lava: return 'L';
-    case TileType::Water: return 'W';
-    case TileType::FireDoor: return 'F';
-    case TileType::WaterDoor: return 'I';
-    case TileType::FireExit: return 'E';
-    case TileType::WaterExit: return 'X';
-    case TileType::Acid: return 'A';
-    case TileType::PoisonDoor: return 'D';
-    case TileType::PoisonExit: return 'P';
-    case TileType::Gem: return 'G';
-    case TileType::Button: return 'B';
-    default: return '#';
+        case TileType::Empty:
+            return '.';
+        case TileType::Solid:
+            return '#';
+        case TileType::Lava:
+            return 'L';
+        case TileType::Water:
+            return 'W';
+        case TileType::FireDoor:
+            return 'F';
+        case TileType::WaterDoor:
+            return 'I';
+        case TileType::FireExit:
+            return 'E';
+        case TileType::WaterExit:
+            return 'X';
+        case TileType::Acid:
+            return 'A';
+        case TileType::PoisonDoor:
+            return 'D';
+        case TileType::PoisonExit:
+            return 'P';
+        case TileType::Gem:
+            return 'G';
+        case TileType::Button:
+            return 'B';
+        default:
+            return '#';
     }
 }
 
@@ -141,7 +168,7 @@ bool GameMap::isSolid(TileType type) const {
 
 bool GameMap::blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bool waterDoorOpen,
                            bool poisonDoorOpen) const {
-    (void)role;
+    (void) role;
     if (type == TileType::Solid) {
         return true;
     }
@@ -195,4 +222,4 @@ int GameMap::countGems() const {
     return count;
 }
 
-} // namespace fireice
+}  // namespace fireice

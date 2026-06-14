@@ -63,4 +63,4 @@ private:
     bool mapIconsReady_ = false;
 };
 
-} // namespace fireice
+}  // namespace fireice

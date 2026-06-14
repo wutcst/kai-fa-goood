@@ -15,7 +15,7 @@ const char* kFontCandidates[] = {
     "C:/Windows/Fonts/simhei.ttf",
 };
 
-} // namespace
+}  // namespace
 
 bool UiHelper::loadFont() {
     for (const char* path : kFontCandidates) {
@@ -90,7 +90,7 @@ void UiHelper::drawImageButton(sf::RenderWindow& window, const sf::FloatRect& ar
 
     sf::Sprite sprite(texture);
     const float scale = std::min(area.width / static_cast<float>(texture.getSize().x),
-        area.height / static_cast<float>(texture.getSize().y));
+                                 area.height / static_cast<float>(texture.getSize().y));
     const float drawW = static_cast<float>(texture.getSize().x) * scale;
     const float drawH = static_cast<float>(texture.getSize().y) * scale;
     sprite.setScale(scale, scale);
@@ -112,7 +112,7 @@ void UiHelper::drawImageButtonWithHint(sf::RenderWindow& window, const sf::Float
     drawImageButton(window, area, texture, enabled, highlighted);
     if (!hint.empty()) {
         drawCenteredText(window, hint, area.left + area.width / 2.0f, area.top + area.height + 4.0f, 14,
-            enabled ? sf::Color(230, 230, 230) : sf::Color(150, 150, 150));
+                         enabled ? sf::Color(230, 230, 230) : sf::Color(150, 150, 150));
     }
 }
 
@@ -176,4 +176,4 @@ void UiHelper::drawTitleMenuItem(sf::RenderWindow& window, const std::string& te
     }
 }
 
-} // namespace fireice
+}  // namespace fireice

@@ -43,20 +43,14 @@ const sf::Texture& AssetManager::mapBossIcon(bool unlocked, bool completed) cons
 }
 
 bool AssetManager::load() {
-    ready_ = loadTexture(fireBoy_, "fireman.png")
-        && loadTexture(waterGirl_, "watergirl.png")
-        && loadTexture(gemRed_, "red.png")
-        && loadTexture(gemBlue_, "blue.png")
-        && loadTexture(lobbyBackground_, "start.png")
-        && loadTexture(gameBackground_, "gamenew.jpg")
-        && loadTexture(winScreen_, "winend.png")
-        && loadTexture(winScreenPartial_, "winend2.png")
-        && loadTexture(loseScreen_, "loseend.png");
+    ready_ = loadTexture(fireBoy_, "fireman.png") && loadTexture(waterGirl_, "watergirl.png") &&
+             loadTexture(gemRed_, "red.png") && loadTexture(gemBlue_, "blue.png") &&
+             loadTexture(lobbyBackground_, "start.png") && loadTexture(gameBackground_, "gamenew.jpg") &&
+             loadTexture(winScreen_, "winend.png") && loadTexture(winScreenPartial_, "winend2.png") &&
+             loadTexture(loseScreen_, "loseend.png");
 
-    buttonsReady_ = loadTexture(playButton_, "play2.png")
-        && loadTexture(retryButton_, "retry_button.png")
-        && loadTexture(continueButton_, "continue_button.png")
-        && loadTexture(menuButton_, "menu_button.png");
+    buttonsReady_ = loadTexture(playButton_, "play2.png") && loadTexture(retryButton_, "retry_button.png") &&
+                    loadTexture(continueButton_, "continue_button.png") && loadTexture(menuButton_, "menu_button.png");
 
     mapIconsReady_ = loadMapIcons();
 
@@ -64,4 +58,4 @@ bool AssetManager::load() {
     return ready_;
 }
 
-} // namespace fireice
+}  // namespace fireice

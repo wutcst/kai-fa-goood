@@ -44,4 +44,4 @@ private:
     char tileToChar(TileType type) const;
 };
 
-} // namespace fireice
+}  // namespace fireice

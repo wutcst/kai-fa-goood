@@ -14,14 +14,9 @@ constexpr uint16_t SERVER_PORT = 24567;
 constexpr uint8_t MIN_PLAYERS_TO_START = 1;
 constexpr float TICK_RATE = 60.0f;           // 服务端物理帧率
 constexpr float TICK_DT = 1.0f / TICK_RATE;
-constexpr float STATE_BROADCAST_HZ = 20.0f;  // 状态同步频率
+constexpr float STATE_BROADCAST_HZ = 60.0f;  // 状态同步频率
 
-enum class PlayerRole : uint8_t {
-    None = 0,
-    Fire = 1,
-    Water = 2,
-    Poison = 3
-};
+enum class PlayerRole : uint8_t { None = 0, Fire = 1, Water = 2, Poison = 3 };
 
 enum class TileType : uint8_t {
     Empty = 0,
@@ -47,13 +42,7 @@ enum class GamePhase : uint8_t {
     GameOver = 4
 };
 
-enum class InputFlags : uint8_t {
-    None = 0,
-    Left = 1 << 0,
-    Right = 1 << 1,
-    Jump = 1 << 2,
-    Down = 1 << 3
-};
+enum class InputFlags : uint8_t { None = 0, Left = 1 << 0, Right = 1 << 1, Jump = 1 << 2, Down = 1 << 3 };
 
 enum class PlayerAction : uint8_t {
     None = 0,
@@ -119,8 +108,7 @@ struct AABB {
     float bottom() const { return y + h; }
 
     bool intersects(const AABB& other) const {
-        return left() < other.right() && right() > other.left()
-            && top() < other.bottom() && bottom() > other.top();
+        return left() < other.right() && right() > other.left() && top() < other.bottom() && bottom() > other.top();
     }
 };
 
@@ -162,13 +150,19 @@ struct WorldState {
 
 inline const char* phaseName(GamePhase phase) {
     switch (phase) {
-    case GamePhase::Lobby: return "Lobby";
-    case GamePhase::Countdown: return "Countdown";
-    case GamePhase::Playing: return "Playing";
-    case GamePhase::Victory: return "Victory";
-    case GamePhase::GameOver: return "GameOver";
-    default: return "Unknown";
+        case GamePhase::Lobby:
+            return "Lobby";
+        case GamePhase::Countdown:
+            return "Countdown";
+        case GamePhase::Playing:
+            return "Playing";
+        case GamePhase::Victory:
+            return "Victory";
+        case GamePhase::GameOver:
+            return "GameOver";
+        default:
+            return "Unknown";
     }
 }
 
-} // namespace fireice
+}  // namespace fireice

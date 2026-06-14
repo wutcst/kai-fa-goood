@@ -16,7 +16,8 @@ enum class PacketType : uint8_t {
     Input = 4,
     State = 5,
     Disconnect = 6,
-    Action = 7
+    Action = 7,
+    Discovery = 8
 };
 
 #pragma pack(push, 1)
@@ -69,6 +70,15 @@ struct ActionPacket {
     uint8_t value = 0;
 };
 
+struct DiscoveryPacket {
+    PacketHeader header{PacketType::Discovery, 1};
+    uint8_t isResponse = 0;
+    char roomCode[MAX_ROOM_CODE]{};
+    uint8_t playerCount = 0;
+    uint8_t maxPlayers = 0;
+    char levelName[MAX_LEVEL_NAME]{};
+};
+
 #pragma pack(pop)
 
 template <typename T>
@@ -94,11 +104,15 @@ bool unpackPacket(const char* data, std::size_t size, T& packet) {
 
 inline const char* roleName(PlayerRole role) {
     switch (role) {
-    case PlayerRole::Fire: return "Fire";
-    case PlayerRole::Water: return "Water";
-    case PlayerRole::Poison: return "Poison";
-    default: return "None";
+        case PlayerRole::Fire:
+            return "Fire";
+        case PlayerRole::Water:
+            return "Water";
+        case PlayerRole::Poison:
+            return "Poison";
+        default:
+            return "None";
     }
 }
 
-} // namespace fireice
+}  // namespace fireice

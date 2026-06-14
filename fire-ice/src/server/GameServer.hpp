@@ -73,4 +73,4 @@ private:
     std::chrono::steady_clock::time_point lastBroadcast_;
 };
 
-} // namespace fireice
+}  // namespace fireice
