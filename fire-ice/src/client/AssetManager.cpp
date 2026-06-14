@@ -10,15 +10,15 @@ bool AssetManager::loadTexture(sf::Texture& texture, const std::string& fileName
 bool AssetManager::loadMapIcons() {
     for (std::size_t i = 0; i < mapLevelAvailable_.size(); ++i) {
         const std::string prefix = "map/level_" + std::to_string(i + 1) + "_";
-        if (!loadTexture(mapLevelAvailable_[i], prefix + "available.png")
-            || !loadTexture(mapLevelLocked_[i], prefix + "locked.png")
-            || !loadTexture(mapLevelCompleted_[i], prefix + "completed.png")) {
+        if (!loadTexture(mapLevelAvailable_[i], prefix + "available.png") ||
+            !loadTexture(mapLevelLocked_[i], prefix + "locked.png") ||
+            !loadTexture(mapLevelCompleted_[i], prefix + "completed.png")) {
             return false;
         }
     }
-    return loadTexture(mapBossAvailable_, "map/boss_available.png")
-        && loadTexture(mapBossLocked_, "map/boss_locked.png")
-        && loadTexture(mapBossCompleted_, "map/boss_completed.png");
+    return loadTexture(mapBossAvailable_, "map/boss_available.png") &&
+           loadTexture(mapBossLocked_, "map/boss_locked.png") &&
+           loadTexture(mapBossCompleted_, "map/boss_completed.png");
 }
 
 const sf::Texture& AssetManager::mapLevelIcon(uint8_t levelIndex, bool unlocked, bool completed) const {

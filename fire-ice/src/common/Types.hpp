@@ -12,7 +12,7 @@ constexpr float MAX_FALL_SPEED = 900.0f;
 
 constexpr uint16_t SERVER_PORT = 24567;
 constexpr uint8_t MIN_PLAYERS_TO_START = 1;
-constexpr float TICK_RATE = 60.0f;           // 服务端物理帧率
+constexpr float TICK_RATE = 60.0f;  // 服务端物理帧率
 constexpr float TICK_DT = 1.0f / TICK_RATE;
 constexpr float STATE_BROADCAST_HZ = 60.0f;  // 状态同步频率
 
@@ -35,7 +35,7 @@ enum class TileType : uint8_t {
 };
 
 enum class GamePhase : uint8_t {
-    Lobby = 0,      // 等待室 / 选关
+    Lobby = 0,  // 等待室 / 选关
     Countdown = 1,
     Playing = 2,
     Victory = 3,
@@ -46,14 +46,14 @@ enum class InputFlags : uint8_t { None = 0, Left = 1 << 0, Right = 1 << 1, Jump 
 
 enum class PlayerAction : uint8_t {
     None = 0,
-    Ready = 1,              // 选关界面：准备开局
+    Ready = 1,  // 选关界面：准备开局
     Restart = 2,
     SelectLevel = 3,
     NextLevel = 4,
     PrevLevel = 5,
     ReturnToLobby = 6,
-    WaitingReady = 7,       // 等待室：切换「我已准备」
-    ProceedToMapSelect = 8, // 等待室：全员准备后进选关
+    WaitingReady = 7,        // 等待室：切换「我已准备」
+    ProceedToMapSelect = 8,  // 等待室：全员准备后进选关
     BackToWaitingRoom = 9
 };
 
@@ -61,7 +61,7 @@ constexpr unsigned LOBBY_WINDOW_WIDTH = 1024;
 constexpr unsigned LOBBY_WINDOW_HEIGHT = 640;
 
 constexpr uint8_t MAX_LEVEL_NAME = 32;
-constexpr uint8_t INITIAL_UNLOCKED_LEVEL_MASK = 0xFF; // 位掩码，每位对应一关是否解锁
+constexpr uint8_t INITIAL_UNLOCKED_LEVEL_MASK = 0xFF;  // 位掩码，每位对应一关是否解锁
 constexpr uint8_t MAX_PLAYER_NAME = 16;
 constexpr uint8_t MAX_PLAYERS = 3;
 constexpr uint8_t MAX_ROOM_CODE = 8;
@@ -129,9 +129,9 @@ struct WorldState {
     uint32_t tick = 0;
     GamePhase phase = GamePhase::Lobby;
     uint8_t connectedCount = 0;
-    uint8_t readyMask = 0;           // 选关界面：谁点了「准备游戏」
+    uint8_t readyMask = 0;  // 选关界面：谁点了「准备游戏」
     uint8_t countdown = 0;
-    uint8_t levelIndex = 0;          // 过滤后的选关序号（非全局 id）
+    uint8_t levelIndex = 0;  // 过滤后的选关序号（非全局 id）
     uint8_t levelCount = 0;
     uint8_t totalGems = 0;
     char levelName[MAX_LEVEL_NAME]{};
@@ -144,8 +144,8 @@ struct WorldState {
     bool levelComplete = false;
     uint8_t unlockedMask = INITIAL_UNLOCKED_LEVEL_MASK;
     uint8_t completedMask = 0;
-    uint8_t lobbyStep = 0;           // 0=等待室，1=选关
-    uint8_t waitingReadyMask = 0;    // 等待室：谁点了「我已准备」
+    uint8_t lobbyStep = 0;         // 0=等待室，1=选关
+    uint8_t waitingReadyMask = 0;  // 等待室：谁点了「我已准备」
 };
 
 inline const char* phaseName(GamePhase phase) {

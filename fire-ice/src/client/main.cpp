@@ -59,8 +59,7 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (host == "127.0.0.1" && arg.find('.') != std::string::npos) {
             host = arg;
-        } else if (arg == "fire" || arg == "water" || arg == "poison" ||
-                   arg == "f" || arg == "w" || arg == "p" ||
+        } else if (arg == "fire" || arg == "water" || arg == "poison" || arg == "f" || arg == "w" || arg == "p" ||
                    arg == "1" || arg == "2" || arg == "3") {
             role = parseRole(arg);
         }

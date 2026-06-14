@@ -8,8 +8,8 @@ namespace fireice {
 
 struct LevelInfo {
     uint8_t id = 0;
-    const char* fileName = "";           // 服务端碰撞：assets/levels/*.txt
-    const char* visualFileName = nullptr; // 客户端 Tiled：assets/maps/*.tmx
+    const char* fileName = "";             // 服务端碰撞：assets/levels/*.txt
+    const char* visualFileName = nullptr;  // 客户端 Tiled：assets/maps/*.tmx
     const char* title = "";
     const char* subtitle = "";
     uint8_t minPlayers = 1;

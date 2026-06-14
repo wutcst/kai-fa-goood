@@ -35,4 +35,4 @@ inline uint8_t findNextUnlockedLevel(uint8_t unlockedMask, uint8_t current, uint
     return current;
 }
 
-} // namespace fireice
+}  // namespace fireice

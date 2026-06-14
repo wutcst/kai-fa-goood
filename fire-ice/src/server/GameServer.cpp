@@ -362,8 +362,7 @@ void GameServer::processPackets() {
                         resp.maxPlayers = MAX_PLAYERS;
                         const LevelCatalog& cat = LevelCatalog::instance();
                         if (selectedLevelIndex_ < cat.count()) {
-                            std::snprintf(resp.levelName, MAX_LEVEL_NAME, "%s",
-                                          cat.at(selectedLevelIndex_).title);
+                            std::snprintf(resp.levelName, MAX_LEVEL_NAME, "%s", cat.at(selectedLevelIndex_).title);
                         }
                         std::array<char, 512> buf{};
                         std::size_t sz = 0;
@@ -528,8 +527,7 @@ void GameServer::simulateTick() {
             clients_[i].airJumpUsedThisHold = false;
         }
         clients_[i].jumpHeld = jumpNow;
-        applyInput(player, clients_[i].pendingInput, TICK_DT, jumpPressed, jumpNow,
-            clients_[i].airJumpUsedThisHold);
+        applyInput(player, clients_[i].pendingInput, TICK_DT, jumpPressed, jumpNow, clients_[i].airJumpUsedThisHold);
         integratePlayer(player, map_, world_, TICK_DT);
 
         if (sampleHazard(map_, player, world_)) {

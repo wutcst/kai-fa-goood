@@ -66,7 +66,7 @@ AABB playerBounds(const PlayerState& player) {
 }
 
 void applyInput(PlayerState& player, InputFlags input, float dt, bool jumpPressed, bool jumpHeld,
-    bool& airJumpUsedThisHold) {
+                bool& airJumpUsedThisHold) {
     if (!player.alive) {
         return;
     }
@@ -86,8 +86,7 @@ void applyInput(PlayerState& player, InputFlags input, float dt, bool jumpPresse
         player.onGround = false;
         player.airJumpsLeft = MAX_AIR_JUMPS;
         airJumpUsedThisHold = false;
-    } else if (!player.onGround && player.airJumpsLeft > 0
-        && ((jumpPressed) || (jumpHeld && !airJumpUsedThisHold))) {
+    } else if (!player.onGround && player.airJumpsLeft > 0 && ((jumpPressed) || (jumpHeld && !airJumpUsedThisHold))) {
         player.vy = -JUMP_SPEED;
         --player.airJumpsLeft;
         airJumpUsedThisHold = true;

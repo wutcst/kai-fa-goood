@@ -81,4 +81,4 @@ inline sf::FloatRect levelNodeLocalHitArea(uint8_t index, uint8_t levelCount) {
     return {center.x - radius, center.y - radius, radius * 2.0f, radius * 2.0f};
 }
 
-} // namespace fireice
+}  // namespace fireice

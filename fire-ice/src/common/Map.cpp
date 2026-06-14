@@ -124,17 +124,14 @@ bool GameMap::loadFromText(const std::string& text) {
 
             if (c == 'f') {
                 // 出生点居中于标记格，避免头顶穿入上方实心块
-                spawns_.push_back({PlayerRole::Fire,
-                    x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
-                    y * TILE_SIZE + TILE_SIZE * 0.5f});
+                spawns_.push_back({PlayerRole::Fire, x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
+                                   y * TILE_SIZE + TILE_SIZE * 0.5f});
             } else if (c == 'w') {
-                spawns_.push_back({PlayerRole::Water,
-                    x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
-                    y * TILE_SIZE + TILE_SIZE * 0.5f});
+                spawns_.push_back({PlayerRole::Water, x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
+                                   y * TILE_SIZE + TILE_SIZE * 0.5f});
             } else if (c == 'p') {
-                spawns_.push_back({PlayerRole::Poison,
-                    x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
-                    y * TILE_SIZE + TILE_SIZE * 0.5f});
+                spawns_.push_back({PlayerRole::Poison, x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
+                                   y * TILE_SIZE + TILE_SIZE * 0.5f});
             }
         }
     }

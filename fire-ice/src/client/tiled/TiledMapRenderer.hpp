@@ -10,9 +10,9 @@ namespace fireice {
 class TiledMapRenderer {
 public:
     bool load(const std::string& tmxPath);
-    void bake();   // 预渲染静态层到纹理，运行时只 draw 一次
+    void bake();  // 预渲染静态层到纹理，运行时只 draw 一次
     void drawStatic(sf::RenderWindow& window) const;
-    void drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const; // 选关缩略图
+    void drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;  // 选关缩略图
 
     bool ready() const { return isBaked_; }
     int mapWidth() const { return mapWidth_; }
@@ -61,7 +61,7 @@ private:
     int mapHeight_ = 0;
     int tileWidth_ = 32;
     int tileHeight_ = 32;
-    float mapScale_ = 1.0f; // TMX 16px 图块 → 游戏 32px 的缩放比
+    float mapScale_ = 1.0f;  // TMX 16px 图块 → 游戏 32px 的缩放比
     std::vector<TilesetRef> tilesets_;
     std::vector<Layer> visualLayers_;
     std::vector<ImageLayer> imageLayers_;
@@ -71,4 +71,4 @@ private:
     bool isBaked_ = false;
 };
 
-} // namespace fireice
+}  // namespace fireice

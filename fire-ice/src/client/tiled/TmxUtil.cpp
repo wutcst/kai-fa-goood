@@ -51,8 +51,8 @@ std::optional<int> extractJsonIntValue(const std::string& json, const char* key)
         ++valueStart;
     }
     std::size_t valueEnd = valueStart;
-    while (valueEnd < json.size()
-        && (std::isdigit(static_cast<unsigned char>(json[valueEnd])) || json[valueEnd] == '-')) {
+    while (valueEnd < json.size() &&
+           (std::isdigit(static_cast<unsigned char>(json[valueEnd])) || json[valueEnd] == '-')) {
         ++valueEnd;
     }
     if (valueEnd == valueStart) {
@@ -61,7 +61,7 @@ std::optional<int> extractJsonIntValue(const std::string& json, const char* key)
     return std::stoi(json.substr(valueStart, valueEnd - valueStart));
 }
 
-} // namespace
+}  // namespace
 
 std::string readFile(const std::string& path) {
     std::ifstream file(path);
@@ -93,7 +93,8 @@ std::string tagName(const std::string& tag) {
         return {};
     }
     std::size_t end = start + 1;
-    while (end < tag.size() && !std::isspace(static_cast<unsigned char>(tag[end])) && tag[end] != '>' && tag[end] != '/') {
+    while (end < tag.size() && !std::isspace(static_cast<unsigned char>(tag[end])) && tag[end] != '>' &&
+           tag[end] != '/') {
         ++end;
     }
     return tag.substr(start + 1, end - start - 1);
@@ -195,7 +196,7 @@ float attributeFloat(const std::string& tag, const char* name, float fallback) {
     return std::stof(*value);
 }
 
-} // namespace
+}  // namespace
 
 std::vector<int> parseCsvInts(const std::string& csv) {
     std::vector<int> values;
@@ -372,4 +373,4 @@ std::string joinPath(const std::string& base, const std::string& relative) {
 #endif
 }
 
-} // namespace fireice::tmx
+}  // namespace fireice::tmx

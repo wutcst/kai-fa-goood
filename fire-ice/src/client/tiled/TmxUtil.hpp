@@ -43,4 +43,4 @@ std::vector<int> parseCsvInts(const std::string& csv);
 std::string parentDirectory(const std::string& path);
 std::string joinPath(const std::string& base, const std::string& relative);
 
-} // namespace fireice::tmx
+}  // namespace fireice::tmx
