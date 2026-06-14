@@ -5,8 +5,8 @@
 
 namespace fireice {
 
-constexpr float PLAYER_WIDTH = TILE_SIZE * 2.0f;
-constexpr float PLAYER_HEIGHT = TILE_SIZE * 3.0f;
+constexpr float PLAYER_WIDTH = TILE_SIZE * 0.7f;
+constexpr float PLAYER_HEIGHT = TILE_SIZE * 1.3f;
 constexpr uint8_t MAX_AIR_JUMPS = 1; // 空中可再跳次数（二段跳）
 
 AABB playerBounds(const PlayerState& player);

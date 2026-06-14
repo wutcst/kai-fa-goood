@@ -44,7 +44,7 @@ std::array<sf::FloatRect, 3> roomActionButtonAreas() {
 
 } // namespace
 
-bool GameClient::initialize(const std::string& host, PlayerRole preferredRole) {
+bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, bool autoConnect) {
     host_ = host;
     serverAddress_ = sf::IpAddress(host);
     if (serverAddress_ == sf::IpAddress::None) {
@@ -98,6 +98,13 @@ bool GameClient::initialize(const std::string& host, PlayerRole preferredRole) {
 
     std::cout << "[Client] Title screen ready. Server: " << serverAddress_.toString() << ":" << SERVER_PORT
               << "  Role: " << roleName(preferredRole_) << std::endl;
+
+    if (autoConnect && host_ != "127.0.0.1") {
+        std::cout << "[Client] Auto-connecting to " << host_ << "..." << std::endl;
+        typedRoomCode_.clear();
+        beginConnect();
+    }
+
     return true;
 }
 
@@ -158,9 +165,12 @@ void GameClient::handleTitleMenuSelect(int index) {
     switch (index) {
     case 0:
         typedRoomCode_.clear();
-        host_ = "127.0.0.1";
-        serverAddress_ = sf::IpAddress(host_);
-        if (startHosting()) {
+        if (host_ == "127.0.0.1") {
+            serverAddress_ = sf::IpAddress(host_);
+            if (startHosting()) {
+                beginConnect();
+            }
+        } else {
             beginConnect();
         }
         break;
@@ -480,9 +490,7 @@ void GameClient::stopHosting() {
 }
 
 void GameClient::broadcastDiscovery() {
-    if (discoveryActive_) {
-        return;
-    }
+    if (discoveryActive_) return;
 
     discoveryActive_ = true;
     discoveredRooms_.clear();
@@ -491,23 +499,12 @@ void GameClient::broadcastDiscovery() {
     const std::string targetCode = typedRoomCode_;
 
     std::thread([this, targetCode]() {
-#ifdef _WIN32
-        SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-        if (sock == INVALID_SOCKET) {
+        sf::UdpSocket scanSocket;
+        if (scanSocket.bind(sf::Socket::AnyPort) != sf::Socket::Done) {
             discoveryActive_ = false;
             return;
         }
-
-        int broadcast = 1;
-        setsockopt(sock, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&broadcast), sizeof(broadcast));
-
-        int timeout = 1500;
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
-
-        sockaddr_in dest{};
-        dest.sin_family = AF_INET;
-        dest.sin_port = htons(SERVER_PORT);
-        dest.sin_addr.s_addr = INADDR_BROADCAST;
+        scanSocket.setBlocking(false);
 
         DiscoveryPacket disc{};
         disc.isResponse = 0;
@@ -518,50 +515,49 @@ void GameClient::broadcastDiscovery() {
         std::array<char, 512> buf{};
         std::size_t sz = 0;
         packPacket(disc, buf, sz);
-        sendto(sock, buf.data(), static_cast<int>(sz), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
 
-        char recvBuf[512];
-        sockaddr_in from{};
-        int fromLen = sizeof(from);
-
-        while (discoveryActive_) {
-            int n = recvfrom(sock, recvBuf, sizeof(recvBuf), 0, reinterpret_cast<sockaddr*>(&from), &fromLen);
-            if (n <= 0) {
-                break;
-            }
-
-            char ipStr[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &from.sin_addr, ipStr, sizeof(ipStr));
-
-            DiscoveryPacket resp{};
-            if (unpackPacket(recvBuf, static_cast<std::size_t>(n), resp) && resp.isResponse == 1) {
-                DiscoveredRoom room;
-                room.address = ipStr;
-                room.roomCode = resp.roomCode;
-                room.levelName = resp.levelName[0] ? resp.levelName : "???";
-                room.playerCount = resp.playerCount;
-                room.maxPlayers = resp.maxPlayers;
-
-                bool duplicate = false;
-                for (const auto& dr : discoveredRooms_) {
-                    if (dr.address == room.address && dr.roomCode == room.roomCode) {
-                        duplicate = true;
-                        break;
-                    }
-                }
-                if (!duplicate && room.roomCode[0]) {
-                    discoveredRooms_.push_back(room);
-                    if (selectedDiscoveredRoom_ < 0) {
-                        selectedDiscoveredRoom_ = 0;
-                    }
-                }
-            }
+        for (int i = 0; i < 3; ++i) {
+            scanSocket.send(buf.data(), sz, sf::IpAddress::Broadcast, SERVER_PORT);
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 
-        closesocket(sock);
-#else
-        (void)targetCode;
-#endif
+        auto startTime = std::chrono::steady_clock::now();
+        while (discoveryActive_) {
+            char recvBuf[512];
+            std::size_t received = 0;
+            sf::IpAddress sender;
+            unsigned short senderPort = 0;
+
+            if (scanSocket.receive(recvBuf, sizeof(recvBuf), received, sender, senderPort) == sf::Socket::Done) {
+                DiscoveryPacket resp{};
+                if (unpackPacket(recvBuf, received, resp) && resp.isResponse == 1) {
+                    DiscoveredRoom room;
+                    room.address = sender.toString();
+                    room.roomCode = resp.roomCode;
+                    room.levelName = resp.levelName[0] ? resp.levelName : "???";
+                    room.playerCount = resp.playerCount;
+                    room.maxPlayers = resp.maxPlayers;
+
+                    bool duplicate = false;
+                    for (const auto& dr : discoveredRooms_) {
+                        if (dr.address == room.address && dr.roomCode == room.roomCode) {
+                            duplicate = true;
+                            break;
+                        }
+                    }
+                    if (!duplicate && room.roomCode[0]) {
+                        discoveredRooms_.push_back(room);
+                        if (selectedDiscoveredRoom_ < 0) selectedDiscoveredRoom_ = 0;
+                    }
+                }
+            }
+
+            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - startTime).count();
+            if (elapsed > 2000) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+
         discoveryActive_ = false;
     }).detach();
 }

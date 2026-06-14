@@ -48,16 +48,26 @@ int main(int argc, char* argv[]) {
 
     std::string host = "127.0.0.1";
     fireice::PlayerRole role = fireice::PlayerRole::Fire;
+    bool autoConnect = false;
 
-    if (argc > 1) {
-        host = argv[1];
-    }
-    if (argc > 2) {
-        role = parseRole(argv[2]);
+    for (int i = 1; i < argc; ++i) {
+        std::string arg(argv[i]);
+        if (arg == "--auto" || arg == "--join") {
+            autoConnect = true;
+        } else if (arg == "--help") {
+            printUsage(argv[0]);
+            return 0;
+        } else if (host == "127.0.0.1" && arg.find('.') != std::string::npos) {
+            host = arg;
+        } else if (arg == "fire" || arg == "water" || arg == "poison" ||
+                   arg == "f" || arg == "w" || arg == "p" ||
+                   arg == "1" || arg == "2" || arg == "3") {
+            role = parseRole(arg);
+        }
     }
 
     fireice::GameClient client;
-    if (!client.initialize(host, role)) {
+    if (!client.initialize(host, role, autoConnect)) {
         return 1;
     }
 

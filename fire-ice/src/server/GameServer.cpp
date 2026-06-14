@@ -382,7 +382,7 @@ void GameServer::processPackets() {
                     clients_[packet.slot] = ClientSlot{};
                     syncConnectedCount();
 
-                    if (world_.phase == GamePhase::Countdown || world_.phase == GamePhase::Playing) {
+                    if (world_.phase != GamePhase::Lobby) {
                         returnToLobby();
                     }
 

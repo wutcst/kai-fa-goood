@@ -32,7 +32,7 @@ enum class ClientScreen : uint8_t {
 
 class GameClient {
 public:
-    bool initialize(const std::string& host, PlayerRole preferredRole);
+    bool initialize(const std::string& host, PlayerRole preferredRole, bool autoConnect = false);
     void run();
     void disconnect();
     bool startHosting();

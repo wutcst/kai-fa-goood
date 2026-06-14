@@ -15,10 +15,7 @@ inline std::string utf8(std::initializer_list<unsigned char> bytes) {
 }
 
 inline const std::string& windowTitle() {
-    static const std::string value = utf8({
-        0xE7, 0x81, 0xAB, 0xE5, 0xA8, 0x83, ' ',  '&',  ' ',  0xE5, 0x86, 0xB0, 0xE5, 0xA8, 0x83,
-        ' ',  '-',  ' ',  0xE6, 0xA3, 0xAE, 0xE6, 0x9E, 0x97, 0xE7, 0xA5, 0x9E, 0xE6, 0xAE, 0xBF,
-    });
+    static const std::string value = "Fire & Ice - Forest Temple";
     return value;
 }
 

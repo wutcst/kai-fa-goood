@@ -151,6 +151,7 @@ def upload_code(deploy):
         (f"{local}/src/common/Physics.cpp", f"{PROJECT}/src/common/Physics.cpp"),
         (f"{local}/src/common/LevelCatalog.hpp", f"{PROJECT}/src/common/LevelCatalog.hpp"),
         (f"{local}/src/common/LevelCatalog.cpp", f"{PROJECT}/src/common/LevelCatalog.cpp"),
+        (f"{local}/src/common/LevelProgress.hpp", f"{PROJECT}/src/common/LevelProgress.hpp"),
         (f"{local}/src/server/GameServer.hpp", f"{PROJECT}/src/server/GameServer.hpp"),
         (f"{local}/src/server/GameServer.cpp", f"{PROJECT}/src/server/GameServer.cpp"),
         (f"{local}/src/server/main.cpp", f"{PROJECT}/src/server/main.cpp"),

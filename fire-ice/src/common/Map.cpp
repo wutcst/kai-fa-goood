@@ -123,18 +123,18 @@ bool GameMap::loadFromText(const std::string& text) {
             tiles_[static_cast<std::size_t>(y * width_ + x)] = charToTile(c);
 
             if (c == 'f') {
-                // 出生点：脚底对齐平台顶面
+                // 出生点居中于标记格，避免头顶穿入上方实心块
                 spawns_.push_back({PlayerRole::Fire,
                     x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
-                    y * TILE_SIZE + TILE_SIZE - PLAYER_HEIGHT});
+                    y * TILE_SIZE + TILE_SIZE * 0.5f});
             } else if (c == 'w') {
                 spawns_.push_back({PlayerRole::Water,
                     x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
-                    y * TILE_SIZE + TILE_SIZE - PLAYER_HEIGHT});
+                    y * TILE_SIZE + TILE_SIZE * 0.5f});
             } else if (c == 'p') {
                 spawns_.push_back({PlayerRole::Poison,
                     x * TILE_SIZE + (TILE_SIZE - PLAYER_WIDTH) * 0.5f,
-                    y * TILE_SIZE + TILE_SIZE - PLAYER_HEIGHT});
+                    y * TILE_SIZE + TILE_SIZE * 0.5f});
             }
         }
     }
