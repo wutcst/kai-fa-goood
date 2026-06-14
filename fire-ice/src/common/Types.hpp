@@ -13,7 +13,7 @@ constexpr float MAX_FALL_SPEED = 900.0f;
 constexpr uint16_t SERVER_PORT = 24567;
 constexpr float TICK_RATE = 60.0f;
 constexpr float TICK_DT = 1.0f / TICK_RATE;
-constexpr float STATE_BROADCAST_HZ = 20.0f;
+constexpr float STATE_BROADCAST_HZ = 60.0f;
 
 enum class PlayerRole : uint8_t { None = 0, Fire = 1, Water = 2, Poison = 3 };
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AssetManager.hpp"
+#include "GameServer.hpp"
 #include "Map.hpp"
 #include "Protocol.hpp"
 #include "UiHelper.hpp"
@@ -11,8 +12,10 @@
 
 #include <array>
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace fireice {
@@ -31,6 +34,8 @@ public:
     bool initialize(const std::string& host, PlayerRole preferredRole);
     void run();
     void disconnect();
+    bool startHosting();
+    void stopHosting();
 
 private:
     void pollNetwork();
@@ -62,7 +67,10 @@ private:
     void renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH, int playerSlot,
                                PlayerRole expectedRole);
     void renderJoinRoomScreen();
+    void renderJoinRoomScanResults();
     void renderGameScreen();
+    void broadcastDiscovery();
+    void handleDiscoveryResponse(const DiscoveryPacket& packet, const sf::IpAddress& sender);
     void drawBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawMap(sf::RenderWindow& window) const;
     void drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;
@@ -110,6 +118,23 @@ private:
 
     std::chrono::steady_clock::time_point lastInputSend_;
     std::chrono::steady_clock::time_point lastConnectRetry_;
+
+    bool isHosting_ = false;
+    std::unique_ptr<GameServer> server_;
+    std::thread serverThread_;
+    std::string localIp_;
+
+    struct DiscoveredRoom {
+        std::string address;
+        std::string roomCode;
+        std::string levelName;
+        uint8_t playerCount = 0;
+        uint8_t maxPlayers = 0;
+    };
+    std::vector<DiscoveredRoom> discoveredRooms_;
+    bool discoveryActive_ = false;
+    float discoveryTimer_ = 0.0f;
+    int selectedDiscoveredRoom_ = -1;
 };
 
 }  // namespace fireice

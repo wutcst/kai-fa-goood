@@ -272,6 +272,33 @@ void GameServer::processPackets() {
                 handleAction(slot.value(), packet.action, packet.value);
                 break;
             }
+            case PacketType::Discovery: {
+                DiscoveryPacket disc{};
+                if (!unpackPacket(buffer.data(), received, disc)) {
+                    break;
+                }
+                if (disc.isResponse == 0) {
+                    const std::string requested(disc.roomCode);
+                    const std::string mine(roomCode_);
+                    if (requested.empty() || requested == mine) {
+                        DiscoveryPacket resp{};
+                        resp.isResponse = 1;
+                        std::snprintf(resp.roomCode, MAX_ROOM_CODE, "%s", roomCode_);
+                        resp.playerCount = world_.connectedCount;
+                        resp.maxPlayers = MAX_PLAYERS;
+                        const LevelCatalog& cat = LevelCatalog::instance();
+                        if (selectedLevelIndex_ < cat.count()) {
+                            std::snprintf(resp.levelName, MAX_LEVEL_NAME, "%s",
+                                          cat.at(selectedLevelIndex_).title);
+                        }
+                        std::array<char, 512> buf{};
+                        std::size_t sz = 0;
+                        packPacket(resp, buf, sz);
+                        socket_.send(buf.data(), sz, sender, port);
+                    }
+                }
+                break;
+            }
             case PacketType::Disconnect: {
                 DisconnectPacket packet{};
                 if (!unpackPacket(buffer.data(), received, packet)) {

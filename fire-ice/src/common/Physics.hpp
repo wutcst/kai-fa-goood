@@ -5,8 +5,8 @@
 
 namespace fireice {
 
-constexpr float PLAYER_WIDTH = TILE_SIZE * 0.5f;
-constexpr float PLAYER_HEIGHT = TILE_SIZE * 0.75f;
+constexpr float PLAYER_WIDTH = TILE_SIZE * 0.9f;
+constexpr float PLAYER_HEIGHT = TILE_SIZE * 1.6f;
 
 AABB playerBounds(const PlayerState& player);
 void applyInput(PlayerState& player, InputFlags input, float dt);

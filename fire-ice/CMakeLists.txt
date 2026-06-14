@@ -48,13 +48,16 @@ add_executable(fireice_client
     src/client/UiHelper.cpp
     src/client/AssetManager.cpp
     src/client/main.cpp
+    src/server/GameServer.cpp
 )
 target_include_directories(fireice_client PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/server
 )
 target_link_libraries(fireice_client PRIVATE fireice_common sfml-graphics sfml-window sfml-network sfml-system sfml-audio)
 if(MSVC)
     target_compile_options(fireice_client PRIVATE /utf-8)
+    target_link_libraries(fireice_client PRIVATE ws2_32)
 endif()
 
 # Windows: 将 SFML 动态库复制到可执行文件目录，便于直接运行

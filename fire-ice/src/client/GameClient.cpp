@@ -6,6 +6,11 @@
 #include <algorithm>
 #include <iostream>
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
 namespace fireice {
 
 namespace {
@@ -131,11 +136,18 @@ void GameClient::handleTitleMenuSelect(int index) {
     switch (index) {
         case 0:
             typedRoomCode_.clear();
-            beginConnect();
+            host_ = "127.0.0.1";
+            serverAddress_ = sf::IpAddress(host_);
+            if (startHosting()) {
+                beginConnect();
+            }
             break;
         case 1:
             typedRoomCode_.clear();
+            discoveredRooms_.clear();
+            selectedDiscoveredRoom_ = -1;
             clientScreen_ = ClientScreen::JoinRoom;
+            broadcastDiscovery();
             break;
         case 2:
             clientScreen_ = ClientScreen::Help;
@@ -175,11 +187,36 @@ void GameClient::handleTitleInput(const sf::Event& event) {
     if (clientScreen_ == ClientScreen::JoinRoom) {
         if (event.key.code == sf::Keyboard::Escape) {
             typedRoomCode_.clear();
+            discoveredRooms_.clear();
             clientScreen_ = ClientScreen::Title;
-        } else if (event.key.code == sf::Keyboard::Enter && typedRoomCode_.size() == 6) {
-            beginConnect();
+        } else if (event.key.code == sf::Keyboard::F5) {
+            broadcastDiscovery();
+        } else if (event.key.code == sf::Keyboard::Up) {
+            if (!discoveredRooms_.empty() && selectedDiscoveredRoom_ > 0) {
+                selectedDiscoveredRoom_--;
+                typedRoomCode_.clear();
+            }
+        } else if (event.key.code == sf::Keyboard::Down) {
+            if (!discoveredRooms_.empty() &&
+                selectedDiscoveredRoom_ < static_cast<int>(discoveredRooms_.size()) - 1) {
+                selectedDiscoveredRoom_++;
+                typedRoomCode_.clear();
+            }
+        } else if (event.key.code == sf::Keyboard::Enter) {
+            if (selectedDiscoveredRoom_ >= 0 &&
+                selectedDiscoveredRoom_ < static_cast<int>(discoveredRooms_.size())) {
+                const auto& room = discoveredRooms_[selectedDiscoveredRoom_];
+                host_ = room.address;
+                serverAddress_ = sf::IpAddress(host_);
+                typedRoomCode_ = room.roomCode;
+                beginConnect();
+            } else if (typedRoomCode_.size() == 6 || typedRoomCode_.empty()) {
+                // Empty room code = quick join (server assigns room)
+                beginConnect();
+            }
         } else if (event.key.code == sf::Keyboard::Backspace && !typedRoomCode_.empty()) {
             typedRoomCode_.pop_back();
+            selectedDiscoveredRoom_ = -1;
         }
         return;
     }
@@ -270,6 +307,8 @@ void GameClient::useGameLayout() {
     const unsigned height = static_cast<unsigned>(std::max(540, static_cast<int>(map_.height() * TILE_SIZE + 80)));
     window_.setSize({width, height});
     window_.setTitle("Fire-Ice Online");
+    window_.setFramerateLimit(0);
+    window_.setVerticalSyncEnabled(false);
     window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height))));
 }
 
@@ -350,6 +389,9 @@ void GameClient::disconnect() {
     }
 
     if (!connected_) {
+        if (isHosting_) {
+            stopHosting();
+        }
         return;
     }
 
@@ -360,6 +402,147 @@ void GameClient::disconnect() {
     packPacket(packet, buffer, size);
     socket_.send(buffer.data(), size, serverAddress_, SERVER_PORT);
     connected_ = false;
+
+    if (isHosting_) {
+        stopHosting();
+    }
+}
+
+bool GameClient::startHosting() {
+    if (isHosting_) return true;
+
+    server_ = std::make_unique<GameServer>();
+    if (!server_->start(0)) {
+        std::cerr << "[Client] Failed to start internal server (port " << SERVER_PORT << " may be in use)" << std::endl;
+        server_.reset();
+        return false;
+    }
+
+    isHosting_ = true;
+
+    localIp_ = sf::IpAddress::getLocalAddress().toString();
+    if (localIp_ == "0.0.0.0" || localIp_.empty()) {
+        localIp_ = "127.0.0.1";
+    }
+
+    serverThread_ = std::thread([this]() { server_->run(); });
+
+    std::cout << "[Client] Internal server started. Local IP: " << localIp_ << ":" << SERVER_PORT << std::endl;
+    return true;
+}
+
+void GameClient::stopHosting() {
+    if (!isHosting_) return;
+
+    server_->stop();
+    if (serverThread_.joinable()) {
+        serverThread_.join();
+    }
+    server_.reset();
+    isHosting_ = false;
+    localIp_.clear();
+
+    std::cout << "[Client] Internal server stopped" << std::endl;
+}
+
+void GameClient::broadcastDiscovery() {
+    if (discoveryActive_) return;
+
+    discoveryActive_ = true;
+    discoveredRooms_.clear();
+    selectedDiscoveredRoom_ = -1;
+
+    const std::string targetCode = typedRoomCode_;
+
+    std::thread([this, targetCode]() {
+#ifdef _WIN32
+        SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+        if (sock == INVALID_SOCKET) {
+            discoveryActive_ = false;
+            return;
+        }
+
+        int broadcast = 1;
+        setsockopt(sock, SOL_SOCKET, SO_BROADCAST, reinterpret_cast<const char*>(&broadcast), sizeof(broadcast));
+
+        int timeout = 1500;
+        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+
+        sockaddr_in dest{};
+        dest.sin_family = AF_INET;
+        dest.sin_port = htons(SERVER_PORT);
+        dest.sin_addr.s_addr = INADDR_BROADCAST;
+
+        DiscoveryPacket disc{};
+        disc.isResponse = 0;
+        if (!targetCode.empty()) {
+            std::snprintf(disc.roomCode, MAX_ROOM_CODE, "%s", targetCode.c_str());
+        }
+
+        std::array<char, 512> buf{};
+        std::size_t sz = 0;
+        packPacket(disc, buf, sz);
+        sendto(sock, buf.data(), static_cast<int>(sz), 0, reinterpret_cast<const sockaddr*>(&dest), sizeof(dest));
+
+        char recvBuf[512];
+        sockaddr_in from{};
+        int fromLen = sizeof(from);
+
+        while (discoveryActive_) {
+            int n = recvfrom(sock, recvBuf, sizeof(recvBuf), 0, reinterpret_cast<sockaddr*>(&from), &fromLen);
+            if (n <= 0) break;
+
+            char ipStr[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &from.sin_addr, ipStr, sizeof(ipStr));
+
+            DiscoveryPacket resp{};
+            if (unpackPacket(recvBuf, static_cast<std::size_t>(n), resp) && resp.isResponse == 1) {
+                DiscoveredRoom room;
+                room.address = ipStr;
+                room.roomCode = resp.roomCode;
+                room.levelName = resp.levelName[0] ? resp.levelName : "???";
+                room.playerCount = resp.playerCount;
+                room.maxPlayers = resp.maxPlayers;
+
+                bool duplicate = false;
+                for (const auto& dr : discoveredRooms_) {
+                    if (dr.address == room.address && dr.roomCode == room.roomCode) {
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate && room.roomCode[0]) {
+                    discoveredRooms_.push_back(room);
+                    if (selectedDiscoveredRoom_ < 0) selectedDiscoveredRoom_ = 0;
+                }
+            }
+        }
+
+        closesocket(sock);
+#else
+        (void)targetCode;
+#endif
+        discoveryActive_ = false;
+    }).detach();
+}
+
+void GameClient::handleDiscoveryResponse(const DiscoveryPacket& packet, const sf::IpAddress& sender) {
+    if (!discoveryActive_ || !packet.isResponse) return;
+
+    DiscoveredRoom room;
+    room.address = sender.toString();
+    room.roomCode = packet.roomCode;
+    room.levelName = packet.levelName[0] ? packet.levelName : "???";
+    room.playerCount = packet.playerCount;
+    room.maxPlayers = packet.maxPlayers;
+
+    for (const auto& dr : discoveredRooms_) {
+        if (dr.address == room.address && dr.roomCode == room.roomCode) return;
+    }
+    if (room.roomCode[0]) {
+        discoveredRooms_.push_back(room);
+        if (selectedDiscoveredRoom_ < 0) selectedDiscoveredRoom_ = 0;
+    }
 }
 
 void GameClient::pollNetwork() {
@@ -431,7 +614,7 @@ void GameClient::pollNetwork() {
 
 bool GameClient::sendInput() {
     const auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration<float>(now - lastInputSend_).count() < 1.0f / 30.0f) {
+    if (std::chrono::duration<float>(now - lastInputSend_).count() < 1.0f / 60.0f) {
         return false;
     }
 
@@ -758,34 +941,25 @@ void GameClient::renderTitleSpotlight() {
 }
 
 void GameClient::renderTitleCharacters() {
-    if (!assets_.ready()) {
-        return;
-    }
+    const float charW = 32.0f;
+    const float charH = 56.0f;
 
-    const sf::Texture& waterTex = assets_.waterGirl();
-    sf::Sprite waterGirl(waterTex);
-    const float waterScale = 3.2f;
-    waterGirl.setScale(waterScale, waterScale);
-    waterGirl.setPosition(48.0f, static_cast<float>(LOBBY_WINDOW_HEIGHT) - waterTex.getSize().y * waterScale - 36.0f);
-    window_.draw(waterGirl);
-
-    const sf::Texture& fireTex = assets_.fireBoy();
-    sf::Sprite fireBoy(fireTex);
-    const float fireScale = 3.2f;
-    fireBoy.setScale(-fireScale, fireScale);
-    fireBoy.setPosition(static_cast<float>(LOBBY_WINDOW_WIDTH) - 48.0f,
-                        static_cast<float>(LOBBY_WINDOW_HEIGHT) - fireTex.getSize().y * fireScale - 36.0f);
+    sf::RectangleShape fireBoy({charW, charH});
+    fireBoy.setPosition(48.0f + 20.0f, static_cast<float>(LOBBY_WINDOW_HEIGHT) - charH - 36.0f);
+    fireBoy.setFillColor(sf::Color(255, 90, 40));
     window_.draw(fireBoy);
+
+    sf::RectangleShape waterGirl({charW, charH});
+    waterGirl.setPosition(static_cast<float>(LOBBY_WINDOW_WIDTH) - 48.0f - 20.0f - charW,
+                          static_cast<float>(LOBBY_WINDOW_HEIGHT) - charH - 36.0f);
+    waterGirl.setFillColor(sf::Color(60, 140, 255));
+    window_.draw(waterGirl);
 }
 
 void GameClient::renderTitleScreen() {
-    if (assets_.ready()) {
-        drawBackgroundSprite(window_, assets_.lobbyBackground());
-    } else {
-        sf::RectangleShape fallback({static_cast<float>(LOBBY_WINDOW_WIDTH), static_cast<float>(LOBBY_WINDOW_HEIGHT)});
-        fallback.setFillColor(sf::Color(28, 42, 34));
-        window_.draw(fallback);
-    }
+    sf::RectangleShape fallback({static_cast<float>(LOBBY_WINDOW_WIDTH), static_cast<float>(LOBBY_WINDOW_HEIGHT)});
+    fallback.setFillColor(sf::Color(28, 42, 34));
+    window_.draw(fallback);
 
     renderTitleSpotlight();
     renderTitleCharacters();
@@ -898,34 +1072,91 @@ void GameClient::drawBackgroundSprite(sf::RenderWindow& window, const sf::Textur
 }
 
 void GameClient::renderJoinRoomScreen() {
+    roomAnimTimer_ += 0.016f;
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
     const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
-    if (assets_.ready()) {
-        drawBackgroundSprite(window_, assets_.lobbyBackground());
-    } else {
-        sf::RectangleShape fallback({w, h});
-        fallback.setFillColor(sf::Color(12, 20, 30));
-        window_.draw(fallback);
-    }
+    sf::RectangleShape fallback({w, h});
+    fallback.setFillColor(sf::Color(12, 20, 30));
+    window_.draw(fallback);
 
-    // Dark overlay
     sf::RectangleShape dim({w, h});
-    dim.setFillColor(sf::Color(0, 0, 0, 120));
+    dim.setFillColor(sf::Color(0, 0, 0, 100));
     window_.draw(dim);
 
-    // Center dialog
-    const sf::FloatRect dialog{w / 2.0f - 240.0f, h / 2.0f - 150.0f, 480.0f, 300.0f};
+    const float panelW = 620.0f;
+    const float panelH = 480.0f;
+    const float panelX = (w - panelW) / 2.0f;
+    const float panelY = 80.0f;
+    const sf::FloatRect dialog{panelX, panelY, panelW, panelH};
     ui_.drawPanel(window_, dialog, sf::Color(20, 28, 44, 240), 240.0f);
-    ui_.drawOutlinedCenteredText(window_, "加入房间", w / 2.0f, dialog.top + 24.0f, 32, sf::Color(255, 230, 100),
-                                 sf::Color(80, 50, 10), 3.0f);
-    ui_.drawCenteredText(window_, "请输入6位房间号码", w / 2.0f, dialog.top + 70.0f, 18, sf::Color(180, 190, 210));
+    ui_.drawOutlinedCenteredText(window_, "加入房间  (局域网自动发现)", w / 2.0f, dialog.top + 16.0f, 26,
+                                 sf::Color(255, 230, 100), sf::Color(80, 50, 10), 2.5f);
+
+    // --- Discovered rooms list ---
+    const float listX = panelX + 20.0f;
+    const float listY = dialog.top + 56.0f;
+    const float listW = panelW - 40.0f;
+    const float listH = 240.0f;
+
+    sf::RectangleShape listBg({listW, listH});
+    listBg.setPosition(listX, listY);
+    listBg.setFillColor(sf::Color(12, 16, 28, 230));
+    listBg.setOutlineThickness(1.0f);
+    listBg.setOutlineColor(sf::Color(60, 80, 120));
+    window_.draw(listBg);
+
+    const float roomRowH = 48.0f;
+    if (discoveryActive_) {
+        const int dots = (static_cast<int>(roomAnimTimer_ * 3.0f) % 3) + 1;
+        std::string scanMsg = "正在扫描局域网";
+        for (int i = 0; i < dots; ++i) scanMsg += ".";
+        ui_.drawCenteredText(window_, scanMsg, w / 2.0f, listY + listH / 2.0f - 14.0f, 22, sf::Color(180, 200, 255));
+        ui_.drawCenteredText(window_, "自动发现同一网络下的游戏房间", w / 2.0f, listY + listH / 2.0f + 18.0f, 14,
+                             sf::Color(120, 140, 180));
+    } else if (discoveredRooms_.empty()) {
+        ui_.drawCenteredText(window_, "未发现局域网房间", w / 2.0f, listY + listH / 2.0f - 14.0f, 20,
+                             sf::Color(180, 160, 120));
+        ui_.drawCenteredText(window_, "请确认主机在同一网络下已创建房间  或手动输入房间号", w / 2.0f,
+                             listY + listH / 2.0f + 18.0f, 14, sf::Color(140, 150, 170));
+    } else {
+        ui_.drawText(window_,
+                     "发现 " + std::to_string(discoveredRooms_.size()) + " 个房间  [↑↓] 选择  [Enter] 加入",
+                     listX + 8.0f, listY + 6.0f, 14, sf::Color(160, 190, 230));
+
+        const int visibleStart = std::max(0, selectedDiscoveredRoom_ - 3);
+        const int maxVisible = static_cast<int>(listH / roomRowH) - 1;
+        const int visibleEnd = std::min(static_cast<int>(discoveredRooms_.size()), visibleStart + maxVisible);
+
+        for (int i = visibleStart; i < visibleEnd; ++i) {
+            const float rowY2 = listY + 26.0f + (i - visibleStart) * roomRowH;
+            const bool sel = i == selectedDiscoveredRoom_;
+
+            sf::RectangleShape row({listW - 16.0f, roomRowH - 6.0f});
+            row.setPosition(listX + 8.0f, rowY2);
+            row.setFillColor(sel ? sf::Color(55, 95, 150) : sf::Color(30, 38, 55));
+            row.setOutlineThickness(sel ? 2.0f : 1.0f);
+            row.setOutlineColor(sel ? sf::Color(140, 200, 255) : sf::Color(60, 70, 100));
+            window_.draw(row);
+
+            const auto& room = discoveredRooms_[i];
+            const std::string label = "房间 " + room.roomCode + "  |  " + room.levelName +
+                                      "  |  玩家 " + std::to_string(room.playerCount) + "/" +
+                                      std::to_string(room.maxPlayers) + "  |  " + room.address;
+            ui_.drawText(window_, label, listX + 18.0f, rowY2 + 6.0f, 16,
+                         sel ? sf::Color::White : sf::Color(200, 210, 220));
+        }
+    }
+
+    // --- Manual entry divider ---
+    const float dividerY = listY + listH + 12.0f;
+    ui_.drawCenteredText(window_, "—— 或手动输入房间号 ——", w / 2.0f, dividerY, 14, sf::Color(140, 155, 180));
 
     // Room code input box
-    const float boxW = 280.0f;
-    const float boxH = 52.0f;
+    const float boxW = 260.0f;
+    const float boxH = 46.0f;
     const float boxX = w / 2.0f - boxW / 2.0f;
-    const float boxY = dialog.top + 100.0f;
+    const float boxY = dividerY + 26.0f;
     sf::RectangleShape inputBox({boxW, boxH});
     inputBox.setPosition(boxX, boxY);
     inputBox.setFillColor(sf::Color(12, 16, 28));
@@ -933,7 +1164,6 @@ void GameClient::renderJoinRoomScreen() {
     inputBox.setOutlineColor(sf::Color(100, 160, 255));
     window_.draw(inputBox);
 
-    // Display typed digits with underscore for missing
     std::string displayCode;
     for (int i = 0; i < 6; ++i) {
         if (i < static_cast<int>(typedRoomCode_.size())) {
@@ -941,31 +1171,21 @@ void GameClient::renderJoinRoomScreen() {
         } else {
             displayCode.push_back('_');
         }
-        if (i < 5)
-            displayCode.push_back(' ');
+        if (i < 5) displayCode.push_back(' ');
     }
-    ui_.drawOutlinedCenteredText(window_, displayCode, w / 2.0f, boxY + 10.0f, 28, sf::Color(255, 255, 255),
+    ui_.drawOutlinedCenteredText(window_, displayCode, w / 2.0f, boxY + 7.0f, 26, sf::Color(255, 255, 255),
                                  sf::Color(40, 40, 80), 2.0f);
 
-    // Blinking cursor
     if (static_cast<int>(roomAnimTimer_ * 2.0f) % 2 == 0 && typedRoomCode_.size() < 6) {
-        const float cursorX = boxX + 18.0f + static_cast<float>(typedRoomCode_.size()) * 27.0f;
-        sf::RectangleShape cursor({2.0f, 28.0f});
-        cursor.setPosition(cursorX, boxY + 12.0f);
+        const float cursorX = boxX + 16.0f + static_cast<float>(typedRoomCode_.size()) * 25.0f;
+        sf::RectangleShape cursor({2.0f, 24.0f});
+        cursor.setPosition(cursorX, boxY + 10.0f);
         cursor.setFillColor(sf::Color(255, 255, 255, 200));
         window_.draw(cursor);
     }
 
-    ui_.drawCenteredText(window_, "[数字键] 输入  [Enter] 确认  [Esc] 返回", w / 2.0f, dialog.top + 180.0f, 16,
-                         sf::Color(160, 170, 190));
-
-    if (!typedRoomCode_.empty() && typedRoomCode_.size() < 6) {
-        ui_.drawCenteredText(window_, "还需输入 " + std::to_string(6 - typedRoomCode_.size()) + " 位", w / 2.0f,
-                             dialog.top + 210.0f, 15, sf::Color(200, 170, 100));
-    }
-
-    ui_.drawCenteredText(window_, "Server: " + host_ + ":" + std::to_string(SERVER_PORT), w / 2.0f, dialog.top + 250.0f,
-                         14, sf::Color(140, 150, 170));
+    ui_.drawCenteredText(window_, "[↑↓] 选房间  [数字键] 输房间号  [Enter] 加入  [Esc] 返回  [F5] 刷新", w / 2.0f,
+                         dialog.top + panelH - 24.0f, 14, sf::Color(160, 170, 190));
 }
 
 void GameClient::renderRoomScreen() {
@@ -973,13 +1193,9 @@ void GameClient::renderRoomScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
     const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
-    if (assets_.ready()) {
-        drawBackgroundSprite(window_, assets_.lobbyBackground());
-    } else {
-        sf::RectangleShape fallback({w, h});
-        fallback.setFillColor(sf::Color(12, 20, 30));
-        window_.draw(fallback);
-    }
+    sf::RectangleShape fallback({w, h});
+    fallback.setFillColor(sf::Color(12, 20, 30));
+    window_.draw(fallback);
 
     // Top header bar
     ui_.drawPanel(window_, {0.0f, 0.0f, w, 68.0f}, sf::Color(16, 22, 40, 230), 230.0f);
@@ -990,12 +1206,22 @@ void GameClient::renderRoomScreen() {
     // Room code display (prominent)
     const std::string roomCodeStr =
         renderWorld_.roomCode[0] ? std::string("房间号: ") + std::string(renderWorld_.roomCode) : "房间号: ------";
-    ui_.drawOutlinedCenteredText(window_, roomCodeStr, w - 180.0f, 14.0f, 18, sf::Color(100, 255, 140),
+    ui_.drawOutlinedCenteredText(window_, roomCodeStr, w - 180.0f, 8.0f, 16, sf::Color(100, 255, 140),
                                  sf::Color(20, 60, 20), 2.0f);
+
+    // Host IP display
+    std::string ipStr;
+    if (isHosting_ && !localIp_.empty()) {
+        ipStr = "主机IP: " + localIp_ + ":" + std::to_string(SERVER_PORT);
+    } else {
+        ipStr = "服务器: " + host_ + ":" + std::to_string(SERVER_PORT);
+    }
+    ui_.drawCenteredText(window_, ipStr, w - 180.0f, 30.0f, 12, sf::Color(180, 200, 255));
+
     ui_.drawCenteredText(
         window_,
         std::string("在线: ") + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS),
-        w - 180.0f, 42.0f, 13, sf::Color(160, 200, 140));
+        w - 180.0f, 48.0f, 13, sf::Color(160, 200, 140));
 
     // --- Player panels ---
     const float panelW = 200.0f;
@@ -1122,6 +1348,14 @@ void GameClient::renderRoomScreen() {
     ui_.drawText(window_, "[↑↓] 或 [1-8] 选关   [Enter] 准备 / 取消准备   [Esc] 返回", 52.0f, statusY + 100.0f, 14,
                  sf::Color(140, 150, 170));
 
+    // Connection instructions for host
+    if (isHosting_ && renderWorld_.connectedCount < MAX_PLAYERS) {
+        const std::string roomCodeStr2 =
+            renderWorld_.roomCode[0] ? std::string(renderWorld_.roomCode) : "------";
+        const std::string connInfo = "其他玩家连接: fireice_client.exe " + localIp_ + " <角色>  房间号: " + roomCodeStr2;
+        ui_.drawText(window_, connInfo, 52.0f, statusY + 124.0f, 13, sf::Color(120, 200, 160));
+    }
+
     // --- Right side buttons ---
     const float btnX = w - 172.0f;
 
@@ -1129,18 +1363,10 @@ void GameClient::renderRoomScreen() {
     const float readyBtnY = 554.0f;
     const sf::FloatRect readyArea{btnX, readyBtnY, 140.0f, 48.0f};
 
-    if (assets_.hasButtons()) {
-        if (!localReady_) {
-            ui_.drawImageButtonWithHint(window_, readyArea, assets_.playButton(), "[Enter] 准备", true, true);
-        } else {
-            ui_.drawImageButtonWithHint(window_, readyArea, assets_.playButton(), "已准备! [Esc]", true, true);
-        }
+    if (!localReady_) {
+        ui_.drawButton(window_, readyArea, "准备游戏", true, sf::Color(60, 130, 210));
     } else {
-        if (!localReady_) {
-            ui_.drawButton(window_, readyArea, "准备游戏", true, sf::Color(60, 130, 210));
-        } else {
-            ui_.drawButton(window_, readyArea, "已准备 (Esc取消)", true, sf::Color(50, 160, 90));
-        }
+        ui_.drawButton(window_, readyArea, "已准备 (Esc取消)", true, sf::Color(50, 160, 90));
     }
 
     // Back button
@@ -1205,45 +1431,16 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
                                  isConnected ? roleColor : sf::Color(120, 120, 130), sf::Color(30, 20, 20), 2.0f);
 
     // Character portrait
-    if (assets_.ready()) {
-        const sf::Texture* charTex = nullptr;
-        if (expectedRole == PlayerRole::Fire) {
-            charTex = &assets_.fireBoy();
-        } else if (expectedRole == PlayerRole::Water) {
-            charTex = &assets_.waterGirl();
-        }
-        if (charTex && charTex->getSize().y > 0) {
-            sf::Sprite portrait(*charTex);
-            const float targetH = 100.0f;
-            const float scale = targetH / static_cast<float>(charTex->getSize().y);
-            const float drawW = static_cast<float>(charTex->getSize().x) * scale;
-            portrait.setScale(scale, scale);
-            portrait.setPosition(panelX + (panelW - drawW) / 2.0f, panelY + 44.0f);
+    sf::RectangleShape placeholder({60.0f, 100.0f});
+    placeholder.setPosition(panelX + (panelW - 60.0f) / 2.0f, panelY + 44.0f);
+    placeholder.setFillColor(isConnected ? roleColor : sf::Color(80, 80, 80));
+    window_.draw(placeholder);
 
-            if (!isConnected) {
-                portrait.setColor(sf::Color(80, 80, 80, 140));
-            } else if (isSelf) {
-                portrait.setColor(sf::Color(255, 255, 255, 255));
-            }
-            window_.draw(portrait);
-        } else {
-            sf::RectangleShape placeholder({56.0f, 100.0f});
-            placeholder.setPosition(panelX + (panelW - 56.0f) / 2.0f, panelY + 44.0f);
-            placeholder.setFillColor(isConnected ? roleColor : sf::Color(80, 80, 80));
-            window_.draw(placeholder);
-        }
-
-        if (isSelf) {
-            sf::CircleShape indicator(6.0f);
-            indicator.setPosition(panelX + panelW / 2.0f + 40.0f, panelY + 50.0f);
-            indicator.setFillColor(sf::Color(80, 255, 120));
-            window_.draw(indicator);
-        }
-    } else {
-        sf::RectangleShape placeholder({56.0f, 100.0f});
-        placeholder.setPosition(panelX + (panelW - 56.0f) / 2.0f, panelY + 44.0f);
-        placeholder.setFillColor(isConnected ? roleColor : sf::Color(80, 80, 80));
-        window_.draw(placeholder);
+    if (isSelf) {
+        sf::CircleShape indicator(6.0f);
+        indicator.setPosition(panelX + panelW / 2.0f + 40.0f, panelY + 50.0f);
+        indicator.setFillColor(sf::Color(80, 255, 120));
+        window_.draw(indicator);
     }
 
     // Player name
@@ -1291,9 +1488,9 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
 void GameClient::renderLobbyScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
 
-    if (assets_.ready()) {
-        drawBackgroundSprite(window_, assets_.lobbyBackground());
-    }
+    sf::RectangleShape fallback({w, static_cast<float>(LOBBY_WINDOW_HEIGHT)});
+    fallback.setFillColor(sf::Color(14, 20, 32));
+    window_.draw(fallback);
 
     ui_.drawPanel(window_, {0.0f, 0.0f, w, 72.0f}, sf::Color(28, 36, 52, 200), 200.0f);
     ui_.drawCenteredText(window_, "Forest Temple Online", w / 2.0f, 14.0f, 34, sf::Color(255, 230, 170));
@@ -1362,15 +1559,7 @@ void GameClient::renderLobbyScreen() {
                  statusPanel.top + 42.0f, 16, sf::Color(160, 170, 190));
 
     const sf::FloatRect playArea{760.0f, statusPanel.top + 8.0f, 220.0f, 72.0f};
-    if (assets_.hasButtons()) {
-        if (renderWorld_.connectedCount < 2) {
-            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), text::waitPartner(), false, false);
-        } else if (!localReady_) {
-            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), "[Enter] Start", true, true);
-        } else {
-            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), "Ready! [Esc]", true, true);
-        }
-    } else if (renderWorld_.connectedCount < 2) {
+    if (renderWorld_.connectedCount < 2) {
         ui_.drawButton(window_, playArea, "Wait Partner", false, sf::Color(120, 90, 40));
     } else if (!localReady_) {
         ui_.drawButton(window_, playArea, "ENTER - Start", true, sf::Color(60, 130, 210));
@@ -1383,15 +1572,9 @@ void GameClient::renderGameScreen() {
     const float mapW = static_cast<float>(map_.width()) * TILE_SIZE;
     const float mapH = static_cast<float>(map_.height()) * TILE_SIZE;
 
-    if (assets_.ready()) {
-        sf::Sprite bg(assets_.gameBackground());
-        const sf::Vector2u texSize = assets_.gameBackground().getSize();
-        if (texSize.x > 0 && texSize.y > 0) {
-            bg.setScale(mapW / static_cast<float>(texSize.x), mapH / static_cast<float>(texSize.y));
-            bg.setPosition(0.0f, 0.0f);
-            window_.draw(bg);
-        }
-    }
+    sf::RectangleShape bg({mapW, mapH});
+    bg.setFillColor(sf::Color(8, 12, 18));
+    window_.draw(bg);
 
     drawMap(window_);
 
@@ -1453,17 +1636,6 @@ void GameClient::drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& a
             const float px = offsetX + x * TILE_SIZE * scale;
             const float py = offsetY + y * TILE_SIZE * scale;
 
-            if (type == TileType::Gem && assets_.ready()) {
-                const sf::Texture& gemTex = ((x + y) % 2 == 0) ? assets_.gemRed() : assets_.gemBlue();
-                sf::Sprite gem(gemTex);
-                const float gemScale = tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
-                gem.setScale(gemScale, gemScale);
-                gem.setPosition(px + (tileSize - gemTex.getSize().x * gemScale) / 2.0f,
-                                py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
-                window.draw(gem);
-                continue;
-            }
-
             sf::RectangleShape tile({tileSize, tileSize});
             tile.setPosition(px, py);
             tile.setFillColor(tileColor(type));
@@ -1491,17 +1663,6 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
             const float px = x * TILE_SIZE;
             const float py = y * TILE_SIZE;
 
-            if (type == TileType::Gem && assets_.ready()) {
-                const sf::Texture& gemTex = ((x + y) % 2 == 0) ? assets_.gemRed() : assets_.gemBlue();
-                sf::Sprite gem(gemTex);
-                const float gemScale = tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
-                gem.setScale(gemScale, gemScale);
-                gem.setPosition(px + (tileSize - gemTex.getSize().x * gemScale) / 2.0f,
-                                py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
-                window.draw(gem);
-                continue;
-            }
-
             sf::RectangleShape tile({tileSize, tileSize});
             tile.setPosition(px, py);
             tile.setFillColor(tileColor(type));
@@ -1512,26 +1673,6 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
 
 void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player) const {
     if (player.role == PlayerRole::None) {
-        return;
-    }
-
-    if (assets_.ready()) {
-        const sf::Texture& texture = player.role == PlayerRole::Fire ? assets_.fireBoy() : assets_.waterGirl();
-        sf::Sprite sprite(texture);
-        const sf::Vector2u texSize = texture.getSize();
-        const float scaleX = PLAYER_WIDTH / static_cast<float>(texSize.x);
-        const float scaleY = PLAYER_HEIGHT / static_cast<float>(texSize.y);
-        sprite.setScale(scaleX, scaleY);
-        if (player.vx < -1.0f) {
-            sprite.setScale(-scaleX, scaleY);
-            sprite.setPosition(player.x + PLAYER_WIDTH, player.y);
-        } else {
-            sprite.setPosition(player.x, player.y);
-        }
-        if (!player.alive) {
-            sprite.setColor(sf::Color(120, 120, 120, 140));
-        }
-        window.draw(sprite);
         return;
     }
 
@@ -1572,23 +1713,11 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
         const char* controlText = role_ == PlayerRole::Fire ? "WASD" : "Arrows";
         ui_.drawText(window, std::string(roleDisplayName()) + " [" + controlText + "]", 500.0f, hudY + 16.0f, 18,
                      sf::Color(180, 180, 180));
-        if (assets_.hasButtons()) {
-            ui_.drawImageButton(window, {windowW - 168.0f, hudY + 6.0f, 152.0f, 48.0f}, assets_.menuButton(), true,
-                                true);
-            ui_.drawCenteredText(window, "[Esc] Lobby", windowW - 92.0f, hudY + 54.0f, 13, sf::Color(255, 200, 120));
-        } else {
-            ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
-        }
+        ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
     }
 
     if (renderWorld_.phase == GamePhase::Countdown) {
-        if (assets_.hasButtons()) {
-            ui_.drawImageButton(window, {windowW - 168.0f, hudY + 6.0f, 152.0f, 48.0f}, assets_.menuButton(), true,
-                                true);
-            ui_.drawCenteredText(window, "[Esc] Lobby", windowW - 92.0f, hudY + 54.0f, 13, sf::Color(255, 200, 120));
-        } else {
-            ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
-        }
+        ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
     }
 }
 
@@ -1610,27 +1739,8 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     dim.setFillColor(sf::Color(0, 0, 0, 120));
     window.draw(dim);
 
-    if (assets_.ready()) {
-        const sf::Texture& screenTex =
-            victory ? ((renderWorld_.players[0].gems + renderWorld_.players[1].gems >= renderWorld_.totalGems &&
-                        renderWorld_.totalGems > 0)
-                           ? assets_.winScreen()
-                           : assets_.winScreenPartial())
-                    : assets_.loseScreen();
-
-        sf::Sprite screen(screenTex);
-        const float targetW = 520.0f;
-        const float targetH = 280.0f;
-        const float scale = std::min(targetW / static_cast<float>(screenTex.getSize().x),
-                                     targetH / static_cast<float>(screenTex.getSize().y));
-        screen.setScale(scale, scale);
-        screen.setPosition(centerX - screenTex.getSize().x * scale / 2.0f,
-                           mapH / 2.0f - screenTex.getSize().y * scale / 2.0f);
-        window.draw(screen);
-    } else {
-        const sf::Color panelColor = victory ? sf::Color(20, 60, 35) : sf::Color(70, 20, 20);
-        ui_.drawPanel(window, {centerX - 260.0f, mapH / 2.0f - 140.0f, 520.0f, 280.0f}, panelColor, 235.0f);
-    }
+    const sf::Color panelColor = victory ? sf::Color(20, 60, 35) : sf::Color(70, 20, 20);
+    ui_.drawPanel(window, {centerX - 260.0f, mapH / 2.0f - 140.0f, 520.0f, 280.0f}, panelColor, 235.0f);
 
     const std::string levelLine =
         "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + renderWorld_.levelName;
@@ -1659,36 +1769,15 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     ui_.drawCenteredText(window, "Gems: " + std::to_string(totalGems) + " / " + std::to_string(renderWorld_.totalGems),
                          centerX, mapH / 2.0f + 28.0f, 22, sf::Color(255, 220, 100));
 
-    const float btnW = 150.0f;
-    const float btnH = 52.0f;
-    const float gap = 28.0f;
-    const float rowY = mapH / 2.0f + 130.0f;
     const bool hasNextLevel = victory && renderWorld_.levelIndex + 1 < renderWorld_.levelCount;
 
-    if (assets_.hasButtons()) {
-        if (hasNextLevel) {
-            const float totalW = btnW * 3.0f + gap * 2.0f;
-            const float startX = centerX - totalW / 2.0f;
-            ui_.drawImageButtonWithHint(window, {startX, rowY, btnW, btnH}, assets_.retryButton(), "[R] Retry");
-            ui_.drawImageButtonWithHint(window, {startX + btnW + gap, rowY, btnW, btnH}, assets_.continueButton(),
-                                        "[N] Next");
-            ui_.drawImageButtonWithHint(window, {startX + (btnW + gap) * 2.0f, rowY, btnW, btnH}, assets_.menuButton(),
-                                        "[Esc] Lobby");
-        } else {
-            const float startX = centerX - btnW - gap / 2.0f;
-            ui_.drawImageButtonWithHint(window, {startX, rowY, btnW, btnH}, assets_.retryButton(), "[R] Retry");
-            ui_.drawImageButtonWithHint(window, {startX + btnW + gap, rowY, btnW, btnH}, assets_.menuButton(),
-                                        "[Esc] Lobby");
-        }
-    } else {
-        ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 62.0f, 250.0f, 40.0f}, "R - Replay", true,
-                       victory ? sf::Color(50, 130, 90) : sf::Color(170, 70, 70));
-        ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 110.0f, 250.0f, 40.0f}, "ESC - Lobby", true,
-                       sf::Color(90, 90, 120));
-        if (hasNextLevel) {
-            ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 158.0f, 250.0f, 40.0f}, "N - Next Level", true,
-                           sf::Color(60, 120, 200));
-        }
+    ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 62.0f, 250.0f, 40.0f}, "R - Replay", true,
+                   victory ? sf::Color(50, 130, 90) : sf::Color(170, 70, 70));
+    ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 110.0f, 250.0f, 40.0f}, "ESC - Lobby", true,
+                   sf::Color(90, 90, 120));
+    if (hasNextLevel) {
+        ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 158.0f, 250.0f, 40.0f}, "N - Next Level", true,
+                       sf::Color(60, 120, 200));
     }
 }
 

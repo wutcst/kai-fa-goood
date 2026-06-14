@@ -1,9 +1,26 @@
 #include "GameServer.hpp"
 
 #include <algorithm>
+#include <condition_variable>
+#include <csignal>
 #include <iostream>
+#include <mutex>
 #include <string>
 #include <thread>
+
+namespace {
+
+std::mutex gMutex;
+std::condition_variable gCv;
+bool gShutdown = false;
+
+void signalHandler(int /*sig*/) {
+    std::lock_guard<std::mutex> lock(gMutex);
+    gShutdown = true;
+    gCv.notify_one();
+}
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
     uint8_t initialLevel = 0;
@@ -16,11 +33,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    std::signal(SIGINT, signalHandler);
+    std::signal(SIGTERM, signalHandler);
+
     std::cout << "Fire-Ice Online Server" << std::endl;
-    std::cout << "Press Enter to stop..." << std::endl;
+    std::cout << "Server running. Send SIGINT/SIGTERM to stop." << std::endl;
 
     std::thread serverThread([&server]() { server.run(); });
-    std::cin.get();
+
+    {
+        std::unique_lock<std::mutex> lock(gMutex);
+        gCv.wait(lock, [] { return gShutdown; });
+    }
+
+    std::cout << "Shutting down..." << std::endl;
     server.stop();
     serverThread.join();
 
