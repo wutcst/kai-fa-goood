@@ -39,6 +39,7 @@ struct ConnectAcceptPacket {
     uint8_t slot = 0;
     PlayerRole role = PlayerRole::None;
     uint32_t worldSeed = 0;
+    char roomCode[MAX_ROOM_CODE]{};
 };
 
 struct ConnectRejectPacket {

@@ -7,8 +7,11 @@
 
 #include <array>
 #include <chrono>
+#include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace fireice {
 
@@ -25,13 +28,19 @@ struct ClientSlot {
     std::string name;
 };
 
-class GameServer {
-public:
-    bool start(uint8_t initialLevel = 0);
-    void run();
-    void stop();
+struct Room {
+    std::string code;
+    GameMap map;
+    std::string mapPath;
+    uint8_t selectedLevelIndex = 0;
+    WorldState world{};
+    std::array<ClientSlot, MAX_PLAYERS> clients{};
+    float countdownTimer = 0.0f;
+    uint8_t unlockedMask = INITIAL_UNLOCKED_LEVEL_MASK;
+    uint8_t completedMask = 0;
+    std::chrono::steady_clock::time_point lastTick;
+    std::chrono::steady_clock::time_point lastBroadcast;
 
-private:
     void selectLevel(uint8_t index);
     void applyLevelMetadata();
     void syncProgressToWorld();
@@ -47,28 +56,34 @@ private:
     void syncWaitingReadyMask();
     void proceedToMapSelect();
     void backToWaitingRoom();
-    void processPackets();
     void handleAction(uint8_t slot, PlayerAction action, uint8_t value);
     void simulateTick();
     void updatePhase();
-    void broadcastState();
+    void broadcastState(sf::UdpSocket& socket);
     std::optional<uint8_t> findOpenSlot(PlayerRole preferred) const;
     std::optional<uint8_t> findSlotByEndpoint(const sf::IpAddress& address, unsigned short port) const;
     PlayerRole roleForSlot(uint8_t slot) const;
-    void acceptClient(const sf::IpAddress& address, unsigned short port, const ConnectRequestPacket& request);
-    void rejectClient(const sf::IpAddress& address, unsigned short port, const char* reason);
+    void acceptClient(sf::UdpSocket& socket, const sf::IpAddress& address, unsigned short port,
+                      const ConnectRequestPacket& request);
+    void rejectClient(sf::UdpSocket& socket, const sf::IpAddress& address, unsigned short port, const char* reason);
+    void disconnectClient(uint8_t slot, sf::UdpSocket& socket);
+};
+
+class GameServer {
+public:
+    bool start();
+    void run();
+    void stop();
+
+private:
+    void processPackets();
+    void simulateAllRooms();
+    void broadcastAllRooms();
+    std::string generateRoomCode();
 
     sf::UdpSocket socket_;
-    GameMap map_;
-    std::string mapPath_;
-    uint8_t selectedLevelIndex_ = 0;
-    uint8_t unlockedMask_ = INITIAL_UNLOCKED_LEVEL_MASK;
-    uint8_t completedMask_ = 0;
-    WorldState world_{};
-    std::array<ClientSlot, MAX_PLAYERS> clients_{};
-    char roomCode_[MAX_ROOM_CODE]{};
     bool running_ = false;
-    float countdownTimer_ = 0.0f;
+    std::unordered_map<std::string, std::unique_ptr<Room>> rooms_;
     std::chrono::steady_clock::time_point lastTick_;
     std::chrono::steady_clock::time_point lastBroadcast_;
 };

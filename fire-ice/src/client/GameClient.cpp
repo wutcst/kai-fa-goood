@@ -451,7 +451,7 @@ bool GameClient::startHosting() {
     }
 
     server_ = std::make_unique<GameServer>();
-    if (!server_->start(0)) {
+    if (!server_->start()) {
         std::cerr << "[Client] Failed to start internal server (port " << SERVER_PORT << " may be in use)" << std::endl;
         server_.reset();
         return false;

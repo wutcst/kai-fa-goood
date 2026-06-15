@@ -1,7 +1,7 @@
 #include "GameServer.hpp"
 
-#include "LevelProgress.hpp"
 #include "LevelCatalog.hpp"
+#include "LevelProgress.hpp"
 #include "Physics.hpp"
 
 #include <algorithm>
@@ -17,261 +17,539 @@ namespace {
 
 constexpr float COUNTDOWN_SECONDS = 3.0f;
 
-std::string generateRoomCode() {
-    static const char kChars[] = "0123456789";
-    std::string code;
-    code.reserve(6);
-    for (int i = 0; i < 6; ++i) {
-        code.push_back(kChars[std::rand() % 10]);
-    }
-    return code;
-}
-
 }  // namespace
 
-bool GameServer::start(uint8_t initialLevel) {
-    if (socket_.bind(SERVER_PORT) != sf::Socket::Done) {
-        std::cerr << "[Server] Failed to bind UDP port " << SERVER_PORT << std::endl;
-        return false;
-    }
+// ============================================================================
+// Room implementation
+// ============================================================================
 
-    socket_.setBlocking(false);
-
-    std::srand(static_cast<unsigned>(std::time(nullptr)));
-    const std::string code = generateRoomCode();
-    std::snprintf(roomCode_, MAX_ROOM_CODE, "%s", code.c_str());
-    std::snprintf(world_.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
-
-    selectLevel(initialLevel);
-    running_ = true;
-    lastTick_ = std::chrono::steady_clock::now();
-    lastBroadcast_ = lastTick_;
-
-    std::cout << "[Server] Room code: " << roomCode_ << "  Listening on port " << SERVER_PORT << std::endl;
-    std::cout << "[Server] Levels loaded: " << static_cast<int>(LevelCatalog::instance().count()) << std::endl;
-    return true;
-}
-
-void GameServer::selectLevel(uint8_t index) {
+void Room::selectLevel(uint8_t index) {
     const LevelCatalog& catalog = LevelCatalog::instance();
     if (index >= catalog.count()) {
         index = 0;
     }
 
-    selectedLevelIndex_ = index;
-    mapPath_ = catalog.resolvePath(index);
-    if (!map_.loadFromFile(mapPath_)) {
-        std::cerr << "[Server] Failed to load level: " << mapPath_ << std::endl;
+    selectedLevelIndex = index;
+    mapPath = catalog.resolvePath(index);
+    if (!map.loadFromFile(mapPath)) {
+        std::cerr << "[Room " << code << "] Failed to load level: " << mapPath << std::endl;
         return;
     }
 
     applyLevelMetadata();
     resetWorld();
-    world_.phase = GamePhase::Lobby;
-    world_.countdown = 0;
-    countdownTimer_ = 0.0f;
+    world.phase = GamePhase::Lobby;
+    world.lobbyStep = 0;
+    world.countdown = 0;
+    countdownTimer = 0.0f;
 
-    for (ClientSlot& client : clients_) {
+    for (ClientSlot& client : clients) {
         client.ready = false;
+        client.waitingReady = false;
         client.pendingInput = InputFlags::None;
     }
 
     syncConnectedCount();
-    broadcastState();
-    std::cout << "[Server] Selected level " << static_cast<int>(index + 1) << ": " << world_.levelName << std::endl;
 }
 
-void GameServer::applyLevelMetadata() {
-    // 把全局关卡 id 转成当前人数下的选关序号与宝石总数
+void Room::applyLevelMetadata() {
     const LevelCatalog& catalog = LevelCatalog::instance();
-    const LevelInfo& info = catalog.at(selectedLevelIndex_);
+    const LevelInfo& info = catalog.at(selectedLevelIndex);
 
-    const uint8_t playerCount = std::max(uint8_t{1}, world_.connectedCount);
-    world_.levelIndex = catalog.globalIndexToFilteredIndex(selectedLevelIndex_, playerCount);
-    world_.levelCount = catalog.countForPlayerCount(playerCount);
-    world_.totalGems = static_cast<uint8_t>(std::min(255, map_.countGems()));
-    std::snprintf(world_.levelName, MAX_LEVEL_NAME, "%s", info.title);
+    const uint8_t playerCount = std::max(uint8_t{1}, world.connectedCount);
+    world.levelIndex = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);
+    world.levelCount = catalog.countForPlayerCount(playerCount);
+    world.totalGems = static_cast<uint8_t>(std::min(255, map.countGems()));
+    std::snprintf(world.levelName, MAX_LEVEL_NAME, "%s", info.title);
+    std::snprintf(world.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
     syncProgressToWorld();
 }
 
-void GameServer::syncProgressToWorld() {
-    world_.unlockedMask = unlockedMask_;
-    world_.completedMask = completedMask_;
+void Room::syncProgressToWorld() {
+    world.unlockedMask = unlockedMask;
+    world.completedMask = completedMask;
 }
 
-void GameServer::syncWaitingReadyMask() {
-    // 每位连接玩家占 waitingReadyMask 的一位
-    uint8_t mask = 0;
-    for (std::size_t i = 0; i < clients_.size(); ++i) {
-        if (clients_[i].connected && clients_[i].waitingReady) {
-            mask |= static_cast<uint8_t>(1u << i);
+bool Room::isLevelUnlocked(uint8_t index) const {
+    return fireice::isLevelUnlocked(unlockedMask, index);
+}
+
+void Room::reloadMap() {
+    map.loadFromFile(mapPath);
+    applyLevelMetadata();
+}
+
+void Room::resetWorld() {
+    reloadMap();
+
+    world.tick = 0;
+    world.fireDoorOpen = false;
+    world.waterDoorOpen = false;
+    world.poisonDoorOpen = false;
+    world.levelComplete = false;
+
+    for (PlayerState& player : world.players) {
+        player = PlayerState{};
+    }
+
+    for (ClientSlot& client : clients) {
+        client.jumpHeld = false;
+        client.airJumpUsedThisHold = false;
+    }
+
+    for (const SpawnPoint& spawn : map.spawns()) {
+        if (spawn.role == PlayerRole::Fire && clients[0].connected) {
+            world.players[0].role = PlayerRole::Fire;
+            world.players[0].x = spawn.x;
+            world.players[0].y = spawn.y;
+            world.players[0].alive = true;
+        } else if (spawn.role == PlayerRole::Water && clients[1].connected) {
+            world.players[1].role = PlayerRole::Water;
+            world.players[1].x = spawn.x;
+            world.players[1].y = spawn.y;
+            world.players[1].alive = true;
+        } else if (spawn.role == PlayerRole::Poison && clients[2].connected) {
+            world.players[2].role = PlayerRole::Poison;
+            world.players[2].x = spawn.x;
+            world.players[2].y = spawn.y;
+            world.players[2].alive = true;
         }
     }
-    world_.waitingReadyMask = mask;
 }
 
-bool GameServer::allConnectedWaitingReady() const {
+void Room::syncConnectedCount() {
+    uint8_t count = 0;
+    uint8_t readyMask = 0;
+
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        if (!clients[i].connected) {
+            world.playerNames[i][0] = '\0';
+            continue;
+        }
+        ++count;
+        if (clients[i].ready) {
+            readyMask |= static_cast<uint8_t>(1u << i);
+        }
+        std::snprintf(world.playerNames[i], MAX_PLAYER_NAME, "%s", clients[i].name.c_str());
+    }
+
+    world.connectedCount = count;
+    world.readyMask = readyMask;
+}
+
+void Room::beginCountdown() {
+    world.phase = GamePhase::Countdown;
+    countdownTimer = COUNTDOWN_SECONDS;
+    world.countdown = static_cast<uint8_t>(std::ceil(countdownTimer));
+    std::cout << "[Room " << code << "] Countdown started" << std::endl;
+}
+
+void Room::beginPlaying() {
+    resetWorld();
+    world.phase = GamePhase::Playing;
+    world.countdown = 0;
+
+    for (ClientSlot& client : clients) {
+        client.pendingInput = InputFlags::None;
+    }
+
+    std::cout << "[Room " << code << "] Game started - " << world.levelName << std::endl;
+}
+
+void Room::returnToLobby() {
+    resetWorld();
+    world.phase = GamePhase::Lobby;
+    world.lobbyStep = 0;
+    world.countdown = 0;
+    countdownTimer = 0.0f;
+
+    for (ClientSlot& client : clients) {
+        client.ready = false;
+        client.waitingReady = false;
+        client.pendingInput = InputFlags::None;
+    }
+
+    syncConnectedCount();
+    syncWaitingReadyMask();
+    std::cout << "[Room " << code << "] Returned to lobby" << std::endl;
+}
+
+bool Room::allConnectedReady() const {
+    uint8_t connected = 0;
+    uint8_t ready = 0;
+
+    for (const ClientSlot& client : clients) {
+        if (!client.connected)
+            continue;
+        ++connected;
+        if (client.ready)
+            ++ready;
+    }
+
+    return connected > 0 && ready >= connected;
+}
+
+bool Room::allConnectedWaitingReady() const {
     uint8_t connected = 0;
     uint8_t waitingReady = 0;
 
-    for (const ClientSlot& client : clients_) {
-        if (!client.connected) {
+    for (const ClientSlot& client : clients) {
+        if (!client.connected)
             continue;
-        }
         ++connected;
-        if (client.waitingReady) {
+        if (client.waitingReady)
             ++waitingReady;
-        }
     }
 
     return connected > 0 && waitingReady >= connected;
 }
 
-void GameServer::proceedToMapSelect() {
-    // 等待室全员准备后进入选关（lobbyStep: 0→1）
-    world_.lobbyStep = 1;
-    for (ClientSlot& client : clients_) {
-        client.waitingReady = false;
-        client.ready = false;
-    }
-    syncConnectedCount();
-    syncWaitingReadyMask();
-    broadcastState();
-    std::cout << "[Server] Lobby advanced to map select" << std::endl;
-}
-
-void GameServer::backToWaitingRoom() {
-    world_.lobbyStep = 0;
-    for (ClientSlot& client : clients_) {
-        client.waitingReady = false;
-        client.ready = false;
-    }
-    syncConnectedCount();
-    syncWaitingReadyMask();
-    broadcastState();
-    std::cout << "[Server] Returned to waiting room" << std::endl;
-}
-
-bool GameServer::isLevelUnlocked(uint8_t index) const {
-    return fireice::isLevelUnlocked(unlockedMask_, index);
-}
-
-void GameServer::reloadMap() {
-    map_.loadFromFile(mapPath_);
-    applyLevelMetadata();
-}
-
-void GameServer::resetWorld() {
-    reloadMap();
-
-    world_.tick = 0;
-    world_.fireDoorOpen = false;
-    world_.waterDoorOpen = false;
-    world_.poisonDoorOpen = false;
-    world_.levelComplete = false;
-
-    for (PlayerState& player : world_.players) {
-        player = PlayerState{};
-    }
-
-    for (ClientSlot& client : clients_) {
-        client.jumpHeld = false;
-        client.airJumpUsedThisHold = false;
-    }
-
-    for (const SpawnPoint& spawn : map_.spawns()) {
-        // 按 collision 里的 f/w/p 标记重置各 slot 位置
-        if (spawn.role == PlayerRole::Fire && clients_[0].connected) {
-            world_.players[0].role = PlayerRole::Fire;
-            world_.players[0].x = spawn.x;
-            world_.players[0].y = spawn.y;
-            world_.players[0].alive = true;
-        } else if (spawn.role == PlayerRole::Water && clients_[1].connected) {
-            world_.players[1].role = PlayerRole::Water;
-            world_.players[1].x = spawn.x;
-            world_.players[1].y = spawn.y;
-            world_.players[1].alive = true;
-        } else if (spawn.role == PlayerRole::Poison && clients_[2].connected) {
-            world_.players[2].role = PlayerRole::Poison;
-            world_.players[2].x = spawn.x;
-            world_.players[2].y = spawn.y;
-            world_.players[2].alive = true;
+void Room::syncWaitingReadyMask() {
+    uint8_t mask = 0;
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        if (clients[i].connected && clients[i].waitingReady) {
+            mask |= static_cast<uint8_t>(1u << i);
         }
     }
+    world.waitingReadyMask = mask;
 }
 
-void GameServer::syncConnectedCount() {
-    uint8_t count = 0;
-    uint8_t readyMask = 0;
+void Room::proceedToMapSelect() {
+    world.lobbyStep = 1;
+    for (ClientSlot& client : clients) {
+        client.waitingReady = false;
+        client.ready = false;
+    }
+    syncConnectedCount();
+    syncWaitingReadyMask();
+    std::cout << "[Room " << code << "] Advanced to map select" << std::endl;
+}
 
-    for (std::size_t i = 0; i < clients_.size(); ++i) {
-        if (!clients_[i].connected) {
-            world_.playerNames[i][0] = '\0';
+void Room::backToWaitingRoom() {
+    world.lobbyStep = 0;
+    for (ClientSlot& client : clients) {
+        client.waitingReady = false;
+        client.ready = false;
+    }
+    syncConnectedCount();
+    syncWaitingReadyMask();
+    std::cout << "[Room " << code << "] Back to waiting room" << std::endl;
+}
+
+void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
+    if (!clients[slot].connected)
+        return;
+
+    const LevelCatalog& catalog = LevelCatalog::instance();
+    const uint8_t playerCount = std::max(uint8_t{1}, world.connectedCount);
+    const uint8_t filteredCount = catalog.countForPlayerCount(playerCount);
+
+    if (world.phase == GamePhase::Lobby) {
+        if (world.lobbyStep == 0) {
+            if (action == PlayerAction::ReturnToLobby) {
+                clients[slot].waitingReady = false;
+                syncWaitingReadyMask();
+                return;
+            }
+            if (action == PlayerAction::WaitingReady) {
+                clients[slot].waitingReady = !clients[slot].waitingReady;
+                syncWaitingReadyMask();
+                return;
+            }
+            if (action == PlayerAction::ProceedToMapSelect && allConnectedWaitingReady()) {
+                proceedToMapSelect();
+                return;
+            }
+            return;
+        }
+
+        // lobbyStep == 1: map select
+        if (action == PlayerAction::BackToWaitingRoom) {
+            backToWaitingRoom();
+            return;
+        }
+        if (action == PlayerAction::ReturnToLobby) {
+            clients[slot].ready = false;
+            syncConnectedCount();
+            return;
+        }
+        if (action == PlayerAction::PrevLevel || action == PlayerAction::NextLevel) {
+            const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);
+            uint8_t newFiltered = currentFiltered;
+            if (action == PlayerAction::PrevLevel && currentFiltered > 0)
+                newFiltered = currentFiltered - 1;
+            else if (action == PlayerAction::NextLevel && currentFiltered + 1 < filteredCount)
+                newFiltered = currentFiltered + 1;
+            if (newFiltered != currentFiltered)
+                selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount));
+            return;
+        }
+        if (action == PlayerAction::SelectLevel) {
+            if (value < filteredCount)
+                selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
+            return;
+        }
+        if (action == PlayerAction::Ready) {
+            clients[slot].ready = true;
+            syncConnectedCount();
+            std::cout << "[Room " << code << "] Slot " << static_cast<int>(slot) << " ready" << std::endl;
+            if (allConnectedReady())
+                beginCountdown();
+            return;
+        }
+    }
+
+    if (action == PlayerAction::ReturnToLobby && world.phase != GamePhase::Lobby) {
+        returnToLobby();
+        return;
+    }
+    if (action == PlayerAction::Restart && (world.phase == GamePhase::Victory || world.phase == GamePhase::GameOver)) {
+        returnToLobby();
+        return;
+    }
+    if (action == PlayerAction::NextLevel && world.phase == GamePhase::Victory) {
+        const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);
+        if (currentFiltered + 1 < filteredCount)
+            selectLevel(catalog.filteredIndexToGlobalIndex(currentFiltered + 1, playerCount));
+        else
+            returnToLobby();
+    }
+}
+
+void Room::simulateTick() {
+    if (world.phase == GamePhase::Countdown) {
+        countdownTimer = std::max(0.0f, countdownTimer - TICK_DT);
+        world.countdown = static_cast<uint8_t>(std::ceil(countdownTimer));
+        if (countdownTimer <= 0.0f)
+            beginPlaying();
+        ++world.tick;
+        return;
+    }
+
+    if (world.phase != GamePhase::Playing) {
+        ++world.tick;
+        return;
+    }
+
+    updateButtons(map, world);
+
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        if (!clients[i].connected)
             continue;
+
+        PlayerState& player = world.players[i];
+        const bool jumpNow = hasFlag(clients[i].pendingInput, InputFlags::Jump);
+        const bool jumpPressed = jumpNow && !clients[i].jumpHeld;
+        if (!jumpNow)
+            clients[i].airJumpUsedThisHold = false;
+        clients[i].jumpHeld = jumpNow;
+        applyInput(player, clients[i].pendingInput, TICK_DT, jumpPressed, jumpNow, clients[i].airJumpUsedThisHold);
+        integratePlayer(player, map, world, TICK_DT);
+
+        if (sampleHazard(map, player, world))
+            player.alive = false;
+        collectGems(player, map);
+        player.atExit = sampleExit(map, player);
+    }
+
+    updatePhase();
+    ++world.tick;
+}
+
+void Room::updatePhase() {
+    bool anyDead = false;
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        if (!clients[i].connected)
+            continue;
+        if (!world.players[i].alive) {
+            anyDead = true;
+            break;
         }
-        ++count;
-        if (clients_[i].ready) {
-            readyMask |= static_cast<uint8_t>(1u << i);
+    }
+
+    if (anyDead) {
+        world.phase = GamePhase::GameOver;
+        world.levelComplete = false;
+        std::cout << "[Room " << code << "] Game over" << std::endl;
+        return;
+    }
+
+    bool allDone = true;
+    for (std::size_t i = 0; i < clients.size(); ++i) {
+        if (!clients[i].connected)
+            continue;
+        if (!world.players[i].atExit) {
+            allDone = false;
+            break;
         }
-        std::snprintf(world_.playerNames[i], MAX_PLAYER_NAME, "%s", clients_[i].name.c_str());
     }
 
-    world_.connectedCount = count;
-    world_.readyMask = readyMask;
+    if (allDone && world.connectedCount > 0) {
+        world.phase = GamePhase::Victory;
+        world.levelComplete = true;
+        completedMask |= static_cast<uint8_t>(1u << selectedLevelIndex);
+        if (selectedLevelIndex + 1 < LevelCatalog::instance().count())
+            unlockedMask |= static_cast<uint8_t>(1u << (selectedLevelIndex + 1));
+        syncProgressToWorld();
+        std::cout << "[Room " << code << "] Level complete" << std::endl;
+    }
 }
 
-void GameServer::beginCountdown() {
-    world_.phase = GamePhase::Countdown;
-    countdownTimer_ = COUNTDOWN_SECONDS;
-    world_.countdown = static_cast<uint8_t>(std::ceil(countdownTimer_));
-    std::cout << "[Server] Countdown started" << std::endl;
+void Room::broadcastState(sf::UdpSocket& socket) {
+    syncConnectedCount();
+
+    StatePacket packet{};
+    packet.world = world;
+
+    std::array<char, 512> buffer{};
+    std::size_t size = 0;
+    if (!packPacket(packet, buffer, size))
+        return;
+
+    for (const ClientSlot& client : clients) {
+        if (!client.connected)
+            continue;
+        socket.send(buffer.data(), size, client.address, client.port);
+    }
 }
 
-void GameServer::beginPlaying() {
-    resetWorld();
-    world_.phase = GamePhase::Playing;
-    world_.countdown = 0;
+std::optional<uint8_t> Room::findOpenSlot(PlayerRole preferred) const {
+    if (preferred == PlayerRole::Fire && !clients[0].connected)
+        return static_cast<uint8_t>(0);
+    if (preferred == PlayerRole::Water && !clients[1].connected)
+        return static_cast<uint8_t>(1);
+    for (std::size_t i = 0; i < clients.size(); ++i)
+        if (!clients[i].connected)
+            return static_cast<uint8_t>(i);
+    return std::nullopt;
+}
 
-    for (ClientSlot& client : clients_) {
-        client.pendingInput = InputFlags::None;
+std::optional<uint8_t> Room::findSlotByEndpoint(const sf::IpAddress& address, unsigned short port) const {
+    for (std::size_t i = 0; i < clients.size(); ++i)
+        if (clients[i].connected && clients[i].address == address && clients[i].port == port)
+            return static_cast<uint8_t>(i);
+    return std::nullopt;
+}
+
+PlayerRole Room::roleForSlot(uint8_t slot) const {
+    switch (slot) {
+        case 0:
+            return PlayerRole::Fire;
+        case 1:
+            return PlayerRole::Water;
+        case 2:
+            return PlayerRole::Poison;
+        default:
+            return PlayerRole::None;
+    }
+}
+
+void Room::acceptClient(sf::UdpSocket& socket, const sf::IpAddress& address, unsigned short port,
+                        const ConnectRequestPacket& request) {
+    const auto existing = findSlotByEndpoint(address, port);
+    if (existing.has_value()) {
+        ConnectAcceptPacket accept{};
+        accept.slot = existing.value();
+        accept.role = clients[existing.value()].role;
+        std::snprintf(accept.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
+
+        std::array<char, 512> buf{};
+        std::size_t sz = 0;
+        packPacket(accept, buf, sz);
+        socket.send(buf.data(), sz, address, port);
+        broadcastState(socket);
+        return;
     }
 
-    std::cout << "[Server] Game started - " << world_.levelName << std::endl;
-}
-
-void GameServer::returnToLobby() {
-    resetWorld();
-    world_.phase = GamePhase::Lobby;
-    world_.lobbyStep = 0;
-    world_.countdown = 0;
-    countdownTimer_ = 0.0f;
-
-    for (ClientSlot& client : clients_) {
-        client.ready = false;
-        client.waitingReady = false;
-        client.pendingInput = InputFlags::None;
+    const auto slot = findOpenSlot(request.preferredRole);
+    if (!slot.has_value()) {
+        rejectClient(socket, address, port, "Room is full");
+        return;
     }
+
+    const PlayerRole role = roleForSlot(slot.value());
+
+    ClientSlot& client = clients[slot.value()];
+    client.connected = true;
+    client.ready = false;
+    client.waitingReady = false;
+    client.role = role;
+    client.address = address;
+    client.port = port;
+    client.pendingInput = InputFlags::None;
+    client.name = request.playerName;
+
+    ConnectAcceptPacket accept{};
+    accept.slot = slot.value();
+    accept.role = role;
+    std::snprintf(accept.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
+
+    std::array<char, 512> buf{};
+    std::size_t sz = 0;
+    packPacket(accept, buf, sz);
+    socket.send(buf.data(), sz, address, port);
 
     syncConnectedCount();
     syncWaitingReadyMask();
-    std::cout << "[Server] Returned to lobby" << std::endl;
+    broadcastState(socket);
+
+    std::cout << "[Room " << code << "] Client joined slot " << static_cast<int>(slot.value()) << " as "
+              << roleName(role) << " from " << address << ":" << port << std::endl;
 }
 
-bool GameServer::allConnectedReady() const {
-    uint8_t connected = 0;
-    uint8_t ready = 0;
+void Room::rejectClient(sf::UdpSocket& socket, const sf::IpAddress& address, unsigned short port, const char* reason) {
+    ConnectRejectPacket reject{};
+    std::snprintf(reject.reason, sizeof(reject.reason), "%s", reason);
 
-    for (const ClientSlot& client : clients_) {
-        if (!client.connected) {
-            continue;
-        }
-        ++connected;
-        if (client.ready) {
-            ++ready;
-        }
+    std::array<char, 512> buf{};
+    std::size_t sz = 0;
+    packPacket(reject, buf, sz);
+    socket.send(buf.data(), sz, address, port);
+}
+
+void Room::disconnectClient(uint8_t slot, sf::UdpSocket& socket) {
+    if (slot >= clients.size())
+        return;
+
+    clients[slot] = ClientSlot{};
+    syncConnectedCount();
+    syncWaitingReadyMask();
+
+    if (world.phase != GamePhase::Lobby)
+        returnToLobby();
+
+    broadcastState(socket);
+    std::cout << "[Room " << code << "] Client slot " << static_cast<int>(slot) << " disconnected" << std::endl;
+}
+
+// ============================================================================
+// GameServer implementation (multi-room manager)
+// ============================================================================
+
+std::string GameServer::generateRoomCode() {
+    static const char kChars[] = "0123456789";
+    std::string code;
+    code.reserve(6);
+    for (int i = 0; i < 6; ++i)
+        code.push_back(kChars[std::rand() % 10]);
+    return code;
+}
+
+bool GameServer::start() {
+    if (socket_.bind(SERVER_PORT) != sf::Socket::Done) {
+        std::cerr << "[Server] Failed to bind UDP port " << SERVER_PORT << std::endl;
+        return false;
     }
+    socket_.setBlocking(false);
 
-    return connected > 0 && ready >= connected;
+    std::srand(static_cast<unsigned>(std::time(nullptr)));
+    running_ = true;
+    lastTick_ = std::chrono::steady_clock::now();
+    lastBroadcast_ = lastTick_;
+
+    std::cout << "[Server] Multi-room server listening on port " << SERVER_PORT << std::endl;
+    std::cout << "[Server] Levels loaded: " << static_cast<int>(LevelCatalog::instance().count()) << std::endl;
+    return true;
 }
 
 void GameServer::run() {
@@ -281,13 +559,13 @@ void GameServer::run() {
         const auto now = std::chrono::steady_clock::now();
         const float tickElapsed = std::chrono::duration<float>(now - lastTick_).count();
         if (tickElapsed >= TICK_DT) {
-            simulateTick();
+            simulateAllRooms();
             lastTick_ = now;
         }
 
         const float broadcastElapsed = std::chrono::duration<float>(now - lastBroadcast_).count();
         if (broadcastElapsed >= 1.0f / STATE_BROADCAST_HZ) {
-            broadcastState();
+            broadcastAllRooms();
             lastBroadcast_ = now;
         }
 
@@ -306,412 +584,144 @@ void GameServer::processPackets() {
     unsigned short port = 0;
 
     while (socket_.receive(buffer.data(), buffer.size(), received, sender, port) == sf::Socket::Done) {
-        if (received < sizeof(PacketHeader)) {
+        if (received < sizeof(PacketHeader))
             continue;
-        }
 
         const auto* header = reinterpret_cast<const PacketHeader*>(buffer.data());
+
         switch (header->type) {
             case PacketType::ConnectRequest: {
                 ConnectRequestPacket packet{};
-                if (!unpackPacket(buffer.data(), received, packet)) {
+                if (!unpackPacket(buffer.data(), received, packet))
                     break;
+
+                // Find which room this client belongs to
+                if (packet.roomCode[0] != '\0') {
+                    const std::string targetCode(packet.roomCode);
+                    auto it = rooms_.find(targetCode);
+                    if (it != rooms_.end()) {
+                        it->second->acceptClient(socket_, sender, port, packet);
+                    } else {
+                        // Room not found
+                        ConnectRejectPacket reject{};
+                        std::snprintf(reject.reason, sizeof(reject.reason), "Room not found");
+                        std::array<char, 512> buf{};
+                        std::size_t sz = 0;
+                        packPacket(reject, buf, sz);
+                        socket_.send(buf.data(), sz, sender, port);
+                    }
+                } else {
+                    // No room code = create new room
+                    std::string newCode;
+                    do {
+                        newCode = generateRoomCode();
+                    } while (rooms_.find(newCode) != rooms_.end());
+
+                    auto room = std::make_unique<Room>();
+                    room->code = newCode;
+                    room->lastTick = std::chrono::steady_clock::now();
+                    room->lastBroadcast = room->lastTick;
+                    room->selectLevel(0);
+
+                    Room* raw = room.get();
+                    rooms_[newCode] = std::move(room);
+                    raw->acceptClient(socket_, sender, port, packet);
+
+                    std::cout << "[Server] Created room " << newCode << std::endl;
                 }
-                acceptClient(sender, port, packet);
                 break;
             }
-            case PacketType::Input: {
-                InputPacket packet{};
-                if (!unpackPacket(buffer.data(), received, packet)) {
-                    break;
+
+            case PacketType::Input:
+            case PacketType::Action:
+            case PacketType::Disconnect: {
+                // Route to the correct room by finding which room has this endpoint
+                Room* foundRoom = nullptr;
+                uint8_t foundSlot = 0;
+                for (auto& [code, room] : rooms_) {
+                    auto slot = room->findSlotByEndpoint(sender, port);
+                    if (slot.has_value()) {
+                        foundRoom = room.get();
+                        foundSlot = slot.value();
+                        break;
+                    }
                 }
-                const auto slot = findSlotByEndpoint(sender, port);
-                if (!slot.has_value() || packet.slot != slot.value()) {
+                if (!foundRoom)
                     break;
-                }
-                if (world_.phase == GamePhase::Playing) {
-                    clients_[slot.value()].pendingInput = static_cast<InputFlags>(packet.flags);
+
+                if (header->type == PacketType::Input) {
+                    InputPacket pkt{};
+                    if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot) {
+                        if (foundRoom->world.phase == GamePhase::Playing)
+                            foundRoom->clients[foundSlot].pendingInput = static_cast<InputFlags>(pkt.flags);
+                    }
+                } else if (header->type == PacketType::Action) {
+                    ActionPacket pkt{};
+                    if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot)
+                        foundRoom->handleAction(foundSlot, pkt.action, pkt.value);
+                } else if (header->type == PacketType::Disconnect) {
+                    DisconnectPacket pkt{};
+                    if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot) {
+                        foundRoom->disconnectClient(foundSlot, socket_);
+                        // Remove room if empty
+                        bool empty = true;
+                        for (const auto& c : foundRoom->clients)
+                            if (c.connected) {
+                                empty = false;
+                                break;
+                            }
+                        if (empty) {
+                            std::cout << "[Server] Removing empty room " << foundRoom->code << std::endl;
+                            rooms_.erase(foundRoom->code);
+                        }
+                    }
                 }
                 break;
             }
-            case PacketType::Action: {
-                ActionPacket packet{};
-                if (!unpackPacket(buffer.data(), received, packet)) {
-                    break;
-                }
-                const auto slot = findSlotByEndpoint(sender, port);
-                if (!slot.has_value() || packet.slot != slot.value()) {
-                    break;
-                }
-                handleAction(slot.value(), packet.action, packet.value);
-                break;
-            }
+
             case PacketType::Discovery: {
                 DiscoveryPacket disc{};
-                if (!unpackPacket(buffer.data(), received, disc)) {
+                if (!unpackPacket(buffer.data(), received, disc) || disc.isResponse != 0)
                     break;
-                }
-                if (disc.isResponse == 0) {
-                    const std::string requested(disc.roomCode);
-                    const std::string mine(roomCode_);
-                    if (requested.empty() || requested == mine) {
+
+                const std::string requested(disc.roomCode);
+                for (auto& [code, room] : rooms_) {
+                    if (requested.empty() || requested == code) {
                         DiscoveryPacket resp{};
                         resp.isResponse = 1;
-                        std::snprintf(resp.roomCode, MAX_ROOM_CODE, "%s", roomCode_);
-                        resp.playerCount = world_.connectedCount;
+                        std::snprintf(resp.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
+                        resp.playerCount = room->world.connectedCount;
                         resp.maxPlayers = MAX_PLAYERS;
                         const LevelCatalog& cat = LevelCatalog::instance();
-                        if (selectedLevelIndex_ < cat.count()) {
-                            std::snprintf(resp.levelName, MAX_LEVEL_NAME, "%s", cat.at(selectedLevelIndex_).title);
-                        }
+                        if (room->selectedLevelIndex < cat.count())
+                            std::snprintf(resp.levelName, MAX_LEVEL_NAME, "%s", cat.at(room->selectedLevelIndex).title);
                         std::array<char, 512> buf{};
                         std::size_t sz = 0;
                         packPacket(resp, buf, sz);
                         socket_.send(buf.data(), sz, sender, port);
+                        if (!requested.empty())
+                            break;  // specific match, stop
                     }
                 }
                 break;
             }
-            case PacketType::Disconnect: {
-                DisconnectPacket packet{};
-                if (!unpackPacket(buffer.data(), received, packet)) {
-                    break;
-                }
-                if (packet.slot < clients_.size()) {
-                    clients_[packet.slot] = ClientSlot{};
-                    syncConnectedCount();
 
-                    if (world_.phase != GamePhase::Lobby) {
-                        returnToLobby();
-                    }
-
-                    std::cout << "[Server] Client slot " << static_cast<int>(packet.slot) << " disconnected"
-                              << std::endl;
-                }
-                break;
-            }
             default:
                 break;
         }
     }
 }
 
-void GameServer::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
-    if (!clients_[slot].connected) {
-        return;
-    }
-
-    const LevelCatalog& catalog = LevelCatalog::instance();
-    const uint8_t playerCount = std::max(uint8_t{1}, world_.connectedCount);
-    const uint8_t filteredCount = catalog.countForPlayerCount(playerCount);
-
-    if (world_.phase == GamePhase::Lobby) {
-        if (world_.lobbyStep == 0) {
-            // --- 等待室：准备 → 下一步进选关 ---
-            if (action == PlayerAction::ReturnToLobby) {
-                clients_[slot].waitingReady = false;
-                syncWaitingReadyMask();
-                broadcastState();
-                return;
-            }
-
-            if (action == PlayerAction::WaitingReady) {
-                clients_[slot].waitingReady = !clients_[slot].waitingReady;
-                syncWaitingReadyMask();
-                broadcastState();
-                return;
-            }
-
-            if (action == PlayerAction::ProceedToMapSelect && allConnectedWaitingReady()) {
-                proceedToMapSelect();
-                return;
-            }
-
-            return;
-        }
-
-        // --- 选关界面：切关 / 准备 / 开局 ---
-        if (action == PlayerAction::BackToWaitingRoom) {
-            backToWaitingRoom();
-            return;
-        }
-
-        if (action == PlayerAction::ReturnToLobby) {
-            clients_[slot].ready = false;
-            syncConnectedCount();
-            broadcastState();
-            return;
-        }
-
-        if (action == PlayerAction::PrevLevel || action == PlayerAction::NextLevel) {
-            const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex_, playerCount);
-            uint8_t newFiltered = currentFiltered;
-            if (action == PlayerAction::PrevLevel && currentFiltered > 0) {
-                newFiltered = currentFiltered - 1;
-            } else if (action == PlayerAction::NextLevel && currentFiltered + 1 < filteredCount) {
-                newFiltered = currentFiltered + 1;
-            }
-            if (newFiltered != currentFiltered) {
-                selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount));
-            }
-            return;
-        }
-
-        if (action == PlayerAction::SelectLevel) {
-            if (value < filteredCount) {
-                selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
-            }
-            return;
-        }
-
-        if (action == PlayerAction::Ready) {
-            clients_[slot].ready = true;
-            syncConnectedCount();
-            std::cout << "[Server] Slot " << static_cast<int>(slot) << " is ready" << std::endl;
-
-            if (allConnectedReady()) {
-                beginCountdown();
-            }
-            return;
-        }
-    }
-
-    if (action == PlayerAction::ReturnToLobby && world_.phase != GamePhase::Lobby) {
-        returnToLobby();
-        return;
-    }
-
-    if (action == PlayerAction::Restart &&
-        (world_.phase == GamePhase::Victory || world_.phase == GamePhase::GameOver)) {
-        returnToLobby();
-        return;
-    }
-
-    if (action == PlayerAction::NextLevel && world_.phase == GamePhase::Victory) {
-        const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex_, playerCount);
-        if (currentFiltered + 1 < filteredCount) {
-            selectLevel(catalog.filteredIndexToGlobalIndex(currentFiltered + 1, playerCount));
-        } else {
-            returnToLobby();
-        }
+void GameServer::simulateAllRooms() {
+    for (auto& [code, room] : rooms_) {
+        room->simulateTick();
     }
 }
 
-void GameServer::simulateTick() {
-    if (world_.phase == GamePhase::Countdown) {
-        countdownTimer_ = std::max(0.0f, countdownTimer_ - TICK_DT);
-        world_.countdown = static_cast<uint8_t>(std::ceil(countdownTimer_));
-        if (countdownTimer_ <= 0.0f) {
-            beginPlaying();
-        }
-        ++world_.tick;
-        return;
+void GameServer::broadcastAllRooms() {
+    for (auto& [code, room] : rooms_) {
+        room->broadcastState(socket_);
     }
-
-    if (world_.phase != GamePhase::Playing) {
-        ++world_.tick;
-        return;
-    }
-
-    updateButtons(map_, world_);
-
-    for (std::size_t i = 0; i < clients_.size(); ++i) {
-        if (!clients_[i].connected) {
-            continue;
-        }
-
-        PlayerState& player = world_.players[i];
-        const bool jumpNow = hasFlag(clients_[i].pendingInput, InputFlags::Jump);
-        const bool jumpPressed = jumpNow && !clients_[i].jumpHeld;
-        if (!jumpNow) {
-            clients_[i].airJumpUsedThisHold = false;
-        }
-        clients_[i].jumpHeld = jumpNow;
-        applyInput(player, clients_[i].pendingInput, TICK_DT, jumpPressed, jumpNow, clients_[i].airJumpUsedThisHold);
-        integratePlayer(player, map_, world_, TICK_DT);
-
-        if (sampleHazard(map_, player, world_)) {
-            player.alive = false;
-        }
-
-        collectGems(player, map_);
-        player.atExit = sampleExit(map_, player);
-    }
-
-    updatePhase();
-    ++world_.tick;
-}
-
-void GameServer::updatePhase() {
-    // 任一存活玩家死亡 → GameOver；全部到达出口 → Victory
-    bool anyDead = false;
-    for (std::size_t i = 0; i < clients_.size(); ++i) {
-        if (!clients_[i].connected) {
-            continue;
-        }
-        if (!world_.players[i].alive) {
-            anyDead = true;
-            break;
-        }
-    }
-
-    if (anyDead) {
-        world_.phase = GamePhase::GameOver;
-        world_.levelComplete = false;
-        std::cout << "[Server] Game over" << std::endl;
-        return;
-    }
-
-    bool allDone = true;
-    for (std::size_t i = 0; i < clients_.size(); ++i) {
-        if (!clients_[i].connected) {
-            continue;
-        }
-        if (!world_.players[i].atExit) {
-            allDone = false;
-            break;
-        }
-    }
-
-    if (allDone && world_.connectedCount > 0) {
-        world_.phase = GamePhase::Victory;
-        world_.levelComplete = true;
-        completedMask_ |= static_cast<uint8_t>(1u << selectedLevelIndex_);
-        if (selectedLevelIndex_ + 1 < LevelCatalog::instance().count()) {
-            unlockedMask_ |= static_cast<uint8_t>(1u << (selectedLevelIndex_ + 1));
-        }
-        syncProgressToWorld();
-        std::cout << "[Server] Level complete" << std::endl;
-    }
-}
-
-void GameServer::broadcastState() {
-    syncConnectedCount();
-
-    StatePacket packet{};
-    packet.world = world_;
-
-    std::array<char, 512> buffer{};
-    std::size_t size = 0;
-    if (!packPacket(packet, buffer, size)) {
-        return;
-    }
-
-    for (const ClientSlot& client : clients_) {
-        if (!client.connected) {
-            continue;
-        }
-        socket_.send(buffer.data(), size, client.address, client.port);
-    }
-}
-
-std::optional<uint8_t> GameServer::findOpenSlot(PlayerRole preferred) const {
-    const uint8_t fireSlot = 0;
-    const uint8_t waterSlot = 1;
-
-    if (preferred == PlayerRole::Fire && !clients_[fireSlot].connected) {
-        return fireSlot;
-    }
-    if (preferred == PlayerRole::Water && !clients_[waterSlot].connected) {
-        return waterSlot;
-    }
-
-    for (std::size_t i = 0; i < clients_.size(); ++i) {
-        if (!clients_[i].connected) {
-            return static_cast<uint8_t>(i);
-        }
-    }
-    return std::nullopt;
-}
-
-std::optional<uint8_t> GameServer::findSlotByEndpoint(const sf::IpAddress& address, unsigned short port) const {
-    for (std::size_t i = 0; i < clients_.size(); ++i) {
-        if (clients_[i].connected && clients_[i].address == address && clients_[i].port == port) {
-            return static_cast<uint8_t>(i);
-        }
-    }
-    return std::nullopt;
-}
-
-PlayerRole GameServer::roleForSlot(uint8_t slot) const {
-    switch (slot) {
-        case 0:
-            return PlayerRole::Fire;
-        case 1:
-            return PlayerRole::Water;
-        case 2:
-            return PlayerRole::Poison;
-        default:
-            return PlayerRole::None;
-    }
-}
-
-void GameServer::acceptClient(const sf::IpAddress& address, unsigned short port, const ConnectRequestPacket& request) {
-    const auto existing = findSlotByEndpoint(address, port);
-    if (existing.has_value()) {
-        ConnectAcceptPacket accept{};
-        accept.slot = existing.value();
-        accept.role = clients_[existing.value()].role;
-
-        std::array<char, 512> buffer{};
-        std::size_t size = 0;
-        packPacket(accept, buffer, size);
-        socket_.send(buffer.data(), size, address, port);
-        broadcastState();
-        return;
-    }
-
-    if (request.roomCode[0] != '\0') {
-        const std::string clientCode(request.roomCode);
-        const std::string serverCode(roomCode_);
-        if (clientCode != serverCode) {
-            rejectClient(address, port, "Room code mismatch");
-            return;
-        }
-    }
-
-    const auto slot = findOpenSlot(request.preferredRole);
-    if (!slot.has_value()) {
-        rejectClient(address, port, "Room is full");
-        return;
-    }
-
-    const PlayerRole role = roleForSlot(slot.value());
-
-    ClientSlot& client = clients_[slot.value()];
-    client.connected = true;
-    client.ready = false;
-    client.role = role;
-    client.address = address;
-    client.port = port;
-    client.pendingInput = InputFlags::None;
-    client.name = request.playerName;
-
-    ConnectAcceptPacket accept{};
-    accept.slot = slot.value();
-    accept.role = role;
-    accept.worldSeed = 1;
-
-    std::array<char, 512> buffer{};
-    std::size_t size = 0;
-    packPacket(accept, buffer, size);
-    socket_.send(buffer.data(), size, address, port);
-
-    syncConnectedCount();
-    broadcastState();
-
-    std::cout << "[Server] Client joined slot " << static_cast<int>(slot.value()) << " as " << roleName(role)
-              << " from " << address << ":" << port << std::endl;
-}
-
-void GameServer::rejectClient(const sf::IpAddress& address, unsigned short port, const char* reason) {
-    ConnectRejectPacket reject{};
-    std::snprintf(reject.reason, sizeof(reject.reason), "%s", reason);
-
-    std::array<char, 512> buffer{};
-    std::size_t size = 0;
-    packPacket(reject, buffer, size);
-    socket_.send(buffer.data(), size, address, port);
 }
 
 }  // namespace fireice

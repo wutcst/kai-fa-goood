@@ -1,11 +1,9 @@
 #include "GameServer.hpp"
 
-#include <algorithm>
 #include <condition_variable>
 #include <csignal>
 #include <iostream>
 #include <mutex>
-#include <string>
 #include <thread>
 
 namespace {
@@ -22,21 +20,16 @@ void signalHandler(int /*sig*/) {
 
 }  // namespace
 
-int main(int argc, char* argv[]) {
-    uint8_t initialLevel = 0;
-    if (argc > 1) {
-        initialLevel = static_cast<uint8_t>(std::max(0, std::stoi(argv[1]) - 1));
-    }
-
+int main() {
     fireice::GameServer server;
-    if (!server.start(initialLevel)) {
+    if (!server.start()) {
         return 1;
     }
 
     std::signal(SIGINT, signalHandler);
     std::signal(SIGTERM, signalHandler);
 
-    std::cout << "Fire-Ice Online Server" << std::endl;
+    std::cout << "Fire-Ice Online Server (multi-room)" << std::endl;
     std::cout << "Server running. Send SIGINT/SIGTERM to stop." << std::endl;
 
     std::thread serverThread([&server]() { server.run(); });
