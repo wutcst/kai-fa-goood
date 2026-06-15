@@ -83,7 +83,7 @@ struct DiscoveryPacket {
 #pragma pack(pop)
 
 template <typename T>
-bool packPacket(const T& packet, std::array<char, 512>& buffer, std::size_t& size) {
+bool packPacket(const T& packet, std::array<char, 768>& buffer, std::size_t& size) {
     static_assert(std::is_trivially_copyable_v<T>, "Packet must be trivially copyable");
     if (sizeof(T) > buffer.size()) {
         return false;

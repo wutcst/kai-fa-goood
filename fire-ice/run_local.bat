@@ -8,4 +8,4 @@ if not exist "%BIN%\fireice_client.exe" (
     exit /b 1
 )
 
-start "Fire & Ice" /D "%BIN%" "%BIN%\fireice_client.exe" 8.141.101.126
+start "Fire & Ice" /D "%BIN%" "%BIN%\fireice_client.exe" 127.0.0.1

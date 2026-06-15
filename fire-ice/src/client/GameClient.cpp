@@ -1,6 +1,7 @@
 #include "GameClient.hpp"
 #include "LevelCatalog.hpp"
 #include "LevelMapLayout.hpp"
+#include "LevelMechanics.hpp"
 #include "LevelProgress.hpp"
 #include "LocaleText.hpp"
 #include "Physics.hpp"
@@ -143,7 +144,7 @@ void GameClient::sendConnectRequest() {
         std::snprintf(request.roomCode, sizeof(request.roomCode), "%s", typedRoomCode_.c_str());
     }
 
-    std::array<char, 512> buffer{};
+    std::array<char, 768> buffer{};
     std::size_t size = 0;
     packPacket(request, buffer, size);
     socket_.send(buffer.data(), size, serverAddress_, SERVER_PORT);
@@ -165,13 +166,12 @@ void GameClient::handleTitleMenuSelect(int index) {
     switch (index) {
         case 0:
             typedRoomCode_.clear();
-            if (host_ == "127.0.0.1") {
-                serverAddress_ = sf::IpAddress(host_);
-                if (startHosting()) {
-                    beginConnect();
-                }
-            } else {
+            host_ = "127.0.0.1";
+            serverAddress_ = sf::IpAddress::LocalHost;
+            if (startHosting()) {
                 beginConnect();
+            } else {
+                clientScreen_ = ClientScreen::Title;
             }
             break;
         case 1:
@@ -434,7 +434,7 @@ void GameClient::disconnect() {
 
     DisconnectPacket packet{};
     packet.slot = slot_;
-    std::array<char, 512> buffer{};
+    std::array<char, 768> buffer{};
     std::size_t size = 0;
     packPacket(packet, buffer, size);
     socket_.send(buffer.data(), size, serverAddress_, SERVER_PORT);
@@ -510,7 +510,7 @@ void GameClient::broadcastDiscovery() {
             std::snprintf(disc.roomCode, MAX_ROOM_CODE, "%s", targetCode.c_str());
         }
 
-        std::array<char, 512> buf{};
+        std::array<char, 768> buf{};
         std::size_t sz = 0;
         packPacket(disc, buf, sz);
 
@@ -593,7 +593,7 @@ void GameClient::renderJoinRoomScanResults() {
 }
 
 void GameClient::pollNetwork() {
-    std::array<char, 512> buffer{};
+    std::array<char, 768> buffer{};
     std::size_t received = 0;
     sf::IpAddress sender;
     unsigned short port = 0;
@@ -618,6 +618,8 @@ void GameClient::pollNetwork() {
                 preferredRole_ = packet.role;
                 localReady_ = false;
                 roomAnimTimer_ = 0.0f;
+                std::snprintf(renderWorld_.roomCode, MAX_ROOM_CODE, "%s", packet.roomCode);
+                std::snprintf(world_.roomCode, MAX_ROOM_CODE, "%s", packet.roomCode);
                 useLobbyLayout();
                 updateMusic(GamePhase::Lobby);
                 std::cout << "[Client] Connected as " << roleName(role_) << " (slot " << static_cast<int>(slot_) << ")"
@@ -683,7 +685,7 @@ bool GameClient::sendInput() {
     packet.tick = ++inputTick_;
     packet.flags = static_cast<uint8_t>(currentInput_);
 
-    std::array<char, 512> buffer{};
+    std::array<char, 768> buffer{};
     std::size_t size = 0;
     if (!packPacket(packet, buffer, size)) {
         return false;
@@ -703,7 +705,7 @@ bool GameClient::sendAction(PlayerAction action, uint8_t value) {
     packet.action = action;
     packet.value = value;
 
-    std::array<char, 512> buffer{};
+    std::array<char, 768> buffer{};
     std::size_t size = 0;
     if (!packPacket(packet, buffer, size)) {
         return false;
@@ -1915,10 +1917,38 @@ void GameClient::drawDynamicTiles(sf::RenderWindow& window) const {
     }
 }
 
+void GameClient::drawMudParticles(sf::RenderWindow& window) const {
+    for (uint8_t i = 0; i < renderWorld_.mudParticleCount; ++i) {
+        const WorldState::SyncMudParticle& particle = renderWorld_.mudParticles[i];
+        if (particle.active == 0) {
+            continue;
+        }
+        sf::CircleShape mud(MUD_HITBOX * 0.5f);
+        mud.setFillColor(sf::Color(50, 150, 60));
+        mud.setOutlineColor(sf::Color(30, 100, 40));
+        mud.setOutlineThickness(1.0f);
+        mud.setOrigin(MUD_HITBOX * 0.5f, MUD_HITBOX * 0.5f);
+        mud.setPosition(particle.x, particle.y);
+        window.draw(mud);
+    }
+}
+
 void GameClient::drawMap(sf::RenderWindow& window) const {
     if (tiledMap_.ready()) {
-        // TMX 已含完整地形，不再叠加 drawDynamicTiles 色块
-        tiledMap_.drawStatic(window);
+        const auto skipHiddenVanishing = [this](int x, int y) {
+            if (map_.tileAt(x, y) != TileType::VanishingPlatform) {
+                return false;
+            }
+            const int16_t slot = map_.vanishingSlotAt(x, y);
+            if (slot < 0) {
+                return false;
+            }
+            return isVanishingTileHidden(renderWorld_, static_cast<uint16_t>(slot));
+        };
+        tiledMap_.drawStatic(window, skipHiddenVanishing);
+        tiledMap_.drawCollectibles(window, renderWorld_.collectedPickupsMask, renderWorld_.collectedPickupsMaskHi,
+                                   renderWorld_.collectedPickupsMaskExt);
+        drawMudParticles(window);
         return;
     }
 

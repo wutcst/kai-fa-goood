@@ -28,11 +28,16 @@ add_library(fireice_common STATIC
     src/common/Physics.cpp
     src/common/Paths.cpp
     src/common/LevelCatalog.cpp
+    src/common/Pickup.cpp
+    src/common/LevelMechanics.cpp
 )
 target_include_directories(fireice_common PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common
 )
 target_link_libraries(fireice_common PUBLIC sfml-system)
+if(MSVC)
+    target_compile_options(fireice_common PRIVATE /utf-8)
+endif()
 
 add_executable(fireice_server
     src/server/GameServer.cpp
@@ -42,6 +47,9 @@ target_include_directories(fireice_server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/server
 )
 target_link_libraries(fireice_server PRIVATE fireice_common sfml-network sfml-system)
+if(MSVC)
+    target_compile_options(fireice_server PRIVATE /utf-8)
+endif()
 
 add_executable(fireice_client
     src/client/GameClient.cpp

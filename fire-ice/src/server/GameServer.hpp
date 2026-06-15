@@ -1,6 +1,8 @@
 #pragma once
 
+#include "LevelMechanics.hpp"
 #include "Map.hpp"
+#include "Pickup.hpp"
 #include "Protocol.hpp"
 
 #include <SFML/Network.hpp>
@@ -32,6 +34,9 @@ struct Room {
     std::string code;
     GameMap map;
     std::string mapPath;
+    std::string visualMapPath;
+    std::vector<Pickup> pickups;
+    LevelRuntime levelRuntime{};
     uint8_t selectedLevelIndex = 0;
     WorldState world{};
     std::array<ClientSlot, MAX_PLAYERS> clients{};

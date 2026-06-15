@@ -20,20 +20,33 @@
 
 ---
 
-## 2. 目录规范（level01 示例）
+## 2. 目录规范
 
 ```
 assets/maps/
 ├── fire-ice.tiled-project
-├── level01.tmx
-└── level01/
-    ├── terrain.tsj / terrain.png      地形
-    ├── apple.tsj / apple.png          苹果装饰
-    ├── player-frog.tsj / player-frog.png
-    └── background.png                 平铺背景
+├── level01.tmx … level08.tmx      # 游戏关卡地图
+├── level01/ … level03/            # 各关卡专用图块集
+├── tilesets/                      # 共享 Pixel Adventure 素材
+│   ├── Background/
+│   ├── Items/
+│   ├── Terrain/
+│   ├── Traps/
+│   └── …
+└── sources/                       # 原始 Tiled 工程归档（map1/2/3）
 ```
 
-第 2 关及以后：`level02.tmx` + `level02/` 文件夹，以此类推。
+**level01 示例：**
+
+```
+level01/
+├── terrain.tsj / terrain.png
+├── apple.tsj / apple.png
+├── player-frog.tsj / player-frog.png
+└── background.png
+```
+
+**level02/03：** 图块集 `.tsx` 引用 `../tilesets/...` 共享素材；关卡专用贴图（如 `player1.png`、`background.png`）放在对应 `levelXX/` 下。
 
 ---
 
@@ -52,10 +65,16 @@ assets/maps/
 
 ## 4. 从 Tiled 导出目录导入新关卡
 
-若你在 Tiled 里另存了一个文件夹（含 `.tmj`、`.tsj`、`.png`）：
+若你在 Tiled 里另存了一个文件夹（含 `.tmj`、`.tsj`、`.png`），可放在 `assets/maps/sources/` 下再导入：
 
 ```bat
-python tools/import_tiled_level.py "你的Tiled文件夹路径" --level 1
+python tools/import_tiled_level.py "assets/maps/sources/map1" --level 1
+```
+
+整理目录（合并共享素材、生成 levelXX 布局）：
+
+```bat
+python tools/reorganize_maps.py
 ```
 
 会自动：复制资源 → 生成 `level01.tmx` → 导出 `level01_collision.txt`。

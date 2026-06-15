@@ -81,6 +81,7 @@ private:
     void handleDiscoveryResponse(const DiscoveryPacket& packet, const sf::IpAddress& sender);
     void drawBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawMap(sf::RenderWindow& window) const;
+    void drawMudParticles(sf::RenderWindow& window) const;
     void drawDynamicTiles(sf::RenderWindow& window) const;
     void drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;
     void drawPlayer(sf::RenderWindow& window, const PlayerState& player) const;

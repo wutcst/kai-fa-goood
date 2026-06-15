@@ -1,0 +1,104 @@
+{
+    "activeFile": "C:/Users/17857/Desktop/map2/map2.tmx",
+    "expandedProjectPaths": [
+        "."
+    ],
+    "fileStates": {
+        "C:/Users/17857/Desktop/map2/Bananas.tsx": {
+            "scaleInDock": 1
+        },
+        "C:/Users/17857/Desktop/map2/Idle.tsx": {
+            "scaleInDock": 1
+        },
+        "C:/Users/17857/Desktop/map2/Mud Particle.tsx": {
+            "scaleInDock": 1
+        },
+        "C:/Users/17857/Desktop/map2/On (24x8).tsx": {
+            "scaleInDock": 1
+        },
+        "C:/Users/17857/Desktop/map2/Sand Mud Ice (16x6).tsx": {
+            "scaleInDock": 1
+        },
+        "C:/Users/17857/Desktop/map2/Terrain (16x16).tsx": {
+            "scaleInDock": 1
+        },
+        "C:/Users/17857/Desktop/map2/map2.tmx": {
+            "scale": 1,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 495,
+                "y": 385.5
+            }
+        },
+        "C:/Users/17857/Desktop/map2/player1.tsx": {
+            "scaleInDock": 1
+        },
+        "Chain.tsx": {
+            "scaleInDock": 5.5,
+            "scaleInEditor": 1
+        },
+        "Idle.tsx": {
+            "scaleInDock": 8,
+            "scaleInEditor": 1
+        },
+        "Kiwi.tsx": {
+            "scaleInDock": 2,
+            "scaleInEditor": 1
+        },
+        "On (38x38).tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Spiked Ball.tsx": {
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Terrain (16x16).tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1.5,
+            "scaleInEditor": 1
+        },
+        "map3.tmx": {
+            "expandedObjectLayers": [
+                3
+            ],
+            "scale": 1.5,
+            "selectedLayer": 2,
+            "viewCenter": {
+                "x": 317.66666666666663,
+                "y": 148.99999999999997
+            }
+        },
+        "rock head.tsx": {
+            "scaleInDock": 1.5,
+            "scaleInEditor": 1
+        }
+    },
+    "last.imagePath": "C:/Users/17857/Desktop/map3/Traps/Spiked Ball",
+    "map.height": 80,
+    "map.lastUsedFormat": "tmx",
+    "map.tileHeight": 16,
+    "map.tileWidth": 16,
+    "map.width": 80,
+    "openFiles": [
+        "map3.tmx",
+        "C:/Users/17857/Desktop/map2/map2.tmx"
+    ],
+    "project": "map3.tiled-project",
+    "recentFiles": [
+        "map3.tmx",
+        "C:/Users/17857/Desktop/map2/map2.tmx",
+        "Chain.tsx",
+        "On (38x38).tsx",
+        "rock head.tsx",
+        "Kiwi.tsx",
+        "Spiked Ball.tsx",
+        "Idle.tsx",
+        "Terrain (16x16).tsx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 8,
+        "width": 8
+    }
+}

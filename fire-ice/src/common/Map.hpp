@@ -7,6 +7,8 @@
 
 namespace fireice {
 
+constexpr int8_t NO_VANISHING_SLOT = -1;
+
 struct SpawnPoint {
     PlayerRole role = PlayerRole::None;
     float x = 0.0f;
@@ -33,11 +35,13 @@ public:
 
     const std::vector<SpawnPoint>& spawns() const { return spawns_; }
     int countGems() const;
+    int16_t vanishingSlotAt(int x, int y) const;
 
 private:
     int width_ = 0;
     int height_ = 0;
     std::vector<TileType> tiles_;
+    std::vector<int16_t> vanishingSlots_;
     std::vector<SpawnPoint> spawns_;
 
     TileType charToTile(char c) const;

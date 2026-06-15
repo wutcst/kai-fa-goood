@@ -4,7 +4,12 @@
     "compatibilityVersion": 1100,
     "extensionsPath": "extensions",
     "folders": [
-        "."
+        ".",
+        "tilesets",
+        "level01",
+        "level02",
+        "level03",
+        "sources"
     ],
     "properties": [],
     "propertyTypes": []

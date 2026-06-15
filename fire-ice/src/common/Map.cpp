@@ -1,6 +1,6 @@
 #include "Map.hpp"
+#include "LevelMechanics.hpp"
 #include "Physics.hpp"
-
 #include <algorithm>
 #include <fstream>
 #include <sstream>
@@ -14,6 +14,8 @@ TileType GameMap::charToTile(char c) const {
             return TileType::Empty;
         case '#':
             return TileType::Solid;
+        case '^':
+            return TileType::OneWayPlatform;
         case 'L':
             return TileType::Lava;
         case 'W':
@@ -32,6 +34,10 @@ TileType GameMap::charToTile(char c) const {
             return TileType::Button;
         case 'A':
             return TileType::Acid;
+        case '~':
+            return TileType::VanishingPlatform;
+        case 'S':
+            return TileType::Spike;
         case 'D':
             return TileType::PoisonDoor;
         case 'P':
@@ -51,6 +57,8 @@ char GameMap::tileToChar(TileType type) const {
             return '.';
         case TileType::Solid:
             return '#';
+        case TileType::OneWayPlatform:
+            return '^';
         case TileType::Lava:
             return 'L';
         case TileType::Water:
@@ -73,6 +81,10 @@ char GameMap::tileToChar(TileType type) const {
             return 'G';
         case TileType::Button:
             return 'B';
+        case TileType::VanishingPlatform:
+            return '~';
+        case TileType::Spike:
+            return 'S';
         default:
             return '#';
     }
@@ -111,7 +123,9 @@ bool GameMap::loadFromText(const std::string& text) {
         width_ = std::max(width_, static_cast<int>(row.size()));
     }
     tiles_.assign(static_cast<std::size_t>(width_ * height_), TileType::Empty);
+    vanishingSlots_.assign(static_cast<std::size_t>(width_ * height_), NO_VANISHING_SLOT);
     spawns_.clear();
+    int nextVanishingSlot = 0;
 
     for (int y = 0; y < height_; ++y) {
         std::string row = rows[static_cast<std::size_t>(y)];
@@ -120,7 +134,12 @@ bool GameMap::loadFromText(const std::string& text) {
         }
         for (int x = 0; x < width_; ++x) {
             const char c = row[static_cast<std::size_t>(x)];
-            tiles_[static_cast<std::size_t>(y * width_ + x)] = charToTile(c);
+            const TileType type = charToTile(c);
+            tiles_[static_cast<std::size_t>(y * width_ + x)] = type;
+            if (type == TileType::VanishingPlatform && nextVanishingSlot < MAX_VANISHING_SLOTS) {
+                vanishingSlots_[static_cast<std::size_t>(y * width_ + x)] =
+                    static_cast<int16_t>(nextVanishingSlot++);
+            }
 
             if (c == 'f') {
                 // 出生点居中于标记格，避免头顶穿入上方实心块
@@ -160,7 +179,7 @@ void GameMap::setTile(int x, int y, TileType type) {
 }
 
 bool GameMap::isSolid(TileType type) const {
-    return type == TileType::Solid;
+    return type == TileType::Solid || type == TileType::OneWayPlatform || type == TileType::VanishingPlatform;
 }
 
 bool GameMap::blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bool waterDoorOpen,
@@ -193,6 +212,9 @@ bool GameMap::isHazardFor(TileType type, PlayerRole role) const {
     if (type == TileType::Acid) {
         return role != PlayerRole::Poison;
     }
+    if (type == TileType::Spike) {
+        return true;
+    }
     return false;
 }
 
@@ -217,6 +239,13 @@ int GameMap::countGems() const {
         }
     }
     return count;
+}
+
+int16_t GameMap::vanishingSlotAt(int x, int y) const {
+    if (x < 0 || y < 0 || x >= width_ || y >= height_) {
+        return NO_VANISHING_SLOT;
+    }
+    return vanishingSlots_[static_cast<std::size_t>(y * width_ + x)];
 }
 
 }  // namespace fireice

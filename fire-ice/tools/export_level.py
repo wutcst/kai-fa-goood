@@ -16,6 +16,9 @@ from pathlib import Path
 
 LOGIC_TO_CHAR = {
     "solid": "#",
+    "oneway": "^",
+    "vanishing": "~",
+    "spike": "S",
     "empty": ".",
     "lava": "L",
     "water": "W",
@@ -46,6 +49,12 @@ def parse_tileset_tsx(tsx_path: Path) -> dict[int, str]:
             value = prop.get("value")
             if name == "logic" and value:
                 mapping[tile_id] = str(value)
+            elif name == "oneway" and value in ("true", "1", True):
+                mapping[tile_id] = "oneway"
+            elif name == "vanishing" and value in ("true", "1", True):
+                mapping[tile_id] = "vanishing"
+            elif name == "spike" and value in ("true", "1", True):
+                mapping[tile_id] = "spike"
             elif name == "solid" and value in ("true", "1", True):
                 mapping[tile_id] = "solid"
     return mapping
@@ -61,6 +70,12 @@ def parse_tileset_tsj(tsj_path: Path) -> dict[int, str]:
             value = prop.get("value")
             if name == "logic" and value:
                 mapping[tile_id] = str(value)
+            elif name == "oneway" and value:
+                mapping[tile_id] = "oneway"
+            elif name == "vanishing" and value:
+                mapping[tile_id] = "vanishing"
+            elif name == "spike" and value:
+                mapping[tile_id] = "spike"
             elif name == "solid" and value:
                 mapping[tile_id] = "solid"
     return mapping
@@ -75,8 +90,8 @@ def parse_tileset(path: Path) -> dict[int, str]:
     return {}
 
 
-def load_tilesets(map_root: ET.Element, map_dir: Path) -> list[tuple[int, dict[int, str]]]:
-    tilesets: list[tuple[int, dict[int, str]]] = []
+def load_tilesets(map_root: ET.Element, map_dir: Path) -> list[tuple[int, dict[int, str], str]]:
+    tilesets: list[tuple[int, dict[int, str], str]] = []
     for ts in map_root.findall("tileset"):
         first_gid = int(ts.get("firstgid", "1"))
         source = ts.get("source")
@@ -85,25 +100,70 @@ def load_tilesets(map_root: ET.Element, map_dir: Path) -> list[tuple[int, dict[i
         tileset_path = (map_dir / source).resolve()
         if not tileset_path.exists():
             continue
-        tilesets.append((first_gid, parse_tileset(tileset_path)))
+        tilesets.append((first_gid, parse_tileset(tileset_path), source.replace("\\", "/")))
     tilesets.sort(key=lambda item: item[0])
     return tilesets
 
 
-def gid_to_logic(gid: int, tilesets: list[tuple[int, dict[int, str]]]) -> str | None:
+def gid_to_local(gid: int, tilesets: list[tuple[int, dict[int, str], str]]) -> tuple[str, int] | tuple[None, None]:
+    if gid == 0:
+        return None, None
+    chosen_source = None
+    local_id = 0
+    for first_gid, _mapping, source in tilesets:
+        if gid >= first_gid:
+            chosen_source = source
+            local_id = gid - first_gid
+        else:
+            break
+    if chosen_source is None:
+        return None, None
+    return chosen_source, local_id
+
+
+def classify_by_tileset(source: str, local_id: int) -> str | None:
+    source_lower = source.lower()
+    if "idle" in source_lower:
+        return "spike"
+    if "on (24x8)" in source_lower:
+        return "empty"
+    if "sand mud ice" in source_lower:
+        if local_id in {4, 6}:
+            return "empty"
+        if local_id in {26, 28, 37, 38, 48, 49}:
+            return "vanishing"
+        return None
+    if "terrain" in source_lower:
+        if local_id in {61, 62, 63}:
+            return "vanishing"
+        if local_id in {105, 106, 107, 149, 150, 151}:
+            return "solid"
+    return None
+
+
+def gid_to_logic(gid: int, tilesets: list[tuple[int, dict[int, str], str]]) -> str | None:
     if gid == 0:
         return "empty"
     chosen = None
     local_id = 0
-    for first_gid, mapping in tilesets:
+    source = ""
+    for first_gid, mapping, src in tilesets:
         if gid >= first_gid:
             chosen = mapping
             local_id = gid - first_gid
+            source = src
         else:
             break
-    if chosen is None:
+    if chosen is not None:
+        if local_id in chosen:
+            return chosen[local_id]
+        inferred = classify_by_tileset(source, local_id)
+        if inferred:
+            return inferred
+    source, local_id = gid_to_local(gid, tilesets)
+    if source is None:
         return None
-    return chosen.get(local_id)
+    return classify_by_tileset(source, local_id)
 
 
 def parse_csv_data(layer: ET.Element) -> list[int]:
@@ -144,6 +204,24 @@ def nearest_empty_tile(rows: list[list[str]], tx: int, ty: int) -> tuple[int, in
                 if 0 <= y < height and 0 <= x < width and rows[y][x] == ".":
                     return x, y
     return None
+
+
+def seal_map_borders(rows: list[list[str]]) -> None:
+    """Force solid walls on the outermost ring so players cannot fall out."""
+    if not rows:
+        return
+    height = len(rows)
+    width = len(rows[0])
+    for x in range(width):
+        if rows[0][x] == ".":
+            rows[0][x] = "#"
+        if rows[height - 1][x] in (".", "^"):
+            rows[height - 1][x] = "#"
+    for y in range(height):
+        if rows[y][0] == ".":
+            rows[y][0] = "#"
+        if rows[y][width - 1] == ".":
+            rows[y][width - 1] = "#"
 
 
 def apply_objects(
@@ -218,7 +296,8 @@ def export_tmx(tmx_path: Path, output_path: Path) -> None:
             if tilesets:
                 logic = gid_to_logic(gid, tilesets)
                 if logic is None:
-                    row.append(".")
+                    # 碰撞层非空图块默认视为实心墙（装饰类 tileset 通常无 solid 属性）
+                    row.append("." if gid == 0 else "#")
                 else:
                     row.append(LOGIC_TO_CHAR.get(logic, "#"))
             else:
@@ -226,6 +305,7 @@ def export_tmx(tmx_path: Path, output_path: Path) -> None:
         rows.append(row)
 
     apply_objects(rows, map_root, tile_width, tile_height)
+    seal_map_borders(rows)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     lines = ["".join(row) for row in rows]

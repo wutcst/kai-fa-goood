@@ -21,6 +21,7 @@ enum class PlayerRole : uint8_t { None = 0, Fire = 1, Water = 2, Poison = 3 };
 enum class TileType : uint8_t {
     Empty = 0,
     Solid,
+    OneWayPlatform,
     Lava,
     Water,
     FireDoor,
@@ -31,7 +32,9 @@ enum class TileType : uint8_t {
     Button,
     Acid,
     PoisonDoor,
-    PoisonExit
+    PoisonExit,
+    VanishingPlatform,
+    Spike
 };
 
 enum class GamePhase : uint8_t {
@@ -65,6 +68,8 @@ constexpr uint8_t INITIAL_UNLOCKED_LEVEL_MASK = 0xFF;  // 位掩码，每位对�
 constexpr uint8_t MAX_PLAYER_NAME = 16;
 constexpr uint8_t MAX_PLAYERS = 3;
 constexpr uint8_t MAX_ROOM_CODE = 8;
+constexpr uint8_t MAX_MUD_PARTICLES = 12;
+constexpr uint16_t MAX_VANISHING_SLOTS = 288;
 
 inline InputFlags operator|(InputFlags a, InputFlags b) {
     return static_cast<InputFlags>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
@@ -129,9 +134,9 @@ struct WorldState {
     uint32_t tick = 0;
     GamePhase phase = GamePhase::Lobby;
     uint8_t connectedCount = 0;
-    uint8_t readyMask = 0;  // 选关界面：谁点了「准备游戏」
+    uint8_t readyMask = 0;
     uint8_t countdown = 0;
-    uint8_t levelIndex = 0;  // 过滤后的选关序号（非全局 id）
+    uint8_t levelIndex = 0;
     uint8_t levelCount = 0;
     uint8_t totalGems = 0;
     char levelName[MAX_LEVEL_NAME]{};
@@ -144,8 +149,21 @@ struct WorldState {
     bool levelComplete = false;
     uint8_t unlockedMask = INITIAL_UNLOCKED_LEVEL_MASK;
     uint8_t completedMask = 0;
-    uint8_t lobbyStep = 0;         // 0=等待室，1=选关
-    uint8_t waitingReadyMask = 0;  // 等待室：谁点了「我已准备」
+    uint32_t collectedPickupsMask = 0;
+    uint32_t collectedPickupsMaskHi = 0;
+    uint32_t collectedPickupsMaskExt = 0;
+    uint16_t vanishingCount = 0;
+    uint32_t vanishingHidden[9]{};
+    uint8_t mudParticleCount = 0;
+    struct SyncMudParticle {
+        float x = 0.0f;
+        float y = 0.0f;
+        uint8_t active = 0;
+        uint8_t pad[3]{};
+    };
+    SyncMudParticle mudParticles[MAX_MUD_PARTICLES]{};
+    uint8_t lobbyStep = 0;
+    uint8_t waitingReadyMask = 0;
 };
 
 inline const char* phaseName(GamePhase phase) {

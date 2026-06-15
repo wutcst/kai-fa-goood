@@ -1,5 +1,7 @@
 #include "Physics.hpp"
 
+#include "LevelMechanics.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -7,8 +9,42 @@ namespace fireice {
 
 namespace {
 
-bool tileBlocks(const GameMap& map, int tx, int ty, PlayerRole role, const WorldState& world) {
+bool oneWayBlocks(const PlayerState& player, int ty) {
+    const float tileTop = ty * TILE_SIZE;
+    const float tileBottom = tileTop + TILE_SIZE;
+    const float feet = player.y + PLAYER_HEIGHT;
+
+    if (player.vy < 0.0f && feet <= tileTop + 2.0f) {
+        return false;
+    }
+    if (feet <= tileTop + 1.0f) {
+        return false;
+    }
+    if (player.y >= tileBottom) {
+        return false;
+    }
+    return player.vy >= 0.0f;
+}
+
+bool tileBlocks(const GameMap& map, int tx, int ty, PlayerRole role, const WorldState& world, bool horizontal,
+                const PlayerState& player) {
     const TileType type = map.tileAt(tx, ty);
+    if (type == TileType::VanishingPlatform) {
+        const int16_t slot = map.vanishingSlotAt(tx, ty);
+        if (slot >= 0 && isVanishingTileHidden(world, static_cast<uint16_t>(slot))) {
+            return false;
+        }
+        if (horizontal) {
+            return false;
+        }
+        return oneWayBlocks(player, ty);
+    }
+    if (type == TileType::OneWayPlatform) {
+        if (horizontal) {
+            return false;
+        }
+        return oneWayBlocks(player, ty);
+    }
     return map.blocksPlayer(type, role, world.fireDoorOpen, world.waterDoorOpen, world.poisonDoorOpen);
 }
 
@@ -23,7 +59,7 @@ void resolveAxis(PlayerState& player, const GameMap& map, const WorldState& worl
 
     for (int ty = minY; ty <= maxY; ++ty) {
         for (int tx = minX; tx <= maxX; ++tx) {
-            if (!tileBlocks(map, tx, ty, player.role, world)) {
+            if (!tileBlocks(map, tx, ty, player.role, world, horizontal, player)) {
                 continue;
             }
 
@@ -86,7 +122,7 @@ void applyInput(PlayerState& player, InputFlags input, float dt, bool jumpPresse
         player.onGround = false;
         player.airJumpsLeft = MAX_AIR_JUMPS;
         airJumpUsedThisHold = false;
-    } else if (!player.onGround && player.airJumpsLeft > 0 && ((jumpPressed) || (jumpHeld && !airJumpUsedThisHold))) {
+    } else if (!player.onGround && player.airJumpsLeft > 0 && jumpPressed) {
         player.vy = -JUMP_SPEED;
         --player.airJumpsLeft;
         airJumpUsedThisHold = true;
@@ -120,6 +156,31 @@ void integratePlayer(PlayerState& player, const GameMap& map, WorldState& world,
 
     if (player.y < -TILE_SIZE * 2.0f || player.y > map.height() * TILE_SIZE + TILE_SIZE * 4.0f) {
         player.alive = false;
+    }
+}
+
+void applyFanZones(PlayerState& player, const std::vector<FanZone>& fans, float dt) {
+    (void) dt;
+    if (!player.alive || fans.empty()) {
+        return;
+    }
+
+    const AABB box = playerBounds(player);
+    for (const FanZone& fan : fans) {
+        const AABB wind{fan.left, fan.top, fan.width, fan.height};
+        if (!box.intersects(wind)) {
+            continue;
+        }
+
+        player.onGround = false;
+        if (player.y > fan.targetFeetY + 1.0f) {
+            player.vy = -FAN_RISE_SPEED;
+        } else {
+            player.y = fan.targetFeetY;
+            player.vy = 0.0f;
+            player.onGround = true;
+        }
+        break;
     }
 }
 

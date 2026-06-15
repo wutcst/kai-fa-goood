@@ -12,7 +12,7 @@ LevelCatalog::LevelCatalog() {
     // fileName 给服务端物理；visualFileName 给客户端 Tiled 渲染
     levels_ = {
         {1, "level01_collision.txt", "level01.tmx", "Forest Entrance", "Learn the basics", 1, 3},
-        {2, "level02_collision.txt", "level02.tmx", "Twin Pools", "Separate lava and water paths", 1, 3},
+        {2, "level02_collision.txt", "level02.tmx", "Banana Temple", "Vanishing platforms and mud traps", 1, 3},
         {3, "level03_collision.txt", "level03.tmx", "Temple Gates", "Buttons open elemental doors", 1, 3},
         {4, "level04_collision.txt", "level04.tmx", "Gem Grotto", "Collect every diamond", 1, 3},
         {5, "level05_collision.txt", "level05.tmx", "Vertical Shaft", "Climb up together", 1, 3},

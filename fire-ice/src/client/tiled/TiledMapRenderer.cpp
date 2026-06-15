@@ -1,6 +1,7 @@
 #include "TiledMapRenderer.hpp"
 
 #include "Paths.hpp"
+#include "Pickup.hpp"
 #include "TmxUtil.hpp"
 #include "Types.hpp"
 
@@ -121,11 +122,13 @@ int TiledMapRenderer::decodeGid(int rawGid) {
 }
 
 bool TiledMapRenderer::load(const std::string& tmxPath) {
+    isLoaded_ = false;
     isBaked_ = false;
     tilesets_.clear();
     visualLayers_.clear();
     imageLayers_.clear();
     objectTiles_.clear();
+    collectibleObjectTiles_.clear();
     mapScale_ = 1.0f;
 
     const std::string resolvedTmx = resolveAssetPath(tmxPath);
@@ -221,11 +224,31 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
         visualLayers_.push_back(std::move(layer));
     }
 
+    uint8_t collectibleIndex = 0;
     for (const tmx::ObjectTileData& obj : tmx::findObjectTiles(xml)) {
         // 出生点 object 由服务端 collision 决定，视觉层跳过
         if (isSpawnObjectName(obj.name)) {
             continue;
         }
+        if (obj.gid > 0) {
+            const int decodedGid = decodeGid(obj.gid);
+            if (decodedGid == 303) {
+                continue;
+            }
+            if (collectibleIndex >= MAX_PICKUPS) {
+                continue;
+            }
+            CollectibleObjectTile tile;
+            tile.gid = obj.gid;
+            tile.x = obj.x;
+            tile.y = obj.y;
+            tile.width = obj.width;
+            tile.height = obj.height;
+            tile.index = collectibleIndex++;
+            collectibleObjectTiles_.push_back(std::move(tile));
+            continue;
+        }
+
         ObjectTile tile;
         tile.gid = obj.gid;
         tile.x = obj.x;
@@ -241,7 +264,8 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
         std::cerr << "[TiledMapRenderer] No tilesets loaded for map: " << resolvedTmx << std::endl;
     }
 
-    return !tilesets_.empty() && !visualLayers_.empty();
+    isLoaded_ = !tilesets_.empty() && !visualLayers_.empty();
+    return isLoaded_;
 }
 
 const TiledMapRenderer::TilesetRef* TiledMapRenderer::findTileset(int gid) const {
@@ -273,6 +297,12 @@ void TiledMapRenderer::drawGidSprite(sf::RenderTexture& target, int rawGid, floa
     }
 
     const int columns = std::max(1, tileset->columns);
+    const int rows = static_cast<int>(tileset->texture.getSize().y /
+                                      static_cast<unsigned>(std::max(1, tileset->tileHeight)));
+    const int maxTiles = rows * columns;
+    if (localId >= maxTiles) {
+        return;
+    }
     const int sx = (localId % columns) * tileset->tileWidth;
     const int sy = (localId / columns) * tileset->tileHeight;
 
@@ -291,6 +321,44 @@ void TiledMapRenderer::drawGidSprite(sf::RenderTexture& target, int rawGid, floa
     target.draw(sprite);
 }
 
+void TiledMapRenderer::drawGidSpriteToWindow(sf::RenderWindow& window, int rawGid, float x, float y, float width,
+                                             float height) const {
+    const int gid = decodeGid(rawGid);
+    const TilesetRef* tileset = findTileset(gid);
+    if (tileset == nullptr) {
+        return;
+    }
+
+    const int localId = gid - tileset->firstGid;
+    if (localId < 0) {
+        return;
+    }
+
+    const int columns = std::max(1, tileset->columns);
+    const int rows = static_cast<int>(tileset->texture.getSize().y /
+                                      static_cast<unsigned>(std::max(1, tileset->tileHeight)));
+    const int maxTiles = rows * columns;
+    if (localId >= maxTiles) {
+        return;
+    }
+    const int sx = (localId % columns) * tileset->tileWidth;
+    const int sy = (localId / columns) * tileset->tileHeight;
+
+    const float drawWidth =
+        (width > 0.0f ? width : static_cast<float>(tileset->tileWidth)) * mapScale_;
+    const float drawHeight =
+        (height > 0.0f ? height : static_cast<float>(tileset->tileHeight)) * mapScale_;
+    const float drawX = x * mapScale_;
+    const float drawY = y * mapScale_ - drawHeight;
+
+    sf::Sprite sprite(tileset->texture);
+    sprite.setTextureRect(sf::IntRect(sx, sy, tileset->tileWidth, tileset->tileHeight));
+    sprite.setPosition(drawX, drawY);
+    sprite.setScale(drawWidth / static_cast<float>(tileset->tileWidth),
+                    drawHeight / static_cast<float>(tileset->tileHeight));
+    window.draw(sprite);
+}
+
 void TiledMapRenderer::drawLayerToTarget(sf::RenderTexture& target, const Layer& layer) const {
     for (int y = 0; y < mapHeight_; ++y) {
         for (int x = 0; x < mapWidth_; ++x) {
@@ -304,9 +372,9 @@ void TiledMapRenderer::drawLayerToTarget(sf::RenderTexture& target, const Layer&
     }
 }
 
-void TiledMapRenderer::drawImageLayersToTarget(sf::RenderTexture& target) const {
-    const float mapPixelW = static_cast<float>(mapWidth_ * tileWidth_);
-    const float mapPixelH = static_cast<float>(mapHeight_ * tileHeight_);
+void TiledMapRenderer::drawImageLayersToTarget(sf::RenderTexture& target, float scale) const {
+    const float mapPixelW = static_cast<float>(mapWidth_ * tileWidth_) * scale;
+    const float mapPixelH = static_cast<float>(mapHeight_ * tileHeight_) * scale;
 
     for (const ImageLayer& layer : imageLayers_) {
         const sf::Vector2u texSize = layer.texture.getSize();
@@ -314,18 +382,17 @@ void TiledMapRenderer::drawImageLayersToTarget(sf::RenderTexture& target) const 
             continue;
         }
 
-        const float stampW = static_cast<float>(layer.imageWidth > 0 ? layer.imageWidth : static_cast<int>(texSize.x));
+        const float stampW =
+            static_cast<float>(layer.imageWidth > 0 ? layer.imageWidth : static_cast<int>(texSize.x)) * scale;
         const float stampH =
-            static_cast<float>(layer.imageHeight > 0 ? layer.imageHeight : static_cast<int>(texSize.y));
+            static_cast<float>(layer.imageHeight > 0 ? layer.imageHeight : static_cast<int>(texSize.y)) * scale;
         const float endX = layer.repeatX ? mapPixelW : stampW;
         const float endY = layer.repeatY ? mapPixelH : stampH;
 
         for (float y = 0.0f; y < endY; y += stampH) {
             for (float x = 0.0f; x < endX; x += stampW) {
                 sf::Sprite sprite(layer.texture);
-                if (stampW != static_cast<float>(texSize.x) || stampH != static_cast<float>(texSize.y)) {
-                    sprite.setScale(stampW / static_cast<float>(texSize.x), stampH / static_cast<float>(texSize.y));
-                }
+                sprite.setScale(stampW / static_cast<float>(texSize.x), stampH / static_cast<float>(texSize.y));
                 sprite.setPosition(x, y);
                 target.draw(sprite);
             }
@@ -367,8 +434,34 @@ void TiledMapRenderer::drawObjectTilesToTarget(sf::RenderTexture& target) const 
     }
 }
 
+void TiledMapRenderer::drawTileLayersToWindow(sf::RenderWindow& window,
+                                              const std::function<bool(int, int)>& skipTile) const {
+    for (const Layer& layer : visualLayers_) {
+        for (int y = 0; y < mapHeight_; ++y) {
+            for (int x = 0; x < mapWidth_; ++x) {
+                if (skipTile && skipTile(x, y)) {
+                    continue;
+                }
+                const int gid = layer.gids[static_cast<std::size_t>(y * mapWidth_ + x)];
+                if (gid <= 0) {
+                    continue;
+                }
+                drawGidSpriteToWindow(window, gid, static_cast<float>(x * tileWidth_),
+                                      static_cast<float>((y + 1) * tileHeight_), static_cast<float>(tileWidth_),
+                                      static_cast<float>(tileHeight_));
+            }
+        }
+    }
+}
+
+void TiledMapRenderer::drawObjectTilesToWindow(sf::RenderWindow& window) const {
+    for (const ObjectTile& obj : objectTiles_) {
+        drawGidSpriteToWindow(window, obj.gid, obj.x, obj.y, obj.width, obj.height);
+    }
+}
+
 void TiledMapRenderer::bake() {
-    // 把所有 tile layer 画进 RenderTexture，避免每帧逐格绘制
+    // 仅用于选关缩略图；游戏中通过 drawTileLayersToWindow 逐帧绘制
     isBaked_ = false;
     if (mapWidth_ <= 0 || mapHeight_ <= 0 || visualLayers_.empty()) {
         return;
@@ -381,7 +474,7 @@ void TiledMapRenderer::bake() {
         return;
     }
 
-    bakedTexture_.clear(sf::Color::Transparent);
+    bakedTexture_.clear(sf::Color(60, 44, 32));
     for (const Layer& layer : visualLayers_) {
         drawLayerToTarget(bakedTexture_, layer);
     }
@@ -394,18 +487,38 @@ void TiledMapRenderer::bake() {
     isBaked_ = true;
 }
 
-void TiledMapRenderer::drawStatic(sf::RenderWindow& window) const {
-    if (!isBaked_) {
+void TiledMapRenderer::drawStatic(sf::RenderWindow& window,
+                                    const std::function<bool(int, int)>& skipTile) const {
+    if (!isLoaded_) {
         return;
     }
-    // 纯黑背景（不再平铺米色 background.png）
     const float mapPixelW = static_cast<float>(mapWidth_) * TILE_SIZE;
     const float mapPixelH = static_cast<float>(mapHeight_) * TILE_SIZE;
-    sf::RectangleShape bg({mapPixelW, mapPixelH});
-    bg.setPosition(0.0f, 0.0f);
-    bg.setFillColor(sf::Color::Black);
-    window.draw(bg);
-    window.draw(bakedSprite_);
+    if (imageLayers_.empty()) {
+        sf::RectangleShape bg({mapPixelW, mapPixelH});
+        bg.setPosition(0.0f, 0.0f);
+        bg.setFillColor(sf::Color(60, 44, 32));
+        window.draw(bg);
+    } else {
+        drawImageLayersToWindow(window);
+    }
+    drawTileLayersToWindow(window, skipTile);
+    drawObjectTilesToWindow(window);
+}
+
+void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, uint32_t collectedMask,
+                                        uint32_t collectedMaskHi, uint32_t collectedMaskExt) const {
+    for (const CollectibleObjectTile& obj : collectibleObjectTiles_) {
+        const uint32_t bit = 1u << (obj.index % 32u);
+        const uint8_t word = obj.index / 32u;
+        const bool taken =
+            word == 0 ? ((collectedMask & bit) != 0)
+                      : (word == 1 ? ((collectedMaskHi & bit) != 0) : ((collectedMaskExt & bit) != 0));
+        if (taken) {
+            continue;
+        }
+        drawGidSpriteToWindow(window, obj.gid, obj.x, obj.y, obj.width, obj.height);
+    }
 }
 
 void TiledMapRenderer::drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const {

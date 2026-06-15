@@ -1,6 +1,7 @@
 #include "GameServer.hpp"
 
 #include "LevelCatalog.hpp"
+#include "LevelMechanics.hpp"
 #include "LevelProgress.hpp"
 #include "Physics.hpp"
 
@@ -31,10 +32,18 @@ void Room::selectLevel(uint8_t index) {
 
     selectedLevelIndex = index;
     mapPath = catalog.resolvePath(index);
+    visualMapPath = catalog.resolveVisualPath(index);
     if (!map.loadFromFile(mapPath)) {
         std::cerr << "[Room " << code << "] Failed to load level: " << mapPath << std::endl;
         return;
     }
+
+    pickups = visualMapPath.empty() ? std::vector<Pickup>{} : loadPickupsFromTmx(visualMapPath);
+    levelRuntime.mudSpawners =
+        visualMapPath.empty() ? std::vector<Vec2>{} : loadMudSpawnsFromTmx(visualMapPath);
+    levelRuntime.fanZones =
+        visualMapPath.empty() ? std::vector<FanZone>{} : loadFanZonesFromTmx(visualMapPath, 16, &levelRuntime.fanTileCoords);
+    initLevelRuntime(map, levelRuntime);
 
     applyLevelMetadata();
     resetWorld();
@@ -59,7 +68,8 @@ void Room::applyLevelMetadata() {
     const uint8_t playerCount = std::max(uint8_t{1}, world.connectedCount);
     world.levelIndex = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);
     world.levelCount = catalog.countForPlayerCount(playerCount);
-    world.totalGems = static_cast<uint8_t>(std::min(255, map.countGems()));
+    world.totalGems = static_cast<uint8_t>(
+        std::min(255, map.countGems() + static_cast<int>(pickups.size())));
     std::snprintf(world.levelName, MAX_LEVEL_NAME, "%s", info.title);
     std::snprintf(world.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
     syncProgressToWorld();
@@ -77,6 +87,7 @@ bool Room::isLevelUnlocked(uint8_t index) const {
 void Room::reloadMap() {
     map.loadFromFile(mapPath);
     applyLevelMetadata();
+    initLevelRuntime(map, levelRuntime);
 }
 
 void Room::resetWorld() {
@@ -87,6 +98,11 @@ void Room::resetWorld() {
     world.waterDoorOpen = false;
     world.poisonDoorOpen = false;
     world.levelComplete = false;
+    world.collectedPickupsMask = 0;
+    world.collectedPickupsMaskHi = 0;
+    world.collectedPickupsMaskExt = 0;
+    resetLevelRuntime(levelRuntime);
+    syncVanishingMask(levelRuntime, world);
 
     for (PlayerState& player : world.players) {
         player = PlayerState{};
@@ -344,14 +360,23 @@ void Room::simulateTick() {
             clients[i].airJumpUsedThisHold = false;
         clients[i].jumpHeld = jumpNow;
         applyInput(player, clients[i].pendingInput, TICK_DT, jumpPressed, jumpNow, clients[i].airJumpUsedThisHold);
+        applyFanZones(player, levelRuntime.fanZones, TICK_DT);
         integratePlayer(player, map, world, TICK_DT);
+        triggerVanishingForPlayer(player, map, levelRuntime);
 
         if (sampleHazard(map, player, world))
             player.alive = false;
+        if (sampleSpikeHazard(map, player))
+            player.alive = false;
+        if (sampleMudHazard(levelRuntime, player))
+            player.alive = false;
         collectGems(player, map);
+        collectPickups(player, pickups, world.collectedPickupsMask, world.collectedPickupsMaskHi,
+                       world.collectedPickupsMaskExt);
         player.atExit = sampleExit(map, player);
     }
 
+    updateLevelMechanics(levelRuntime, map, world, TICK_DT);
     updatePhase();
     ++world.tick;
 }
@@ -371,6 +396,39 @@ void Room::updatePhase() {
         world.phase = GamePhase::GameOver;
         world.levelComplete = false;
         std::cout << "[Room " << code << "] Game over" << std::endl;
+        return;
+    }
+
+    if (levelRuntime.collectVictory && world.totalGems > 0) {
+        uint8_t collected = 0;
+        for (const Pickup& pickup : pickups) {
+            const uint32_t bit = 1u << (pickup.index % 32u);
+            const uint8_t word = pickup.index / 32u;
+            const bool taken =
+                word == 0 ? ((world.collectedPickupsMask & bit) != 0)
+                          : (word == 1 ? ((world.collectedPickupsMaskHi & bit) != 0)
+                                       : ((world.collectedPickupsMaskExt & bit) != 0));
+            if (taken) {
+                ++collected;
+            }
+        }
+        for (std::size_t i = 0; i < clients.size(); ++i) {
+            if (!clients[i].connected) {
+                continue;
+            }
+            collected = static_cast<uint8_t>(
+                std::max(static_cast<int>(collected), static_cast<int>(world.players[i].gems)));
+        }
+        if (collected >= world.totalGems) {
+            world.phase = GamePhase::Victory;
+            world.levelComplete = true;
+            completedMask |= static_cast<uint8_t>(1u << selectedLevelIndex);
+            if (selectedLevelIndex + 1 < LevelCatalog::instance().count()) {
+                unlockedMask |= static_cast<uint8_t>(1u << (selectedLevelIndex + 1));
+            }
+            syncProgressToWorld();
+            std::cout << "[Room " << code << "] Level complete (all fruits collected)" << std::endl;
+        }
         return;
     }
 
@@ -401,7 +459,7 @@ void Room::broadcastState(sf::UdpSocket& socket) {
     StatePacket packet{};
     packet.world = world;
 
-    std::array<char, 512> buffer{};
+    std::array<char, 768> buffer{};
     std::size_t size = 0;
     if (!packPacket(packet, buffer, size))
         return;
@@ -453,7 +511,7 @@ void Room::acceptClient(sf::UdpSocket& socket, const sf::IpAddress& address, uns
         accept.role = clients[existing.value()].role;
         std::snprintf(accept.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
 
-        std::array<char, 512> buf{};
+        std::array<char, 768> buf{};
         std::size_t sz = 0;
         packPacket(accept, buf, sz);
         socket.send(buf.data(), sz, address, port);
@@ -484,7 +542,7 @@ void Room::acceptClient(sf::UdpSocket& socket, const sf::IpAddress& address, uns
     accept.role = role;
     std::snprintf(accept.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
 
-    std::array<char, 512> buf{};
+    std::array<char, 768> buf{};
     std::size_t sz = 0;
     packPacket(accept, buf, sz);
     socket.send(buf.data(), sz, address, port);
@@ -501,7 +559,7 @@ void Room::rejectClient(sf::UdpSocket& socket, const sf::IpAddress& address, uns
     ConnectRejectPacket reject{};
     std::snprintf(reject.reason, sizeof(reject.reason), "%s", reason);
 
-    std::array<char, 512> buf{};
+    std::array<char, 768> buf{};
     std::size_t sz = 0;
     packPacket(reject, buf, sz);
     socket.send(buf.data(), sz, address, port);
@@ -578,7 +636,7 @@ void GameServer::stop() {
 }
 
 void GameServer::processPackets() {
-    std::array<char, 512> buffer{};
+    std::array<char, 768> buffer{};
     std::size_t received = 0;
     sf::IpAddress sender;
     unsigned short port = 0;
@@ -605,7 +663,7 @@ void GameServer::processPackets() {
                         // Room not found
                         ConnectRejectPacket reject{};
                         std::snprintf(reject.reason, sizeof(reject.reason), "Room not found");
-                        std::array<char, 512> buf{};
+                        std::array<char, 768> buf{};
                         std::size_t sz = 0;
                         packPacket(reject, buf, sz);
                         socket_.send(buf.data(), sz, sender, port);
@@ -695,7 +753,7 @@ void GameServer::processPackets() {
                         const LevelCatalog& cat = LevelCatalog::instance();
                         if (room->selectedLevelIndex < cat.count())
                             std::snprintf(resp.levelName, MAX_LEVEL_NAME, "%s", cat.at(room->selectedLevelIndex).title);
-                        std::array<char, 512> buf{};
+                        std::array<char, 768> buf{};
                         std::size_t sz = 0;
                         packPacket(resp, buf, sz);
                         socket_.send(buf.data(), sz, sender, port);

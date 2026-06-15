@@ -1,0 +1,104 @@
+{
+    "activeFile": "map2.tmx",
+    "expandedProjectPaths": [
+        "."
+    ],
+    "file.lastUsedOpenFilter": "全部文件 (*)",
+    "fileStates": {
+        "Bananas.tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 3,
+            "scaleInEditor": 1
+        },
+        "C:/Users/17857/Desktop/TiledLib.Tests/Data/Chests.tsx": {
+            "scaleInDock": 1
+        },
+        "C:/Users/17857/Desktop/TiledLib.Tests/Data/External_tileset.json": {
+            "scaleInDock": 1
+        },
+        "C:/Users/17857/Desktop/TiledLib.Tests/Data/Multi_image_tileset_infinite_map_base64_zstd.tmx": {
+            "scale": 4.9392578125,
+            "selectedLayer": 0,
+            "viewCenter": {
+                "x": 127.95444659733482,
+                "y": 167.33283245679942
+            }
+        },
+        "C:/Users/17857/Desktop/TiledLib.Tests/Data/tsx_tileset.tsx": {
+            "scaleInDock": 1
+        },
+        "Idle.tsx": {
+            "scaleInDock": 3,
+            "scaleInEditor": 1
+        },
+        "Mud Particle.tsx": {
+            "scaleInDock": 4,
+            "scaleInEditor": 8
+        },
+        "On (24x8).tsx": {
+            "scaleInDock": 4,
+            "scaleInEditor": 8
+        },
+        "Sand Mud Ice (16x6).tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "Terrain (16x16).tsx": {
+            "dynamicWrapping": false,
+            "scaleInDock": 1.5,
+            "scaleInEditor": 1
+        },
+        "bakcground.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1,
+            "scaleInEditor": 1
+        },
+        "map2.tmx": {
+            "scale": 1,
+            "selectedLayer": 2,
+            "viewCenter": {
+                "x": 1080,
+                "y": 422.5
+            }
+        },
+        "player1.tsx": {
+            "dynamicWrapping": true,
+            "scaleInDock": 1,
+            "scaleInEditor": 2
+        }
+    },
+    "last.imagePath": "C:/Users/17857/Desktop/map2",
+    "map.height": 80,
+    "map.lastUsedFormat": "tmx",
+    "map.tileHeight": 16,
+    "map.tileWidth": 16,
+    "map.width": 80,
+    "openFiles": [
+        "map2.tmx",
+        "Terrain (16x16).tsx",
+        "Mud Particle.tsx",
+        "Bananas.tsx",
+        "player1.tsx"
+    ],
+    "project": "map2.tiled-project",
+    "property.type": "bool",
+    "recentFiles": [
+        "player1.tsx",
+        "Bananas.tsx",
+        "Mud Particle.tsx",
+        "Terrain (16x16).tsx",
+        "map2.tmx",
+        "Sand Mud Ice (16x6).tsx",
+        "On (24x8).tsx",
+        "Idle.tsx",
+        "C:/Users/17857/Desktop/TiledLib.Tests/Data/Multi_image_tileset_infinite_map_base64_zstd.tmx",
+        "bakcground.tsx"
+    ],
+    "tileset.lastUsedFormat": "tsx",
+    "tileset.tileSize": {
+        "height": 32,
+        "width": 32
+    },
+    "tileset.type": 0
+}
