@@ -1,0 +1,14 @@
+{ "columns":1,
+ "image":"..\/Free\/Items\/Boxes\/Box1\/Idle.png",
+ "imageheight":24,
+ "imagewidth":28,
+ "margin":0,
+ "name":"Idle",
+ "spacing":0,
+ "tilecount":1,
+ "tiledversion":"1.12.2",
+ "tileheight":16,
+ "tilewidth":16,
+ "type":"tileset",
+ "version":"1.10"
+}
