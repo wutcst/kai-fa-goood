@@ -1224,8 +1224,8 @@ void GameClient::renderTitleScreen() {
         sf::RectangleShape fallback({static_cast<float>(LOBBY_WINDOW_WIDTH), static_cast<float>(LOBBY_WINDOW_HEIGHT)});
         fallback.setFillColor(sf::Color(28, 42, 34));
         window_.draw(fallback);
-        ui_.drawOutlinedCenteredText(window_, text::forestTemple(), titleCenterX(), 120.0f, 48,
-                                     sf::Color(90, 210, 90), sf::Color(30, 90, 30), 3.0f);
+        ui_.drawOutlinedCenteredText(window_, text::forestTemple(), titleCenterX(), 120.0f, 48, sf::Color(90, 210, 90),
+                                     sf::Color(30, 90, 30), 3.0f);
     }
 
     renderTitleSpotlight();
@@ -1239,8 +1239,7 @@ void GameClient::renderTitleScreen() {
                               static_cast<int>(i) == activeIndex);
     }
 
-    const float menuBottom =
-        titleMenuStartY() + static_cast<float>(menuItems.size()) * titleMenuItemStep() + 12.0f;
+    const float menuBottom = titleMenuStartY() + static_cast<float>(menuItems.size()) * titleMenuItemStep() + 12.0f;
     const std::string roleLine = text::currentRolePrefix() + roleChineseName() + "     " + text::serverPrefix() + host_;
     ui_.drawCenteredText(window_, roleLine, titleCenterX(), menuBottom, 18, sf::Color(220, 230, 210));
     ui_.drawCenteredText(window_, text::titleControlsHint(), titleCenterX(), menuBottom + 28.0f, 15,
@@ -1273,8 +1272,9 @@ void GameClient::renderHelpOverlay() {
         y += lobbyScaled(34.0f);
     }
 
-    ui_.drawCenteredText(window_, text::backToTitleHint(), titleCenterX(), panel.top + panel.height - lobbyScaled(36.0f),
-                         static_cast<unsigned>(lobbyScaled(18.0f)), sf::Color(255, 220, 120));
+    ui_.drawCenteredText(window_, text::backToTitleHint(), titleCenterX(),
+                         panel.top + panel.height - lobbyScaled(36.0f), static_cast<unsigned>(lobbyScaled(18.0f)),
+                         sf::Color(255, 220, 120));
 }
 
 void GameClient::renderCreditsOverlay() {
@@ -1303,8 +1303,9 @@ void GameClient::renderCreditsOverlay() {
         y += lobbyScaled(36.0f);
     }
 
-    ui_.drawCenteredText(window_, text::backToTitleHint(), titleCenterX(), panel.top + panel.height - lobbyScaled(36.0f),
-                         static_cast<unsigned>(lobbyScaled(18.0f)), sf::Color(255, 220, 120));
+    ui_.drawCenteredText(window_, text::backToTitleHint(), titleCenterX(),
+                         panel.top + panel.height - lobbyScaled(36.0f), static_cast<unsigned>(lobbyScaled(18.0f)),
+                         sf::Color(255, 220, 120));
 }
 
 const char* GameClient::roleChineseName() const {
@@ -1694,8 +1695,8 @@ void GameClient::renderJoinRoomScreen() {
     }
 
     const float dividerY = listY + listH + lobbyScaled(12.0f);
-    ui_.drawCenteredText(window_, "—— 或手动输入房间号 ——", w / 2.0f, dividerY, static_cast<unsigned>(lobbyScaled(14.0f)),
-                         sf::Color(140, 155, 180));
+    ui_.drawCenteredText(window_, "—— 或手动输入房间号 ——", w / 2.0f, dividerY,
+                         static_cast<unsigned>(lobbyScaled(14.0f)), sf::Color(140, 155, 180));
 
     const float boxW = lobbyScaled(260.0f);
     const float boxH = lobbyScaled(46.0f);
@@ -1767,9 +1768,9 @@ void GameClient::renderRoomScreen() {
     // 右侧房间信息左对齐排列，同样在顶栏内垂直居中
     const unsigned infoTitleSize =
         static_cast<unsigned>(std::clamp(h * 0.020f, lobbyScaled(16.0f), lobbyScaled(22.0f)));
-    const unsigned infoLineSize =
-        static_cast<unsigned>(std::clamp(h * 0.016f, lobbyScaled(13.0f), lobbyScaled(18.0f)));
-    const float infoBlockH = static_cast<float>(infoTitleSize) + lobbyScaled(8.0f) + static_cast<float>(infoLineSize) * 2.0f;
+    const unsigned infoLineSize = static_cast<unsigned>(std::clamp(h * 0.016f, lobbyScaled(13.0f), lobbyScaled(18.0f)));
+    const float infoBlockH =
+        static_cast<float>(infoTitleSize) + lobbyScaled(8.0f) + static_cast<float>(infoLineSize) * 2.0f;
     const float infoY = (headerH - infoBlockH) / 2.0f;
     ui_.drawText(window_, roomCodeStr, infoRight - lobbyScaled(180.0f), infoY, infoTitleSize, sf::Color(100, 255, 140));
 
@@ -1779,16 +1780,16 @@ void GameClient::renderRoomScreen() {
     } else {
         ipStr = "服务器: " + host_ + ":" + std::to_string(SERVER_PORT);
     }
-    ui_.drawText(window_, ipStr, infoRight - lobbyScaled(180.0f), infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f),
-                 infoLineSize, sf::Color(180, 200, 255));
+    ui_.drawText(window_, ipStr, infoRight - lobbyScaled(180.0f),
+                 infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f), infoLineSize, sf::Color(180, 200, 255));
 
-    ui_.drawText(window_,
-                 std::string("在线: ") + std::to_string(renderWorld_.connectedCount) + "/" +
-                     std::to_string(MAX_PLAYERS),
-                 infoRight - lobbyScaled(180.0f),
-                 infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f) + static_cast<float>(infoLineSize) +
-                     lobbyScaled(2.0f),
-                 infoLineSize, sf::Color(160, 200, 140));
+    ui_.drawText(
+        window_,
+        std::string("在线: ") + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS),
+        infoRight - lobbyScaled(180.0f),
+        infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f) + static_cast<float>(infoLineSize) +
+            lobbyScaled(2.0f),
+        infoLineSize, sf::Color(160, 200, 140));
 
     const float panelW = roomPanelWidth();
     const float panelH = roomPanelHeight();
@@ -2067,8 +2068,8 @@ void GameClient::renderLobbyScreen() {
 
     const float infoPanelTop = mapPreviewArea.top + mapPreviewArea.height + lobbyScaled(10.0f);
     const float infoPanelH = previewPanel.top + previewPanel.height - infoPanelTop - previewPad;
-    ui_.drawPanel(window_, {previewPanel.left + previewPad, infoPanelTop, previewPanel.width - previewPad * 2.0f,
-                             infoPanelH},
+    ui_.drawPanel(window_,
+                  {previewPanel.left + previewPad, infoPanelTop, previewPanel.width - previewPad * 2.0f, infoPanelH},
                   sf::Color(18, 16, 14, 210), 210.0f);
     if (tiledMap_.ready()) {
         tiledMap_.drawPreview(window_, mapPreviewArea);
@@ -2091,16 +2092,20 @@ void GameClient::renderLobbyScreen() {
     infoY += lobbyScaled(24.0f);
     infoY = ui_.drawWrappedText(window_, text::levelPreviewSummary(globalSelected), infoX, infoY,
                                 static_cast<unsigned>(lobbyScaled(13.0f)), sf::Color(180, 175, 165), textWidth,
-                                lobbyScaled(4.0f)) + lobbyScaled(6.0f);
-    infoY = ui_.drawWrappedText(window_, text::lobbyPreviewElementsLabel() + text::levelPreviewElementList(globalSelected),
-                                infoX, infoY, static_cast<unsigned>(lobbyScaled(13.0f)), sf::Color(150, 200, 170),
-                                textWidth, lobbyScaled(4.0f)) + lobbyScaled(6.0f);
+                                lobbyScaled(4.0f)) +
+            lobbyScaled(6.0f);
+    infoY =
+        ui_.drawWrappedText(window_, text::lobbyPreviewElementsLabel() + text::levelPreviewElementList(globalSelected),
+                            infoX, infoY, static_cast<unsigned>(lobbyScaled(13.0f)), sf::Color(150, 200, 170),
+                            textWidth, lobbyScaled(4.0f)) +
+        lobbyScaled(6.0f);
 
     const std::string requirement =
         text::lobbyPreviewRequirementLabel() +
         (mapHasExitTiles(map_) ? text::lobbyPreviewReachExits() : text::lobbyPreviewCollectAllGems());
     infoY = ui_.drawWrappedText(window_, requirement, infoX, infoY, static_cast<unsigned>(lobbyScaled(13.0f)),
-                                sf::Color(255, 210, 120), textWidth, lobbyScaled(4.0f)) + lobbyScaled(6.0f);
+                                sf::Color(255, 210, 120), textWidth, lobbyScaled(4.0f)) +
+            lobbyScaled(6.0f);
     ui_.drawWrappedText(window_,
                         text::lobbyPreviewGemLabel() + std::to_string(renderWorld_.totalGems) + "  |  " +
                             text::lobbyPreviewPlayerLabel() + std::to_string(selectedInfo.minPlayers) + "-" +
@@ -2556,8 +2561,8 @@ void GameClient::drawPauseOverlay(sf::RenderWindow& window, float centerX) const
         return;
     }
 
-    ui_.drawPanel(window, {centerX - metrics.panelDrawW / 2.0f, metrics.panelTop, metrics.panelDrawW,
-                           metrics.panelDrawH},
+    ui_.drawPanel(window,
+                  {centerX - metrics.panelDrawW / 2.0f, metrics.panelTop, metrics.panelDrawW, metrics.panelDrawH},
                   sf::Color(180, 180, 180), 235.0f);
     ui_.drawOutlinedCenteredText(window, text::pauseTitle(), centerX, metrics.panelTop + metrics.panelDrawH * 0.18f, 42,
                                  sf::Color(255, 220, 80), sf::Color(40, 30, 20), 3.0f);
@@ -2592,10 +2597,9 @@ bool GameClient::handlePauseMenuClick(const sf::Event& event) {
         const float panelTop = mapH / 2.0f - drawH / 2.0f;
         const float baseLeft = centerX - metrics.panelDrawW / 2.0f;
         const auto scaleRect = [&](const sf::FloatRect& rect) {
-            return sf::FloatRect{
-                panelLeft + (rect.left - baseLeft) / metrics.panelDrawW * drawW,
-                panelTop + (rect.top - metrics.panelTop) / metrics.panelDrawH * drawH,
-                rect.width / metrics.panelDrawW * drawW, rect.height / metrics.panelDrawH * drawH};
+            return sf::FloatRect{panelLeft + (rect.left - baseLeft) / metrics.panelDrawW * drawW,
+                                 panelTop + (rect.top - metrics.panelTop) / metrics.panelDrawH * drawH,
+                                 rect.width / metrics.panelDrawW * drawW, rect.height / metrics.panelDrawH * drawH};
         };
         const sf::FloatRect menuBtn = scaleRect(metrics.menuBtn);
         const sf::FloatRect retryBtn = scaleRect(metrics.retryBtn);
@@ -2755,7 +2759,8 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
                                       layout.panelDrawH};
 
         ui_.drawPanel(window, panelRect, sf::Color(175, 175, 175), 240.0f);
-        sf::RectangleShape innerFrame({panelRect.width - layout.uiScale * 28.0f, panelRect.height - layout.uiScale * 28.0f});
+        sf::RectangleShape innerFrame(
+            {panelRect.width - layout.uiScale * 28.0f, panelRect.height - layout.uiScale * 28.0f});
         innerFrame.setPosition(panelRect.left + layout.uiScale * 14.0f, panelRect.top + layout.uiScale * 14.0f);
         innerFrame.setFillColor(sf::Color(165, 165, 165, 220));
         innerFrame.setOutlineThickness(3.0f);

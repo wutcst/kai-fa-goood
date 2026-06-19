@@ -398,18 +398,15 @@ void TiledMapRenderer::drawGidSpriteToWindow(sf::RenderWindow& window, int rawGi
     const int sx = (localId % columns) * tileset->tileWidth;
     const int sy = (localId / columns) * tileset->tileHeight;
 
-    const float baseDrawWidth =
-        (width > 0.0f ? width : static_cast<float>(tileset->tileWidth)) * mapScale_;
-    const float baseDrawHeight =
-        (height > 0.0f ? height : static_cast<float>(tileset->tileHeight)) * mapScale_;
+    const float baseDrawWidth = (width > 0.0f ? width : static_cast<float>(tileset->tileWidth)) * mapScale_;
+    const float baseDrawHeight = (height > 0.0f ? height : static_cast<float>(tileset->tileHeight)) * mapScale_;
     float drawWidth = baseDrawWidth;
     float drawHeight = baseDrawHeight;
     float drawX = x * mapScale_;
     float drawY = y * mapScale_ - drawHeight;
 
     constexpr float kThinPlatformMinHeight = TILE_SIZE * 0.5f;
-    if (tileset->tileWidth > tileset->tileHeight && tileset->tileHeight <= 8 &&
-        drawHeight < kThinPlatformMinHeight) {
+    if (tileset->tileWidth > tileset->tileHeight && tileset->tileHeight <= 8 && drawHeight < kThinPlatformMinHeight) {
         const float yBoost = kThinPlatformMinHeight / drawHeight;
         scaleVisualFromBottom(drawX, drawY, drawWidth, drawHeight, 1.0f, yBoost);
     }
@@ -568,8 +565,7 @@ void TiledMapRenderer::drawGrassUnderlay(sf::RenderWindow& window, float mapPixe
     window.draw(bg);
 }
 
-void TiledMapRenderer::drawStatic(sf::RenderWindow& window,
-                                    const std::function<bool(int, int)>& skipTile) const {
+void TiledMapRenderer::drawStatic(sf::RenderWindow& window, const std::function<bool(int, int)>& skipTile) const {
     if (!isLoaded_) {
         return;
     }

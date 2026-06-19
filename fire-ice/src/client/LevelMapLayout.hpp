@@ -69,8 +69,8 @@ inline sf::FloatRect levelMapPanelRect() {
 inline sf::FloatRect levelMapViewportRect() {
     const float pad = levelMapContentPadding();
     const float headerH = levelMapHeaderHeight();
-    return {lobbyScaled(kMapPanelLeft) + pad, levelMapPanelTop() + headerH,
-            levelMapPanelWidth() - pad * 2.0f, levelMapPanelHeight() - headerH - pad};
+    return {lobbyScaled(kMapPanelLeft) + pad, levelMapPanelTop() + headerH, levelMapPanelWidth() - pad * 2.0f,
+            levelMapPanelHeight() - headerH - pad};
 }
 
 inline const std::array<LevelNodeLayout, 8>& levelNodeLocalLayout() {
@@ -150,8 +150,7 @@ inline bool isFinalLevelNode(uint8_t index, uint8_t levelCount) {
 
 inline float levelNodeRadius(uint8_t index, uint8_t levelCount) {
     const float scale = levelMapLayoutScale();
-    const float base =
-        isFinalLevelNode(index, levelCount) ? kLevelNodeRadius * kBossNodeScale : kLevelNodeRadius;
+    const float base = isFinalLevelNode(index, levelCount) ? kLevelNodeRadius * kBossNodeScale : kLevelNodeRadius;
     return base * scale;
 }
 
