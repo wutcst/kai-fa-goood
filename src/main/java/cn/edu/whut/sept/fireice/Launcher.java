@@ -3,6 +3,7 @@ package cn.edu.whut.sept.fireice;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -37,7 +38,7 @@ public final class Launcher {
             System.exit(1);
         }
 
-        Path runtimeDir = Path.of(System.getProperty("java.io.tmpdir"), "fire-ice-runtime");
+        Path runtimeDir = Paths.get(System.getProperty("java.io.tmpdir"), "fire-ice-runtime");
         NativeBundle.ensureExtracted(runtimeDir);
 
         Path executable = runtimeDir.resolve("server".equals(mode) ? "fireice_server.exe" : "fireice_client.exe");

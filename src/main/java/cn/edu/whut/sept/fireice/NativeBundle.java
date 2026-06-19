@@ -7,6 +7,7 @@ import java.net.JarURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Enumeration;
 import java.util.jar.JarEntry;
@@ -27,7 +28,7 @@ final class NativeBundle {
 
         if ("file".equalsIgnoreCase(location.getProtocol()) && location.getPath().endsWith(".jar")) {
             try {
-                extractFromJar(Path.of(location.toURI()), targetDir);
+                extractFromJar(Paths.get(location.toURI()), targetDir);
             } catch (java.net.URISyntaxException e) {
                 throw new IOException("Invalid launcher JAR location.", e);
             }
@@ -82,7 +83,11 @@ final class NativeBundle {
     private static void copyStream(InputStream input, Path output) throws IOException {
         Files.createDirectories(output.getParent());
         try (OutputStream out = Files.newOutputStream(output)) {
-            input.transferTo(out);
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
         }
     }
 }
