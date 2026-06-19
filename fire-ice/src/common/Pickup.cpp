@@ -160,10 +160,9 @@ void collectPickups(PlayerState& player, const std::vector<Pickup>& pickups, uin
 
         const float hitW = pickup.w * kPickupHitboxScale;
         const float hitH = pickup.h * kPickupHitboxScale;
-        const AABB pickupBox{pickup.x + (pickup.w - hitW) * 0.5f,
-                             pickup.y + (pickup.h - hitH) * 0.5f,
-                             hitW,
-                             hitH};
+        const float hitX = pickup.x + (pickup.w - hitW) * 0.5f;
+        const float hitY = pickup.y + (pickup.h - hitH) * 0.5f;
+        const AABB pickupBox{hitX, hitY, hitW, hitH};
         if (!box.intersects(pickupBox)) {
             continue;
         }
