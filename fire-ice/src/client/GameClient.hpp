@@ -61,6 +61,7 @@ private:
     void renderTitleScreen();
     void renderTitleCharacters();
     void renderTitleSpotlight();
+    void drawLobbyBackdrop(sf::Color top, sf::Color bottom);
     void renderHelpOverlay();
     void renderCreditsOverlay();
     void renderLobbyScreen();

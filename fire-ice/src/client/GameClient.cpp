@@ -986,6 +986,32 @@ void GameClient::renderTitleSpotlight() {
     window_.draw(glow);
 }
 
+void GameClient::drawLobbyBackdrop(sf::Color top, sf::Color bottom) {
+    const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
+
+    sf::VertexArray gradient(sf::Quads, 4);
+    gradient[0].position = {0.0f, 0.0f};
+    gradient[1].position = {w, 0.0f};
+    gradient[2].position = {w, h};
+    gradient[3].position = {0.0f, h};
+    gradient[0].color = top;
+    gradient[1].color = top;
+    gradient[2].color = bottom;
+    gradient[3].color = bottom;
+    window_.draw(gradient);
+
+    for (int i = 0; i < 7; ++i) {
+        const float radius = 42.0f + static_cast<float>((i % 3) * 18);
+        sf::CircleShape glow(radius);
+        glow.setOrigin(radius, radius);
+        glow.setPosition(80.0f + static_cast<float>(i) * 150.0f,
+                         96.0f + static_cast<float>((i * 67) % 420));
+        glow.setFillColor(i % 2 == 0 ? sf::Color(255, 140, 80, 18) : sf::Color(80, 180, 255, 16));
+        window_.draw(glow);
+    }
+}
+
 void GameClient::renderTitleCharacters() {
     if (!assets_.ready()) {
         return;
@@ -1460,14 +1486,13 @@ void GameClient::renderRoomScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
     const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
+    drawLobbyBackdrop(sf::Color(18, 30, 48), sf::Color(34, 20, 30));
     if (assets_.ready()) {
         drawBackgroundSprite(window_, assets_.lobbyBackground());
-    } else {
-        sf::RectangleShape fallback({w, h});
-        fallback.setFillColor(sf::Color(12, 20, 30));
-        window_.draw(fallback);
+        sf::RectangleShape tint({w, h});
+        tint.setFillColor(sf::Color(8, 12, 22, 105));
+        window_.draw(tint);
     }
-
     // Top header bar
     ui_.drawPanel(window_, {0.0f, 0.0f, w, 68.0f}, sf::Color(16, 22, 40, 230), 230.0f);
     ui_.drawOutlinedCenteredText(window_, "Fire & Ice 森林神殿", w / 2.0f, 8.0f, 28, sf::Color(255, 230, 100),
@@ -1599,6 +1624,12 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
     ui_.drawPanel(window_, {panelX, panelY, panelW, panelH}, isConnected ? panelHighlight : panelBase,
                   isConnected ? 230.0f : 180.0f);
 
+    sf::RectangleShape innerGlow({panelW - 14.0f, panelH - 14.0f});
+    innerGlow.setPosition(panelX + 7.0f, panelY + 7.0f);
+    innerGlow.setFillColor(sf::Color::Transparent);
+    innerGlow.setOutlineThickness(1.0f);
+    innerGlow.setOutlineColor(isConnected ? sf::Color(255, 255, 255, 52) : sf::Color(255, 255, 255, 24));
+    window_.draw(innerGlow);
     // Role title
     std::string roleTitle;
     sf::Color roleColor;
@@ -1719,9 +1750,7 @@ void GameClient::renderLobbyScreen() {
     }
     levelMapScrollY_ = clampLevelMapScroll(levelMapScrollY_);
 
-    sf::RectangleShape backdrop({w, static_cast<float>(LOBBY_WINDOW_HEIGHT)});
-    backdrop.setFillColor(sf::Color(36, 28, 22));
-    window_.draw(backdrop);
+    drawLobbyBackdrop(sf::Color(38, 31, 44), sf::Color(62, 46, 30));
 
     ui_.drawPanel(window_, {0.0f, 0.0f, w, 72.0f}, sf::Color(48, 36, 28, 220), 220.0f);
     ui_.drawCenteredText(window_, text::forestTemple(), w / 2.0f, 12.0f, 34, sf::Color(255, 230, 170));
@@ -1994,7 +2023,7 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
         return;
     }
 
-    if (assets_.ready()) {
+    if (assets_.ready() && player.role != PlayerRole::Poison) {
         const sf::Texture& texture = player.role == PlayerRole::Fire ? assets_.fireBoy() : assets_.waterGirl();
         sf::Sprite sprite(texture);
         const sf::Vector2u texSize = texture.getSize();
@@ -2014,6 +2043,11 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
         return;
     }
 
+    sf::RectangleShape shadow({PLAYER_WIDTH, PLAYER_HEIGHT});
+    shadow.setPosition(player.x + 3.0f, player.y + 4.0f);
+    shadow.setFillColor(sf::Color(0, 0, 0, 70));
+    window.draw(shadow);
+
     sf::RectangleShape body({PLAYER_WIDTH, PLAYER_HEIGHT});
     body.setPosition(player.x, player.y);
 
@@ -2024,21 +2058,35 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
     } else if (player.role == PlayerRole::Water) {
         body.setFillColor(sf::Color(60, 140, 255));
     } else if (player.role == PlayerRole::Poison) {
-        body.setFillColor(sf::Color(34, 139, 34));
+        body.setFillColor(sf::Color(64, 190, 78));
     }
-
+    body.setOutlineThickness(2.0f);
+    body.setOutlineColor(player.role == PlayerRole::Poison ? sf::Color(20, 80, 30) : sf::Color(30, 30, 35));
     window.draw(body);
-}
 
+    if (player.role == PlayerRole::Poison && player.alive) {
+        sf::CircleShape glow(12.0f);
+        glow.setOrigin(12.0f, 12.0f);
+        glow.setPosition(player.x + PLAYER_WIDTH / 2.0f, player.y + 12.0f);
+        glow.setFillColor(sf::Color(160, 255, 120, 75));
+        window.draw(glow);
+    }
+}
 void GameClient::drawHud(sf::RenderWindow& window) const {
     const float hudY = static_cast<float>(map_.height()) * TILE_SIZE + 8.0f;
     const float windowW = static_cast<float>(window_.getSize().x);
 
     sf::RectangleShape hudBar({windowW, 72.0f});
     hudBar.setPosition(0.0f, hudY);
-    hudBar.setFillColor(sf::Color(30, 30, 40));
+    hudBar.setFillColor(sf::Color(18, 22, 34, 232));
+    hudBar.setOutlineThickness(2.0f);
+    hudBar.setOutlineColor(sf::Color(255, 255, 255, 35));
     window.draw(hudBar);
 
+    sf::RectangleShape hudShine({windowW, 3.0f});
+    hudShine.setPosition(0.0f, hudY + 3.0f);
+    hudShine.setFillColor(sf::Color(255, 255, 255, 35));
+    window.draw(hudShine);
     const int totalGems = renderWorld_.players[0].gems + renderWorld_.players[1].gems;
     ui_.drawText(window, "Gems: " + std::to_string(totalGems) + "/" + std::to_string(renderWorld_.totalGems), 16.0f,
                  hudY + 16.0f, 20, sf::Color(255, 220, 80));
@@ -2048,7 +2096,9 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
     ui_.drawText(window, levelLine, 180.0f, hudY + 16.0f, 18, sf::Color(220, 220, 220));
 
     if (renderWorld_.phase == GamePhase::Playing) {
-        const char* controlText = role_ == PlayerRole::Fire ? "WASD" : "Arrows";
+        const char* controlText = role_ == PlayerRole::Fire    ? "WASD"
+                                  : role_ == PlayerRole::Water ? "Arrows"
+                                                               : "IJKL";
         ui_.drawText(window, std::string(roleDisplayName()) + " [" + controlText + "]", 500.0f, hudY + 16.0f, 18,
                      sf::Color(180, 180, 180));
         if (assets_.hasButtons()) {

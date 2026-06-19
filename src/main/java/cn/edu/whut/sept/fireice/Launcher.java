@@ -1,6 +1,7 @@
 package cn.edu.whut.sept.fireice;
 
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -38,7 +39,7 @@ public final class Launcher {
             System.exit(1);
         }
 
-        Path runtimeDir = Paths.get(System.getProperty("java.io.tmpdir"), "fire-ice-runtime");
+        Path runtimeDir = Paths.get(System.getProperty("java.io.tmpdir"), "fire-ice-runtime", mode + "-" + processId());
         NativeBundle.ensureExtracted(runtimeDir);
 
         Path executable = runtimeDir.resolve("server".equals(mode) ? "fireice_server.exe" : "fireice_client.exe");
@@ -64,5 +65,14 @@ public final class Launcher {
         System.out.println("  java -jar fire-ice-" + ReleaseVersion.VERSION + ".jar server");
         System.out.println("  java -jar fire-ice-" + ReleaseVersion.VERSION + ".jar client [host] [role]");
         System.out.println("  java -jar fire-ice-" + ReleaseVersion.VERSION + ".jar --version");
+    }
+
+    private static String processId() {
+        String runtimeName = ManagementFactory.getRuntimeMXBean().getName();
+        int at = runtimeName.indexOf('@');
+        if (at > 0) {
+            return runtimeName.substring(0, at);
+        }
+        return Long.toString(System.currentTimeMillis());
     }
 }
