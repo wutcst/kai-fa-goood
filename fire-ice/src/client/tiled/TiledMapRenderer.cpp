@@ -1,12 +1,15 @@
 #include "TiledMapRenderer.hpp"
 
 #include "Paths.hpp"
+#include "Physics.hpp"
 #include "Pickup.hpp"
+#include "LevelMechanics.hpp"
 #include "TmxUtil.hpp"
 #include "Types.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 
@@ -504,7 +507,14 @@ void TiledMapRenderer::drawStatic(sf::RenderWindow& window, const std::function<
 }
 
 void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, uint32_t collectedMask, uint32_t collectedMaskHi,
-                                        uint32_t collectedMaskExt) const {
+                                        uint32_t collectedMaskExt, const WorldState* world) const {
+    const bool magnetVisual = world != nullptr && world->magnetActive != 0 && world->magnetOwnerSlot < MAX_PLAYERS;
+    sf::Vector2f magnetTarget;
+    if (magnetVisual) {
+        const PlayerState& owner = world->players[world->magnetOwnerSlot];
+        magnetTarget = {owner.x + PLAYER_WIDTH * 0.5f, owner.y + PLAYER_HEIGHT * 0.5f};
+    }
+
     for (const CollectibleObjectTile& obj : collectibleObjectTiles_) {
         const uint32_t bit = 1u << (obj.index % 32u);
         const uint8_t word = obj.index / 32u;
@@ -513,10 +523,25 @@ void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, uint32_t colle
         if (taken) {
             continue;
         }
-        drawGidSpriteToWindow(window, obj.gid, obj.x, obj.y, obj.width, obj.height);
+
+        float drawX = obj.x;
+        float drawY = obj.y;
+        if (magnetVisual) {
+            const float centerX = obj.x * mapScale_ + obj.width * mapScale_ * 0.5f;
+            const float centerY = (obj.y - obj.height * 0.5f) * mapScale_;
+            const float dx = magnetTarget.x - centerX;
+            const float dy = magnetTarget.y - centerY;
+            const float dist = std::sqrt(dx * dx + dy * dy);
+            if (dist > 0.01f && dist < MAGNET_ATTRACT_RADIUS) {
+                const float pull = std::min(0.75f, (MAGNET_ATTRACT_RADIUS - dist) / MAGNET_ATTRACT_RADIUS * 0.75f);
+                drawX += dx * pull / mapScale_;
+                drawY += dy * pull / mapScale_;
+            }
+        }
+
+        drawGidSpriteToWindow(window, obj.gid, drawX, drawY, obj.width, obj.height);
     }
 }
-
 void TiledMapRenderer::drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const {
     // 等比缩放并居中，用于选关右侧面板
     sf::RectangleShape backdrop({area.width, area.height});

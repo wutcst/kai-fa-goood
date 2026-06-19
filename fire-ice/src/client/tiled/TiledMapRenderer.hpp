@@ -2,6 +2,8 @@
 
 #include <SFML/Graphics.hpp>
 
+#include "Types.hpp"
+
 #include <functional>
 #include <string>
 #include <vector>
@@ -14,7 +16,7 @@ public:
     void bake();  // 预渲染静态层到纹理，运行时只 draw 一次
     void drawStatic(sf::RenderWindow& window, const std::function<bool(int, int)>& skipTile = {}) const;
     void drawCollectibles(sf::RenderWindow& window, uint32_t collectedMask, uint32_t collectedMaskHi = 0,
-                          uint32_t collectedMaskExt = 0) const;
+                          uint32_t collectedMaskExt = 0, const WorldState* world = nullptr) const;
     void drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;  // 选关缩略图
 
     bool ready() const { return isLoaded_; }

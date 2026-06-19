@@ -147,6 +147,14 @@ void resetLevelRuntime(LevelRuntime& runtime) {
     std::fill(runtime.vanishingRespawnTimer.begin(), runtime.vanishingRespawnTimer.end(), 0.0f);
     runtime.mudSpawnTimer = 0.0f;
     runtime.nextMudSpawnIndex = 0;
+    runtime.magnetFalling = false;
+    runtime.magnetActive = false;
+    runtime.magnetOwnerSlot = 255;
+    runtime.magnetX = 0.0f;
+    runtime.magnetY = 0.0f;
+    runtime.magnetTimer = 0.0f;
+    runtime.magnetNextDropTime = MAGNET_DROP_FIRST_TIME;
+    runtime.magnetElapsed = 0.0f;
     for (MudParticle& particle : runtime.mudParticles) {
         particle.active = false;
     }

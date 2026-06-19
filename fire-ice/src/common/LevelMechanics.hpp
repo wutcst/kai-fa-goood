@@ -17,6 +17,13 @@ constexpr float MUD_FALL_SPEED = 140.0f;
 constexpr float MUD_HITBOX = 14.0f;
 constexpr float FAN_RISE_SPEED = 480.0f;
 constexpr int FAN_WIND_TILES_UP = 18;
+constexpr float MAGNET_DROP_FIRST_TIME = 10.0f;
+constexpr float MAGNET_DROP_INTERVAL = 20.0f;
+constexpr float MAGNET_FALL_SPEED = 155.0f;
+constexpr float MAGNET_PICKUP_SIZE = 24.0f;
+constexpr float MAGNET_EFFECT_SECONDS = 5.0f;
+constexpr float MAGNET_ATTRACT_RADIUS = TILE_SIZE * 7.0f;
+constexpr float MAGNET_ATTRACT_SPEED = 360.0f;
 
 struct FanZone {
     float left = 0.0f;
@@ -44,6 +51,15 @@ struct LevelRuntime {
     float mudSpawnTimer = 0.0f;
     bool collectVictory = false;
     int nextMudSpawnIndex = 0;
+    bool magnetEnabled = false;
+    bool magnetFalling = false;
+    bool magnetActive = false;
+    uint8_t magnetOwnerSlot = 255;
+    float magnetX = 0.0f;
+    float magnetY = 0.0f;
+    float magnetTimer = 0.0f;
+    float magnetNextDropTime = MAGNET_DROP_FIRST_TIME;
+    float magnetElapsed = 0.0f;
 };
 
 void initLevelRuntime(const GameMap& map, LevelRuntime& runtime);

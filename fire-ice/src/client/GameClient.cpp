@@ -1172,12 +1172,15 @@ bool GameClient::allPlayersWaitingReady() const {
 }
 
 void GameClient::trySelectLevel(uint8_t index) {
-    if (localReady_ || index >= renderWorld_.levelCount) {
+    if (index >= renderWorld_.levelCount) {
         return;
     }
+    if (localReady_ && index != renderWorld_.levelIndex) {
+        return;
+    }
+    localReady_ = index == renderWorld_.levelIndex;
     sendAction(PlayerAction::SelectLevel, index);
 }
-
 int GameClient::levelNodeAtPosition(float x, float y) const {
     const sf::FloatRect viewport = levelMapViewportRect();
     if (!viewport.contains({x, y})) {
@@ -1208,7 +1211,7 @@ void GameClient::handleLobbyMouseWheel(const sf::Event& event) {
 }
 
 void GameClient::handleLobbyMouseClick(const sf::Event& event) {
-    if (localReady_ || event.mouseButton.button != sf::Mouse::Left) {
+    if (event.mouseButton.button != sf::Mouse::Left) {
         return;
     }
     const int node =
@@ -1217,7 +1220,6 @@ void GameClient::handleLobbyMouseClick(const sf::Event& event) {
         trySelectLevel(static_cast<uint8_t>(node));
     }
 }
-
 void GameClient::drawLevelPath(uint8_t fromIndex, uint8_t toIndex, uint8_t levelCount, bool unlocked) {
     const sf::Vector2f fromCenter = levelNodeLocalCenter(fromIndex);
     const sf::Vector2f toCenter = levelNodeLocalCenter(toIndex);
@@ -1963,6 +1965,34 @@ void GameClient::drawMudParticles(sf::RenderWindow& window) const {
     }
 }
 
+void GameClient::drawMagnet(sf::RenderWindow& window) const {
+    if (renderWorld_.magnetFalling == 0 && renderWorld_.magnetActive == 0) {
+        return;
+    }
+
+    sf::CircleShape halo(MAGNET_PICKUP_SIZE * 0.8f);
+    halo.setOrigin(MAGNET_PICKUP_SIZE * 0.8f, MAGNET_PICKUP_SIZE * 0.8f);
+    halo.setPosition(renderWorld_.magnetX, renderWorld_.magnetY);
+    const sf::Color haloColor = renderWorld_.magnetActive != 0 ? sf::Color(120, 180, 255, 70)
+                                                             : sf::Color(255, 230, 120, 80);
+    halo.setFillColor(haloColor);
+    window.draw(halo);
+
+    sf::RectangleShape core({MAGNET_PICKUP_SIZE, MAGNET_PICKUP_SIZE * 0.62f});
+    core.setOrigin(MAGNET_PICKUP_SIZE * 0.5f, MAGNET_PICKUP_SIZE * 0.31f);
+    core.setPosition(renderWorld_.magnetX, renderWorld_.magnetY);
+    core.setFillColor(sf::Color(220, 60, 70));
+    core.setOutlineThickness(2.0f);
+    core.setOutlineColor(sf::Color(245, 245, 245));
+    window.draw(core);
+
+    sf::RectangleShape gap({MAGNET_PICKUP_SIZE * 0.38f, MAGNET_PICKUP_SIZE * 0.36f});
+    gap.setOrigin(MAGNET_PICKUP_SIZE * 0.19f, MAGNET_PICKUP_SIZE * 0.18f);
+    gap.setPosition(renderWorld_.magnetX, renderWorld_.magnetY + MAGNET_PICKUP_SIZE * 0.1f);
+    gap.setFillColor(sf::Color(50, 60, 78));
+    window.draw(gap);
+}
+
 void GameClient::drawMap(sf::RenderWindow& window) const {
     if (tiledMap_.ready()) {
         const auto skipHiddenVanishing = [this](int x, int y) {
@@ -1977,8 +2007,9 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
         };
         tiledMap_.drawStatic(window, skipHiddenVanishing);
         tiledMap_.drawCollectibles(window, renderWorld_.collectedPickupsMask, renderWorld_.collectedPickupsMaskHi,
-                                   renderWorld_.collectedPickupsMaskExt);
+                                   renderWorld_.collectedPickupsMaskExt, &renderWorld_);
         drawMudParticles(window);
+        drawMagnet(window);
         return;
     }
 
