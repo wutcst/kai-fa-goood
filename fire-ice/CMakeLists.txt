@@ -134,6 +134,16 @@ if(FIREICE_BUILD_TESTS)
         target_compile_options(fireice_tests PRIVATE /utf-8)
     endif()
 
+    if(WIN32)
+        add_custom_command(TARGET fireice_tests POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:sfml-system>
+                $<TARGET_FILE:GTest::gtest>
+                $<TARGET_FILE:GTest::gtest_main>
+                $<TARGET_FILE_DIR:fireice_tests>
+        )
+    endif()
+
     include(GoogleTest)
-    gtest_discover_tests(fireice_tests)
+    gtest_discover_tests(fireice_tests DISCOVERY_MODE PRE_TEST)
 endif()
