@@ -294,13 +294,23 @@ void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
                 newFiltered = currentFiltered - 1;
             else if (action == PlayerAction::NextLevel && currentFiltered + 1 < filteredCount)
                 newFiltered = currentFiltered + 1;
-            if (newFiltered != currentFiltered)
+            if (newFiltered != currentFiltered) {
                 selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount));
+                world.lobbyStep = 1;
+            }
             return;
         }
         if (action == PlayerAction::SelectLevel) {
-            if (value < filteredCount)
+            if (value < filteredCount) {
                 selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
+                world.lobbyStep = 1;
+                clients[slot].ready = true;
+                syncConnectedCount();
+                std::cout << "[Room " << code << "] Slot " << static_cast<int>(slot) << " selected level and ready"
+                          << std::endl;
+                if (allConnectedReady())
+                    beginCountdown();
+            }
             return;
         }
         if (action == PlayerAction::Ready) {

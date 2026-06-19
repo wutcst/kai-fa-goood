@@ -130,6 +130,7 @@ private:
     float roomAnimTimer_ = 0.0f;
 
     InputFlags currentInput_ = InputFlags::None;
+    InputFlags lastSentInput_ = InputFlags::None;
     uint32_t inputTick_ = 0;
 
     std::chrono::steady_clock::time_point lastInputSend_;

@@ -676,7 +676,8 @@ void GameClient::pollNetwork() {
 
 bool GameClient::sendInput() {
     const auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration<float>(now - lastInputSend_).count() < 1.0f / 30.0f) {
+    if (std::chrono::duration<float>(now - lastInputSend_).count() < 1.0f / STATE_BROADCAST_HZ &&
+        currentInput_ == lastSentInput_) {
         return false;
     }
 
@@ -696,6 +697,7 @@ bool GameClient::sendInput() {
     }
 
     lastInputSend_ = now;
+    lastSentInput_ = currentInput_;
     return true;
 }
 
@@ -904,7 +906,7 @@ InputFlags GameClient::readLocalInput() const {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) {
             input = input | InputFlags::Right;
         }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) || sf::Keyboard::isKeyPressed(sf::Keyboard::Space)) {
             input = input | InputFlags::Jump;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
@@ -917,7 +919,7 @@ InputFlags GameClient::readLocalInput() const {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
             input = input | InputFlags::Right;
         }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up) || sf::Keyboard::isKeyPressed(sf::Keyboard::Space)) {
             input = input | InputFlags::Jump;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
@@ -930,7 +932,7 @@ InputFlags GameClient::readLocalInput() const {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::L)) {
             input = input | InputFlags::Right;
         }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::I)) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::I) || sf::Keyboard::isKeyPressed(sf::Keyboard::Space)) {
             input = input | InputFlags::Jump;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::K)) {
@@ -2026,14 +2028,18 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
         const sf::Texture& texture = player.role == PlayerRole::Fire ? assets_.fireBoy() : assets_.waterGirl();
         sf::Sprite sprite(texture);
         const sf::Vector2u texSize = texture.getSize();
-        const float scaleX = PLAYER_WIDTH / static_cast<float>(texSize.x);
-        const float scaleY = PLAYER_HEIGHT / static_cast<float>(texSize.y);
+        const float drawW = PLAYER_WIDTH * 1.6f;
+        const float drawH = PLAYER_HEIGHT * 2.0f;
+        const float drawX = player.x + (PLAYER_WIDTH - drawW) * 0.5f;
+        const float drawY = player.y + PLAYER_HEIGHT - drawH;
+        const float scaleX = drawW / static_cast<float>(texSize.x);
+        const float scaleY = drawH / static_cast<float>(texSize.y);
         sprite.setScale(scaleX, scaleY);
         if (player.vx < -1.0f) {
             sprite.setScale(-scaleX, scaleY);
-            sprite.setPosition(player.x + PLAYER_WIDTH, player.y);
+            sprite.setPosition(drawX + drawW, drawY);
         } else {
-            sprite.setPosition(player.x, player.y);
+            sprite.setPosition(drawX, drawY);
         }
         if (!player.alive) {
             sprite.setColor(sf::Color(120, 120, 120, 140));
@@ -2042,13 +2048,18 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
         return;
     }
 
-    sf::RectangleShape shadow({PLAYER_WIDTH, PLAYER_HEIGHT});
-    shadow.setPosition(player.x + 3.0f, player.y + 4.0f);
+    const float drawW = PLAYER_WIDTH * 1.6f;
+    const float drawH = PLAYER_HEIGHT * 2.0f;
+    const float drawX = player.x + (PLAYER_WIDTH - drawW) * 0.5f;
+    const float drawY = player.y + PLAYER_HEIGHT - drawH;
+
+    sf::RectangleShape shadow({drawW, drawH});
+    shadow.setPosition(drawX + 3.0f, drawY + 4.0f);
     shadow.setFillColor(sf::Color(0, 0, 0, 70));
     window.draw(shadow);
 
-    sf::RectangleShape body({PLAYER_WIDTH, PLAYER_HEIGHT});
-    body.setPosition(player.x, player.y);
+    sf::RectangleShape body({drawW, drawH});
+    body.setPosition(drawX, drawY);
 
     if (!player.alive) {
         body.setFillColor(sf::Color(80, 80, 80, 120));
@@ -2066,7 +2077,7 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
     if (player.role == PlayerRole::Poison && player.alive) {
         sf::CircleShape glow(12.0f);
         glow.setOrigin(12.0f, 12.0f);
-        glow.setPosition(player.x + PLAYER_WIDTH / 2.0f, player.y + 12.0f);
+        glow.setPosition(player.x + PLAYER_WIDTH / 2.0f, drawY + 12.0f);
         glow.setFillColor(sf::Color(160, 255, 120, 75));
         window.draw(glow);
     }
@@ -2095,7 +2106,12 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
     ui_.drawText(window, levelLine, 180.0f, hudY + 16.0f, 18, sf::Color(220, 220, 220));
 
     if (renderWorld_.phase == GamePhase::Playing) {
-        const char* controlText = role_ == PlayerRole::Fire ? "WASD" : (role_ == PlayerRole::Water ? "Arrows" : "IJKL");
+        const char* controlText = "IJKL/Space";
+        if (role_ == PlayerRole::Fire) {
+            controlText = "WASD/Space";
+        } else if (role_ == PlayerRole::Water) {
+            controlText = "Arrows/Space";
+        }
         ui_.drawText(window, std::string(roleDisplayName()) + " [" + controlText + "]", 500.0f, hudY + 16.0f, 18,
                      sf::Color(180, 180, 180));
         if (assets_.hasButtons()) {
