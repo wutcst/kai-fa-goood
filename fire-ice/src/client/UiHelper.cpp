@@ -131,6 +131,83 @@ void UiHelper::drawOutlinedText(sf::RenderWindow& window, const std::string& tex
     window.draw(label);
 }
 
+void UiHelper::drawMultilineText(sf::RenderWindow& window, const std::string& text, float x, float y, unsigned size,
+                                 sf::Color color, float lineSpacing) const {
+    float curY = y;
+    std::string line;
+    for (char ch : text) {
+        if (ch == '\n') {
+            if (!line.empty()) {
+                drawText(window, line, x, curY, size, color);
+                curY += static_cast<float>(size) + lineSpacing;
+                line.clear();
+            }
+            continue;
+        }
+        line.push_back(ch);
+    }
+    if (!line.empty()) {
+        drawText(window, line, x, curY, size, color);
+    }
+}
+
+float UiHelper::drawWrappedText(sf::RenderWindow& window, const std::string& text, float x, float y, unsigned size,
+                                sf::Color color, float maxWidth, float lineSpacing) const {
+    if (text.empty()) {
+        return y;
+    }
+
+    if (!fontLoaded_) {
+        drawText(window, text, x, y, size, color);
+        return y + static_cast<float>(size) + lineSpacing;
+    }
+
+    auto measureLine = [&](const std::string& line) {
+        sf::Text probe(toSfString(line), font_, size);
+        return probe.getLocalBounds().width;
+    };
+
+    float curY = y;
+    std::string current;
+    for (std::size_t i = 0; i < text.size();) {
+        const unsigned char lead = static_cast<unsigned char>(text[i]);
+        std::size_t charLen = 1;
+        if (lead >= 0xF0) {
+            charLen = 4;
+        } else if (lead >= 0xE0) {
+            charLen = 3;
+        } else if (lead >= 0xC0) {
+            charLen = 2;
+        }
+
+        const std::string piece = text.substr(i, charLen);
+        i += charLen;
+
+        if (piece == "\n") {
+            drawText(window, current, x, curY, size, color);
+            curY += static_cast<float>(size) + lineSpacing;
+            current.clear();
+            continue;
+        }
+
+        const std::string candidate = current + piece;
+        if (!current.empty() && measureLine(candidate) > maxWidth) {
+            drawText(window, current, x, curY, size, color);
+            curY += static_cast<float>(size) + lineSpacing;
+            current = piece;
+        } else {
+            current = candidate;
+        }
+    }
+
+    if (!current.empty()) {
+        drawText(window, current, x, curY, size, color);
+        curY += static_cast<float>(size) + lineSpacing;
+    }
+
+    return curY;
+}
+
 void UiHelper::drawOutlinedCenteredText(sf::RenderWindow& window, const std::string& text, float centerX, float y,
                                         unsigned size, sf::Color fill, sf::Color outline,
                                         float outlineThickness) const {

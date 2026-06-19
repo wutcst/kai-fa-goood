@@ -24,7 +24,7 @@ constexpr float COUNTDOWN_SECONDS = 3.0f;
 // Room implementation
 // ============================================================================
 
-void Room::selectLevel(uint8_t index) {
+void Room::selectLevel(uint8_t index, bool keepMapSelect) {
     const LevelCatalog& catalog = LevelCatalog::instance();
     if (index >= catalog.count()) {
         index = 0;
@@ -48,13 +48,15 @@ void Room::selectLevel(uint8_t index) {
     applyLevelMetadata();
     resetWorld();
     world.phase = GamePhase::Lobby;
-    world.lobbyStep = 0;
+    world.lobbyStep = keepMapSelect ? 1 : 0;
     world.countdown = 0;
     countdownTimer = 0.0f;
 
     for (ClientSlot& client : clients) {
         client.ready = false;
-        client.waitingReady = false;
+        if (!keepMapSelect) {
+            client.waitingReady = false;
+        }
         client.pendingInput = InputFlags::None;
     }
 
@@ -297,12 +299,12 @@ void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
             else if (action == PlayerAction::NextLevel && currentFiltered + 1 < filteredCount)
                 newFiltered = currentFiltered + 1;
             if (newFiltered != currentFiltered)
-                selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount));
+                selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount), true);
             return;
         }
         if (action == PlayerAction::SelectLevel) {
             if (value < filteredCount)
-                selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
+                selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount), true);
             return;
         }
         if (action == PlayerAction::Ready) {
@@ -319,9 +321,21 @@ void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
         returnToLobby();
         return;
     }
-    if (action == PlayerAction::Restart && (world.phase == GamePhase::Victory || world.phase == GamePhase::GameOver)) {
-        returnToLobby();
-        return;
+    if (action == PlayerAction::Restart) {
+        if (world.phase == GamePhase::Victory || world.phase == GamePhase::GameOver) {
+            returnToLobby();
+            return;
+        }
+        if (world.phase == GamePhase::Playing || world.phase == GamePhase::Countdown) {
+            resetWorld();
+            world.phase = GamePhase::Countdown;
+            countdownTimer = COUNTDOWN_SECONDS;
+            world.countdown = static_cast<uint8_t>(std::ceil(countdownTimer));
+            for (ClientSlot& client : clients) {
+                client.pendingInput = InputFlags::None;
+            }
+            return;
+        }
     }
     if (action == PlayerAction::NextLevel && world.phase == GamePhase::Victory) {
         const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);

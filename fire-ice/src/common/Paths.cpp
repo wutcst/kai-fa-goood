@@ -40,13 +40,13 @@ std::string resolveAssetPath(const std::string& path) {
         return requested.lexically_normal().string();
     }
 
-    if (fileReadable(requested)) {
-        return std::filesystem::absolute(requested).lexically_normal().string();
-    }
-
     const std::filesystem::path besideExe = executableDirectory() / requested;
     if (fileReadable(besideExe)) {
         return besideExe.lexically_normal().string();
+    }
+
+    if (fileReadable(requested)) {
+        return std::filesystem::absolute(requested).lexically_normal().string();
     }
 
     const std::filesystem::path besideExeFile = executableDirectory() / requested.filename();

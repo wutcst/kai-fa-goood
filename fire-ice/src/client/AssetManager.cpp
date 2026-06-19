@@ -52,6 +52,9 @@ bool AssetManager::load() {
     buttonsReady_ = loadTexture(playButton_, "play2.png") && loadTexture(retryButton_, "retry_button.png") &&
                     loadTexture(continueButton_, "continue_button.png") && loadTexture(menuButton_, "menu_button.png");
 
+    pauseIconReady_ = loadTexture(pauseIcon_, "pause_icon.png");
+    pauseMenuReady_ = loadTexture(pauseMenu_, "pause_menu.png");
+
     mapIconsReady_ = loadMapIcons();
 
     musicPath_ = resolveAssetPath("textures/LevelMusic.wav");

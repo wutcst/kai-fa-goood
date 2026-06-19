@@ -4,7 +4,7 @@
  <tileset firstgid="243" source="level01/apple.tsj"/>
  <tileset firstgid="260" source="level01/player-frog.tsj"/>
  <imagelayer id="2" name="Background" repeatx="1" repeaty="1">
-  <image source="level01/background.png" width="64" height="64"/>
+  <image source="level01/background.png" width="395" height="63"/>
  </imagelayer>
  <layer id="1" name="碰撞" width="31" height="16">
   <data encoding="csv">

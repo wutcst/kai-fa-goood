@@ -1,5 +1,7 @@
 #pragma once
 
+#include "TmxUtil.hpp"
+
 #include <SFML/Graphics.hpp>
 
 #include <functional>
@@ -40,6 +42,8 @@ private:
         sf::Texture texture;
         int imageWidth = 0;
         int imageHeight = 0;
+        float offsetX = 0.0f;
+        float offsetY = 0.0f;
         bool repeatX = false;
         bool repeatY = false;
     };
@@ -70,6 +74,10 @@ private:
     void drawGidSpriteToWindow(sf::RenderWindow& window, int gid, float x, float y, float width, float height) const;
     void drawTileLayersToWindow(sf::RenderWindow& window, const std::function<bool(int, int)>& skipTile) const;
     void drawObjectTilesToWindow(sf::RenderWindow& window) const;
+    bool loadImageLayerTexture(const std::string& mapDir, const tmx::ImageLayerData& source, ImageLayer& out) const;
+    void drawGrassUnderlay(sf::RenderWindow& window, float mapPixelW, float mapPixelH) const;
+    void drawImageLayerRepeating(sf::RenderWindow& window, const ImageLayer& layer, float mapPixelW,
+                                 float mapPixelH) const;
     static bool isSpawnObjectName(const std::string& name);
     static int decodeGid(int rawGid);
 
@@ -83,6 +91,7 @@ private:
     std::vector<ImageLayer> imageLayers_;
     std::vector<ObjectTile> objectTiles_;
     std::vector<CollectibleObjectTile> collectibleObjectTiles_;
+    std::string mapDirectory_;
     sf::RenderTexture bakedTexture_;
     sf::Sprite bakedSprite_;
     bool isLoaded_ = false;

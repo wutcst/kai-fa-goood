@@ -60,8 +60,8 @@ enum class PlayerAction : uint8_t {
     BackToWaitingRoom = 9
 };
 
-constexpr unsigned LOBBY_WINDOW_WIDTH = 1024;
-constexpr unsigned LOBBY_WINDOW_HEIGHT = 640;
+constexpr unsigned LOBBY_WINDOW_WIDTH = 1785;
+constexpr unsigned LOBBY_WINDOW_HEIGHT = 1280;
 
 constexpr uint8_t MAX_LEVEL_NAME = 32;
 constexpr uint8_t INITIAL_UNLOCKED_LEVEL_MASK = 0xFF;  // 位掩码，每位对应一关是否解锁

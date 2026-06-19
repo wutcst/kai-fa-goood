@@ -298,6 +298,12 @@ std::vector<ImageLayerData> findAllImageLayers(const std::string& xml) {
         }
         layer.repeatX = attributeIsTrue(header, "repeatx");
         layer.repeatY = attributeIsTrue(header, "repeaty");
+        if (const auto offsetX = attributeValue(header, "offsetx")) {
+            layer.offsetX = std::stof(*offsetX);
+        }
+        if (const auto offsetY = attributeValue(header, "offsety")) {
+            layer.offsetY = std::stof(*offsetY);
+        }
         layers.push_back(std::move(layer));
         pos = end + 13;
     }

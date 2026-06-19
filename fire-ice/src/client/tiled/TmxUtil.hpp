@@ -15,6 +15,8 @@ struct ImageLayerData {
     std::string imageSource;
     int imageWidth = 0;
     int imageHeight = 0;
+    float offsetX = 0.0f;
+    float offsetY = 0.0f;
     bool repeatX = false;
     bool repeatY = false;
 };

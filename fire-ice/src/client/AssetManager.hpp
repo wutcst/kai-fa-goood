@@ -21,12 +21,16 @@ public:
     const sf::Texture& winScreen() const { return winScreen_; }
     const sf::Texture& winScreenPartial() const { return winScreenPartial_; }
     const sf::Texture& loseScreen() const { return loseScreen_; }
+    const sf::Texture& pauseMenu() const { return pauseMenu_; }
     const sf::Texture& playButton() const { return playButton_; }
     const sf::Texture& retryButton() const { return retryButton_; }
     const sf::Texture& continueButton() const { return continueButton_; }
     const sf::Texture& menuButton() const { return menuButton_; }
+    const sf::Texture& pauseIcon() const { return pauseIcon_; }
 
     bool hasButtons() const { return buttonsReady_; }
+    bool hasPauseIcon() const { return pauseIconReady_; }
+    bool hasPauseMenu() const { return pauseMenuReady_; }
     bool hasMapIcons() const { return mapIconsReady_; }
 
     const sf::Texture& mapLevelIcon(uint8_t levelIndex, bool unlocked, bool completed) const;
@@ -47,10 +51,12 @@ private:
     sf::Texture winScreen_;
     sf::Texture winScreenPartial_;
     sf::Texture loseScreen_;
+    sf::Texture pauseMenu_;
     sf::Texture playButton_;
     sf::Texture retryButton_;
     sf::Texture continueButton_;
     sf::Texture menuButton_;
+    sf::Texture pauseIcon_;
     std::array<sf::Texture, 7> mapLevelAvailable_{};
     std::array<sf::Texture, 7> mapLevelLocked_{};
     std::array<sf::Texture, 7> mapLevelCompleted_{};
@@ -61,6 +67,8 @@ private:
     bool ready_ = false;
     bool buttonsReady_ = false;
     bool mapIconsReady_ = false;
+    bool pauseIconReady_ = false;
+    bool pauseMenuReady_ = false;
 };
 
 }  // namespace fireice

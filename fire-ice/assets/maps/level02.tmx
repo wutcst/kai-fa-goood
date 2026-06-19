@@ -8,7 +8,7 @@
  <tileset firstgid="304" source="level02/Bananas.tsx"/>
  <tileset firstgid="321" source="level02/player1.tsx"/>
  <imagelayer id="2" name="Background" repeatx="1" repeaty="1">
-  <image source="level02/background.png" width="64" height="64"/>
+  <image source="level02/background.png" width="395" height="63"/>
  </imagelayer>
  <layer id="1" name="碰撞" width="60" height="40">
   <data encoding="csv">
