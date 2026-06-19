@@ -1,8 +1,8 @@
 @echo off
 setlocal
 
-set ROOT=%~dp0..
-set BUILD=%ROOT%\fire-ice\build
+set "ROOT=%~dp0.."
+set "BUILD=%ROOT%\fire-ice\build"
 
 if not exist "%BUILD%\fireice_tests.exe" (
   echo Missing fireice_tests.exe. Rebuild native project first.
@@ -12,7 +12,7 @@ if not exist "%BUILD%\fireice_tests.exe" (
 echo Running native unit tests...
 pushd "%BUILD%"
 fireice_tests.exe
-if %ERRORLEVEL% NEQ 0 (
+if errorlevel 1 (
   popd
   exit /b 1
 )
@@ -25,15 +25,15 @@ if not exist "%BUILD%\fireice_server.exe" (
 
 echo Running server smoke test...
 start "" /B fireice_server.exe
-timeout /t 3 /nobreak >nul
-tasklist /FI "IMAGENAME eq fireice_server.exe" 2>nul | find /I "fireice_server.exe" >nul
+%SystemRoot%\System32\timeout.exe /t 3 /nobreak >nul
+%SystemRoot%\System32\tasklist.exe /FI "IMAGENAME eq fireice_server.exe" 2>nul | %SystemRoot%\System32\find.exe /I "fireice_server.exe" >nul
 if errorlevel 1 (
   echo Server exited prematurely during smoke test.
   popd
   exit /b 1
 )
 
-taskkill /IM fireice_server.exe /F >nul 2>&1
+%SystemRoot%\System32\taskkill.exe /IM fireice_server.exe /F >nul 2>&1
 echo Server smoke test passed.
 popd
 exit /b 0
