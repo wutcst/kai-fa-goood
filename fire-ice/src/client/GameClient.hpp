@@ -85,7 +85,6 @@ private:
     void drawTitleBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawMap(sf::RenderWindow& window) const;
     void drawMudParticles(sf::RenderWindow& window) const;
-    void drawMagnet(sf::RenderWindow& window) const;
     void drawDynamicTiles(sf::RenderWindow& window) const;
     void drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;
     void drawPlayer(sf::RenderWindow& window, const PlayerState& player) const;

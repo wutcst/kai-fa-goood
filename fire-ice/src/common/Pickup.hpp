@@ -7,6 +7,8 @@
 
 namespace fireice {
 
+constexpr uint8_t MAX_PICKUPS = 96;
+
 struct Pickup {
     float x = 0.0f;
     float y = 0.0f;
