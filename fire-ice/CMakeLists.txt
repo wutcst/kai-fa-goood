@@ -23,6 +23,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SFML)
 
+option(FIREICE_BUILD_TESTS "Build unit tests" ON)
+
 add_library(fireice_common STATIC
     src/common/Map.cpp
     src/common/Physics.cpp
@@ -112,3 +114,26 @@ add_custom_command(TARGET fireice_client POST_BUILD
         "${CMAKE_SOURCE_DIR}/assets/maps"
         "$<TARGET_FILE_DIR:fireice_client>/maps"
 )
+
+if(FIREICE_BUILD_TESTS)
+    include(FetchContent)
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.14.0
+        GIT_SHALLOW TRUE
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+
+    enable_testing()
+
+    add_executable(fireice_tests tests/unit_tests.cpp)
+    target_link_libraries(fireice_tests PRIVATE fireice_common GTest::gtest_main)
+    if(MSVC)
+        target_compile_options(fireice_tests PRIVATE /utf-8)
+    endif()
+
+    include(GoogleTest)
+    gtest_discover_tests(fireice_tests)
+endif()
