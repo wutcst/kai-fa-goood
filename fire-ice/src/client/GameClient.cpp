@@ -1005,8 +1005,7 @@ void GameClient::drawLobbyBackdrop(sf::Color top, sf::Color bottom) {
         const float radius = 42.0f + static_cast<float>((i % 3) * 18);
         sf::CircleShape glow(radius);
         glow.setOrigin(radius, radius);
-        glow.setPosition(80.0f + static_cast<float>(i) * 150.0f,
-                         96.0f + static_cast<float>((i * 67) % 420));
+        glow.setPosition(80.0f + static_cast<float>(i) * 150.0f, 96.0f + static_cast<float>((i * 67) % 420));
         glow.setFillColor(i % 2 == 0 ? sf::Color(255, 140, 80, 18) : sf::Color(80, 180, 255, 16));
         window_.draw(glow);
     }
@@ -2096,9 +2095,7 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
     ui_.drawText(window, levelLine, 180.0f, hudY + 16.0f, 18, sf::Color(220, 220, 220));
 
     if (renderWorld_.phase == GamePhase::Playing) {
-        const char* controlText = role_ == PlayerRole::Fire    ? "WASD"
-                                  : role_ == PlayerRole::Water ? "Arrows"
-                                                               : "IJKL";
+        const char* controlText = role_ == PlayerRole::Fire ? "WASD" : (role_ == PlayerRole::Water ? "Arrows" : "IJKL");
         ui_.drawText(window, std::string(roleDisplayName()) + " [" + controlText + "]", 500.0f, hudY + 16.0f, 18,
                      sf::Color(180, 180, 180));
         if (assets_.hasButtons()) {
