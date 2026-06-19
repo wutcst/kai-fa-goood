@@ -42,10 +42,65 @@
 
 ### 待完善 / 已知限制
 
-- 毒娃仅在部分关卡（5～8 关）有专用出生点与出口；1～4 关主要面向 1～2 人  
-- 关卡 Catalog 中的英文副标题仍为早期设计描述，与当前简化地形不完全一致  
-- 尚未配置 GitHub Actions 自动构建与测试  
+- 关卡 1～3 玩法已基本完成，关卡 3 机关与机制仍在开发中  
+- 毒娃贴图仍为占位渲染（见 [Issue #4](https://github.com/wutcst/kai-fa-goood/issues/4)）  
 - 联机仅支持局域网 / 本机，无公网中继与账号系统  
+
+### 版本与里程碑
+
+| 版本 | 对应里程碑 | 状态 | 主要内容 |
+|------|-----------|------|----------|
+| **v0.1.0** | 里程碑 1 — 三人联机核心功能 | ✅ 已完成 | 毒娃角色、3 slot 服务端、房间号、地图人数过滤（[Issue #2](https://github.com/wutcst/kai-fa-goood/issues/2)） |
+| **v0.2.0** | 里程碑 2 — 关卡与玩法扩展 | 🚧 进行中 | Tiled 三关地图、消失平台 / 泥浆 / 风扇等机制（[Issue #3](https://github.com/wutcst/kai-fa-goood/issues/3) 已关闭） |
+| **v0.3.0** | 里程碑 3 — 质量与体验 | 📋 待开发 | 单元测试、HUD / 暂停菜单、机关扩展、单人专属关等（[Issue #5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
+
+> CMake 项目版本：`FireIceOnline VERSION 0.1.0`（`fire-ice/CMakeLists.txt`）。里程碑 2 合并后可考虑 bump 至 `0.2.0`。  
+> GitHub 仓库尚未创建正式的 Milestone 对象，以上以 Issue 标题与进度为准。
+
+### CI / 代码规范
+
+- **CI 流水线**：`.github/workflows/ci.yml` — push/PR 到 `master` 时自动触发  
+  1. **代码格式检查**（clang-format）：不符合 `.clang-format` 则 **CI 失败**  
+  2. **Maven 构建流水线**（`mvn verify package`）：  
+     - C++ 单元测试（Google Test）+ 服务端冒烟测试失败则 **CI 失败**  
+     - Java 单元测试（JUnit 5）失败则 **CI 失败**  
+  3. **自动化打包**：通过后生成 **`target/fire-ice-1.0.0.jar`**（含启动器 + 原生 exe/DLL + 资源），上传至 Actions Artifact  
+  4. **手动发布**：在 Actions 页选择 `CI - Build & Check` → `Run workflow`，可额外创建 GitHub Release  
+
+- **发布 JAR 用法**：
+
+```bat
+java -jar target\fire-ice-1.0.0.jar server
+java -jar target\fire-ice-1.0.0.jar client 127.0.0.1 fire
+java -jar target\fire-ice-1.0.0.jar --version
+```
+
+- **本地完整构建**（需 VS 2022 + CMake + Ninja + JDK 8+）：
+
+```bat
+mvn verify package
+```
+
+- **格式规范**：根目录 `.clang-format`（Google 风格，4 空格缩进，120 列宽）  
+- **仅检查格式 / 跳过重复检查**：
+
+```bat
+bash scripts/clang-format-check.sh
+mvn -DskipFormatCheck=true verify package
+```
+
+### Issue 跟踪（2026-06）
+
+| # | 标题 | 状态 |
+|---|------|------|
+| [#2](https://github.com/wutcst/kai-fa-goood/issues/2) | [里程碑 1] 三人联机核心功能开发 | ✅ 已关闭 |
+| [#3](https://github.com/wutcst/kai-fa-goood/issues/3) | 三人联机专属关卡设计 | ✅ 已关闭 |
+| [#6](https://github.com/wutcst/kai-fa-goood/issues/6) | CI/CD 流水线维护与自动化打包 | ✅ 已关闭 |
+| [#4](https://github.com/wutcst/kai-fa-goood/issues/4) | 毒娃角色贴图资源制作 | 🔓 开放 |
+| [#5](https://github.com/wutcst/kai-fa-goood/issues/5) | 单元测试与集成测试 | 🔓 开放 |
+| [#7](https://github.com/wutcst/kai-fa-goood/issues/7) | 游戏机关扩展：传送门与移动平台 | 🔓 开放 |
+| [#8](https://github.com/wutcst/kai-fa-goood/issues/8) | 游戏内暂停菜单与 HUD 优化 | 🔓 开放 |
+| [#9](https://github.com/wutcst/kai-fa-goood/issues/9) | 单人图关卡设计（1 人模式） | 🔓 开放 |
 
 ---
 
@@ -221,14 +276,14 @@ fireice_client.exe 127.0.0.1 poison
 
 | # | 碰撞文件 | 视觉文件 | 名称 | 人数 | 当前地图特点 |
 |---|----------|----------|------|------|--------------|
-| 1 | `level01_collision.txt` | `level01.tmx` | 入门试炼 | 1～3 | 教程关，侧轨 + 平台跳跃 |
-| 2 | `level02_collision.txt` | `level02.tmx` | 双梯汇合 | 1～3 | 左右对称阶梯，顶部汇合 |
-| 3 | `level03_collision.txt` | `level03.tmx` | 中央台阶 | 1～3 | 中央错落平台 |
-| 4 | `level04_collision.txt` | `level04.tmx` | 踏石穿越 | 1～3 | 踏脚石式斜向平台 |
-| 5 | `level05_collision.txt` | `level05.tmx` | 三岔合流 | 1～3 | 三列短梯，底部汇合（含毒娃） |
-| 6 | `level06_collision.txt` | `level06.tmx` | 协作天桥 | 1～3 | 上下长桥 + 中间踏脚石 |
-| 7 | `level07_collision.txt` | `level07.tmx` | 之字攀升 | 1～3 | 之字形左右交替上升 |
-| 8 | `level08_collision.txt` | `level08.tmx` | 终局高台 | 1～3 | 对称上升，中央出口台 |
+| 1 | `level01_collision.txt` | `level01.tmx` | Forest Entrance | 1～3 | 教程关，侧轨 + 平台跳跃 |
+| 2 | `level02_collision.txt` | `level02.tmx` | Banana Temple | 1～3 | 消失平台、泥浆陷阱 |
+| 3 | `level03_collision.txt` | `level03.tmx` | Temple Gates | 1～3 | 按钮开门、机关（开发中） |
+| 4 | `level04_collision.txt` | `level04.tmx` | Gem Grotto | 1～3 | 收集全部宝石 |
+| 5 | `level05_collision.txt` | `level05.tmx` | Vertical Shaft | 1～3 | 协作向上攀爬 |
+| 6 | `level06_collision.txt` | `level06.tmx` | Co-op Bridge | 1～3 | 上下长桥 + 中间踏脚石 |
+| 7 | `level07_collision.txt` | `level07.tmx` | Element Maze | 1～3 | 元素伤害迷宫 |
+| 8 | `level08_collision.txt` | `level08.tmx` | Forest Shrine | 1～3 | 终局神社挑战 |
 
 关卡注册位于 `fire-ice/src/common/LevelCatalog.cpp`。新增关卡后需同步修改该文件并重新编译。
 
