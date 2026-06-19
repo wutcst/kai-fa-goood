@@ -297,8 +297,8 @@ void TiledMapRenderer::drawGidSprite(sf::RenderTexture& target, int rawGid, floa
     }
 
     const int columns = std::max(1, tileset->columns);
-    const int rows = static_cast<int>(tileset->texture.getSize().y /
-                                      static_cast<unsigned>(std::max(1, tileset->tileHeight)));
+    const int rows =
+        static_cast<int>(tileset->texture.getSize().y / static_cast<unsigned>(std::max(1, tileset->tileHeight)));
     const int maxTiles = rows * columns;
     if (localId >= maxTiles) {
         return;
@@ -335,8 +335,8 @@ void TiledMapRenderer::drawGidSpriteToWindow(sf::RenderWindow& window, int rawGi
     }
 
     const int columns = std::max(1, tileset->columns);
-    const int rows = static_cast<int>(tileset->texture.getSize().y /
-                                      static_cast<unsigned>(std::max(1, tileset->tileHeight)));
+    const int rows =
+        static_cast<int>(tileset->texture.getSize().y / static_cast<unsigned>(std::max(1, tileset->tileHeight)));
     const int maxTiles = rows * columns;
     if (localId >= maxTiles) {
         return;
@@ -344,10 +344,8 @@ void TiledMapRenderer::drawGidSpriteToWindow(sf::RenderWindow& window, int rawGi
     const int sx = (localId % columns) * tileset->tileWidth;
     const int sy = (localId / columns) * tileset->tileHeight;
 
-    const float drawWidth =
-        (width > 0.0f ? width : static_cast<float>(tileset->tileWidth)) * mapScale_;
-    const float drawHeight =
-        (height > 0.0f ? height : static_cast<float>(tileset->tileHeight)) * mapScale_;
+    const float drawWidth = (width > 0.0f ? width : static_cast<float>(tileset->tileWidth)) * mapScale_;
+    const float drawHeight = (height > 0.0f ? height : static_cast<float>(tileset->tileHeight)) * mapScale_;
     const float drawX = x * mapScale_;
     const float drawY = y * mapScale_ - drawHeight;
 
@@ -487,8 +485,7 @@ void TiledMapRenderer::bake() {
     isBaked_ = true;
 }
 
-void TiledMapRenderer::drawStatic(sf::RenderWindow& window,
-                                    const std::function<bool(int, int)>& skipTile) const {
+void TiledMapRenderer::drawStatic(sf::RenderWindow& window, const std::function<bool(int, int)>& skipTile) const {
     if (!isLoaded_) {
         return;
     }
@@ -506,14 +503,13 @@ void TiledMapRenderer::drawStatic(sf::RenderWindow& window,
     drawObjectTilesToWindow(window);
 }
 
-void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, uint32_t collectedMask,
-                                        uint32_t collectedMaskHi, uint32_t collectedMaskExt) const {
+void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, uint32_t collectedMask, uint32_t collectedMaskHi,
+                                        uint32_t collectedMaskExt) const {
     for (const CollectibleObjectTile& obj : collectibleObjectTiles_) {
         const uint32_t bit = 1u << (obj.index % 32u);
         const uint8_t word = obj.index / 32u;
-        const bool taken =
-            word == 0 ? ((collectedMask & bit) != 0)
-                      : (word == 1 ? ((collectedMaskHi & bit) != 0) : ((collectedMaskExt & bit) != 0));
+        const bool taken = word == 0 ? ((collectedMask & bit) != 0)
+                                     : (word == 1 ? ((collectedMaskHi & bit) != 0) : ((collectedMaskExt & bit) != 0));
         if (taken) {
             continue;
         }

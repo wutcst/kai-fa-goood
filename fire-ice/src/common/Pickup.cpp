@@ -151,8 +151,7 @@ void collectPickups(PlayerState& player, const std::vector<Pickup>& pickups, uin
         if (word > 2) {
             continue;
         }
-        const uint32_t maskWord =
-            word == 0 ? collectedMask : (word == 1 ? collectedMaskHi : collectedMaskExt);
+        const uint32_t maskWord = word == 0 ? collectedMask : (word == 1 ? collectedMaskHi : collectedMaskExt);
         if (maskWord & bit) {
             continue;
         }
