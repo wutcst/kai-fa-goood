@@ -18,129 +18,6 @@ namespace {
 
 constexpr float COUNTDOWN_SECONDS = 3.0f;
 
-bool pickupTaken(const WorldState& world, const Pickup& pickup) {
-    const uint32_t bit = 1u << (pickup.index % 32u);
-    const uint8_t word = pickup.index / 32u;
-    if (word == 0) {
-        return (world.collectedPickupsMask & bit) != 0;
-    }
-    if (word == 1) {
-        return (world.collectedPickupsMaskHi & bit) != 0;
-    }
-    return (world.collectedPickupsMaskExt & bit) != 0;
-}
-
-void markPickupTaken(WorldState& world, PlayerState& player, const Pickup& pickup) {
-    const uint32_t bit = 1u << (pickup.index % 32u);
-    const uint8_t word = pickup.index / 32u;
-    if (word == 0) {
-        world.collectedPickupsMask |= bit;
-    } else if (word == 1) {
-        world.collectedPickupsMaskHi |= bit;
-    } else {
-        world.collectedPickupsMaskExt |= bit;
-    }
-    ++player.gems;
-}
-
-void syncMagnetToWorld(const LevelRuntime& runtime, WorldState& world) {
-    world.magnetActive = runtime.magnetActive ? 1 : 0;
-    world.magnetFalling = runtime.magnetFalling ? 1 : 0;
-    world.magnetOwnerSlot = runtime.magnetOwnerSlot;
-    world.magnetX = runtime.magnetX;
-    world.magnetY = runtime.magnetY;
-    world.magnetTimer = runtime.magnetTimer;
-}
-
-void spawnMagnet(LevelRuntime& runtime, const GameMap& map) {
-    const float left = TILE_SIZE * 2.0f;
-    const float right = std::max(left, static_cast<float>(map.width()) * TILE_SIZE - TILE_SIZE * 2.0f);
-    const float t = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
-    runtime.magnetX = left + (right - left) * t;
-    runtime.magnetY = -MAGNET_PICKUP_SIZE;
-    runtime.magnetFalling = true;
-    runtime.magnetActive = false;
-    runtime.magnetOwnerSlot = 255;
-    runtime.magnetTimer = 0.0f;
-}
-
-void updateMagnet(LevelRuntime& runtime, GameMap& map, WorldState& world, std::vector<Pickup>& pickups, float dt) {
-    if (!runtime.magnetEnabled) {
-        runtime.magnetFalling = false;
-        runtime.magnetActive = false;
-        syncMagnetToWorld(runtime, world);
-        return;
-    }
-
-    runtime.magnetElapsed += dt;
-    if (!runtime.magnetFalling && !runtime.magnetActive && runtime.magnetElapsed >= runtime.magnetNextDropTime) {
-        spawnMagnet(runtime, map);
-    }
-
-    if (runtime.magnetFalling) {
-        runtime.magnetY += MAGNET_FALL_SPEED * dt;
-        const float magnetLeft = runtime.magnetX - MAGNET_PICKUP_SIZE * 0.5f;
-        const float magnetTop = runtime.magnetY - MAGNET_PICKUP_SIZE * 0.5f;
-        const AABB magnetBox{magnetLeft, magnetTop, MAGNET_PICKUP_SIZE, MAGNET_PICKUP_SIZE};
-        for (std::size_t i = 0; i < MAX_PLAYERS; ++i) {
-            PlayerState& player = world.players[i];
-            if (!player.alive || player.role == PlayerRole::None) {
-                continue;
-            }
-            if (!playerBounds(player).intersects(magnetBox)) {
-                continue;
-            }
-            runtime.magnetFalling = false;
-            runtime.magnetActive = true;
-            runtime.magnetOwnerSlot = static_cast<uint8_t>(i);
-            runtime.magnetTimer = MAGNET_EFFECT_SECONDS;
-            break;
-        }
-        if (runtime.magnetY > static_cast<float>(map.height()) * TILE_SIZE + TILE_SIZE) {
-            runtime.magnetFalling = false;
-            runtime.magnetNextDropTime += MAGNET_DROP_INTERVAL;
-        }
-    }
-
-    if (runtime.magnetActive) {
-        runtime.magnetTimer = std::max(0.0f, runtime.magnetTimer - dt);
-        if (runtime.magnetOwnerSlot < MAX_PLAYERS) {
-            PlayerState& owner = world.players[runtime.magnetOwnerSlot];
-            runtime.magnetX = owner.x + PLAYER_WIDTH * 0.5f;
-            runtime.magnetY = owner.y;
-            const float targetX = owner.x + PLAYER_WIDTH * 0.5f;
-            const float targetY = owner.y + PLAYER_HEIGHT * 0.5f;
-            for (Pickup& pickup : pickups) {
-                if (pickupTaken(world, pickup)) {
-                    continue;
-                }
-                const float centerX = pickup.x + pickup.w * 0.5f;
-                const float centerY = pickup.y + pickup.h * 0.5f;
-                const float dx = targetX - centerX;
-                const float dy = targetY - centerY;
-                const float dist = std::sqrt(dx * dx + dy * dy);
-                if (dist > MAGNET_ATTRACT_RADIUS || dist <= 0.01f) {
-                    continue;
-                }
-                const float step = std::min(dist, MAGNET_ATTRACT_SPEED * dt);
-                pickup.x += dx / dist * step;
-                pickup.y += dy / dist * step;
-                const AABB pickupBox{pickup.x, pickup.y, pickup.w, pickup.h};
-                if (playerBounds(owner).intersects(pickupBox)) {
-                    markPickupTaken(world, owner, pickup);
-                }
-            }
-        }
-        if (runtime.magnetTimer <= 0.0f) {
-            runtime.magnetActive = false;
-            runtime.magnetOwnerSlot = 255;
-            runtime.magnetNextDropTime += MAGNET_DROP_INTERVAL;
-        }
-    }
-
-    syncMagnetToWorld(runtime, world);
-}
-
 }  // namespace
 
 // ============================================================================
@@ -225,8 +102,6 @@ void Room::resetWorld() {
     world.collectedPickupsMaskHi = 0;
     world.collectedPickupsMaskExt = 0;
     resetLevelRuntime(levelRuntime);
-    levelRuntime.magnetEnabled = selectedLevelIndex == 1;
-    syncMagnetToWorld(levelRuntime, world);
     syncVanishingMask(levelRuntime, world);
 
     for (PlayerState& player : world.players) {
@@ -429,23 +304,14 @@ void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
         }
         if (action == PlayerAction::SelectLevel) {
             if (value < filteredCount) {
-                const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);
-                if (value != currentFiltered) {
-                    selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
-                    world.lobbyStep = 1;
-                    clients[slot].ready = true;
-                    syncConnectedCount();
-                } else if (!clients[slot].ready) {
-                    clients[slot].ready = true;
-                    syncConnectedCount();
-                    std::cout << "[Room " << code << "] Slot " << static_cast<int>(slot) << " selected level"
-                              << std::endl;
-                } else {
-                    std::cout << "[Room " << code << "] Slot " << static_cast<int>(slot) << " confirmed level"
-                              << std::endl;
-                    if (allConnectedReady())
-                        beginCountdown();
-                }
+                selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
+                world.lobbyStep = 1;
+                clients[slot].ready = true;
+                syncConnectedCount();
+                std::cout << "[Room " << code << "] Slot " << static_cast<int>(slot) << " selected level and ready"
+                          << std::endl;
+                if (allConnectedReady())
+                    beginCountdown();
             }
             return;
         }
@@ -532,7 +398,6 @@ void Room::simulateTick() {
         player.atExit = sampleExit(map, player);
     }
 
-    updateMagnet(levelRuntime, map, world, pickups, TICK_DT);
     updateLevelMechanics(levelRuntime, map, world, TICK_DT);
     updatePhase();
     ++world.tick;

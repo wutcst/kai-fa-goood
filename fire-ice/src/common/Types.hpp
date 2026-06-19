@@ -69,7 +69,6 @@ constexpr uint8_t MAX_PLAYER_NAME = 16;
 constexpr uint8_t MAX_PLAYERS = 3;
 constexpr uint8_t MAX_ROOM_CODE = 8;
 constexpr uint8_t MAX_MUD_PARTICLES = 12;
-constexpr uint8_t MAX_PICKUPS = 96;
 constexpr uint16_t MAX_VANISHING_SLOTS = 288;
 
 inline InputFlags operator|(InputFlags a, InputFlags b) {
@@ -153,13 +152,6 @@ struct WorldState {
     uint32_t collectedPickupsMask = 0;
     uint32_t collectedPickupsMaskHi = 0;
     uint32_t collectedPickupsMaskExt = 0;
-    uint8_t magnetActive = 0;
-    uint8_t magnetFalling = 0;
-    uint8_t magnetOwnerSlot = 255;
-    uint8_t magnetPad = 0;
-    float magnetX = 0.0f;
-    float magnetY = 0.0f;
-    float magnetTimer = 0.0f;
     uint16_t vanishingCount = 0;
     uint32_t vanishingHidden[9]{};
     uint8_t mudParticleCount = 0;
