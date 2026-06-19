@@ -1973,8 +1973,10 @@ void GameClient::drawMagnet(sf::RenderWindow& window) const {
     sf::CircleShape halo(MAGNET_PICKUP_SIZE * 0.8f);
     halo.setOrigin(MAGNET_PICKUP_SIZE * 0.8f, MAGNET_PICKUP_SIZE * 0.8f);
     halo.setPosition(renderWorld_.magnetX, renderWorld_.magnetY);
-    const sf::Color haloColor = renderWorld_.magnetActive != 0 ? sf::Color(120, 180, 255, 70)
-                                                             : sf::Color(255, 230, 120, 80);
+    sf::Color haloColor(255, 230, 120, 80);
+    if (renderWorld_.magnetActive != 0) {
+        haloColor = sf::Color(120, 180, 255, 70);
+    }
     halo.setFillColor(haloColor);
     window.draw(halo);
 

@@ -79,10 +79,9 @@ void updateMagnet(LevelRuntime& runtime, GameMap& map, WorldState& world, std::v
 
     if (runtime.magnetFalling) {
         runtime.magnetY += MAGNET_FALL_SPEED * dt;
-        const AABB magnetBox{runtime.magnetX - MAGNET_PICKUP_SIZE * 0.5f,
-                             runtime.magnetY - MAGNET_PICKUP_SIZE * 0.5f,
-                             MAGNET_PICKUP_SIZE,
-                             MAGNET_PICKUP_SIZE};
+        const float magnetLeft = runtime.magnetX - MAGNET_PICKUP_SIZE * 0.5f;
+        const float magnetTop = runtime.magnetY - MAGNET_PICKUP_SIZE * 0.5f;
+        const AABB magnetBox{magnetLeft, magnetTop, MAGNET_PICKUP_SIZE, MAGNET_PICKUP_SIZE};
         for (std::size_t i = 0; i < MAX_PLAYERS; ++i) {
             PlayerState& player = world.players[i];
             if (!player.alive || player.role == PlayerRole::None) {
