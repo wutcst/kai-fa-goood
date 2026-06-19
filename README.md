@@ -64,7 +64,7 @@
   2. **Maven 构建流水线**（`mvn verify package`）：  
      - C++ 单元测试（Google Test）+ 服务端冒烟测试失败则 **CI 失败**  
      - Java 单元测试（JUnit 5）失败则 **CI 失败**  
-  3. **自动化打包**：通过后生成 **`target/fire-ice-1.0.0.jar`**（含启动器 + 原生 exe/DLL + 资源），上传至 Actions Artifact  
+  3. **自动化打包**：通过后生成 **`target/fire-ice-1.0.0-release.jar`**（含启动器 + 原生 exe/DLL + 资源），上传至 Actions Artifact
   4. **手动发布**：在 Actions 页选择 `CI - Build & Check` → `Run workflow`，可额外创建 GitHub Release  
 
 - **发布 JAR 用法**：

@@ -97,7 +97,7 @@
                             <mainClass>cn.edu.whut.sept.fireice.Launcher</mainClass>
                         </manifest>
                     </archive>
-                    <appendAssemblyId>false</appendAssemblyId>
+                    <appendAssemblyId>true</appendAssemblyId>
                 </configuration>
                 <executions>
                     <execution>

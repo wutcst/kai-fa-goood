@@ -42,7 +42,7 @@ jobs:
       - name: Verify release JAR
         shell: bash
         run: |
-          JAR="target/fire-ice-1.0.0.jar"
+          JAR="target/fire-ice-1.0.0-release.jar"
           test -f "$JAR"
           java -jar "$JAR" --version
           ls -lh "$JAR"
@@ -51,7 +51,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fire-ice-release-jar
-          path: target/fire-ice-1.0.0.jar
+          path: target/fire-ice-1.0.0-release.jar
           retention-days: 30
 
       - name: Upload native binaries
@@ -79,12 +79,13 @@ jobs:
           name: fire-ice-release-jar
           path: dist/
 
-      - name: Create GitHub Release
+      - name: Create GitHub Pre-release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Fire-Ice Online v1.0.${{ github.run_number }}
+          tag_name: v0.3.0-alpha.${{ github.run_number }}
+          name: Fire-Ice Online v0.3.0-alpha.${{ github.run_number }}
+          prerelease: true
           generate_release_notes: true
-          files: dist/fire-ice-1.0.0.jar
+          files: dist/fire-ice-1.0.0-release.jar
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
