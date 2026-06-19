@@ -39,10 +39,9 @@ void Room::selectLevel(uint8_t index, bool keepMapSelect) {
     }
 
     pickups = visualMapPath.empty() ? std::vector<Pickup>{} : loadPickupsFromTmx(visualMapPath);
-    levelRuntime.mudSpawners =
-        visualMapPath.empty() ? std::vector<Vec2>{} : loadMudSpawnsFromTmx(visualMapPath);
-    levelRuntime.fanZones =
-        visualMapPath.empty() ? std::vector<FanZone>{} : loadFanZonesFromTmx(visualMapPath, 16, &levelRuntime.fanTileCoords);
+    levelRuntime.mudSpawners = visualMapPath.empty() ? std::vector<Vec2>{} : loadMudSpawnsFromTmx(visualMapPath);
+    levelRuntime.fanZones = visualMapPath.empty() ? std::vector<FanZone>{}
+                                                  : loadFanZonesFromTmx(visualMapPath, 16, &levelRuntime.fanTileCoords);
     initLevelRuntime(map, levelRuntime);
 
     applyLevelMetadata();
@@ -70,8 +69,7 @@ void Room::applyLevelMetadata() {
     const uint8_t playerCount = std::max(uint8_t{1}, world.connectedCount);
     world.levelIndex = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);
     world.levelCount = catalog.countForPlayerCount(playerCount);
-    world.totalGems = static_cast<uint8_t>(
-        std::min(255, map.countGems() + static_cast<int>(pickups.size())));
+    world.totalGems = static_cast<uint8_t>(std::min(255, map.countGems() + static_cast<int>(pickups.size())));
     std::snprintf(world.levelName, MAX_LEVEL_NAME, "%s", info.title);
     std::snprintf(world.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
     syncProgressToWorld();
@@ -298,13 +296,23 @@ void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
                 newFiltered = currentFiltered - 1;
             else if (action == PlayerAction::NextLevel && currentFiltered + 1 < filteredCount)
                 newFiltered = currentFiltered + 1;
-            if (newFiltered != currentFiltered)
-                selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount), true);
+            if (newFiltered != currentFiltered) {
+                selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount));
+                world.lobbyStep = 1;
+            }
             return;
         }
         if (action == PlayerAction::SelectLevel) {
-            if (value < filteredCount)
-                selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount), true);
+            if (value < filteredCount) {
+                selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
+                world.lobbyStep = 1;
+                clients[slot].ready = true;
+                syncConnectedCount();
+                std::cout << "[Room " << code << "] Slot " << static_cast<int>(slot) << " selected level and ready"
+                          << std::endl;
+                if (allConnectedReady())
+                    beginCountdown();
+            }
             return;
         }
         if (action == PlayerAction::Ready) {
@@ -418,10 +426,9 @@ void Room::updatePhase() {
         for (const Pickup& pickup : pickups) {
             const uint32_t bit = 1u << (pickup.index % 32u);
             const uint8_t word = pickup.index / 32u;
-            const bool taken =
-                word == 0 ? ((world.collectedPickupsMask & bit) != 0)
-                          : (word == 1 ? ((world.collectedPickupsMaskHi & bit) != 0)
-                                       : ((world.collectedPickupsMaskExt & bit) != 0));
+            const bool taken = word == 0 ? ((world.collectedPickupsMask & bit) != 0)
+                                         : (word == 1 ? ((world.collectedPickupsMaskHi & bit) != 0)
+                                                      : ((world.collectedPickupsMaskExt & bit) != 0));
             if (taken) {
                 ++collected;
             }
@@ -430,8 +437,8 @@ void Room::updatePhase() {
             if (!clients[i].connected) {
                 continue;
             }
-            collected = static_cast<uint8_t>(
-                std::max(static_cast<int>(collected), static_cast<int>(world.players[i].gems)));
+            collected =
+                static_cast<uint8_t>(std::max(static_cast<int>(collected), static_cast<int>(world.players[i].gems)));
         }
         if (collected >= world.totalGems) {
             world.phase = GamePhase::Victory;

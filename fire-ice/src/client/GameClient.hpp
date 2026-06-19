@@ -59,6 +59,9 @@ private:
     InputFlags readLocalInput() const;
     void render();
     void renderTitleScreen();
+    void renderTitleCharacters();
+    void renderTitleSpotlight();
+    void drawLobbyBackdrop(sf::Color top, sf::Color bottom);
     void renderHelpOverlay();
     void renderCreditsOverlay();
     void renderLobbyScreen();
@@ -85,6 +88,7 @@ private:
     void drawDynamicTiles(sf::RenderWindow& window) const;
     void drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;
     void drawPlayer(sf::RenderWindow& window, const PlayerState& player) const;
+    void drawHud(sf::RenderWindow& window) const;
     void drawCountdownOverlay(sf::RenderWindow& window, float centerX) const;
     void drawResultOverlay(sf::RenderWindow& window, float centerX, bool victory) const;
     void drawPauseButton(sf::RenderWindow& window) const;
@@ -134,6 +138,7 @@ private:
     float roomAnimTimer_ = 0.0f;
 
     InputFlags currentInput_ = InputFlags::None;
+    InputFlags lastSentInput_ = InputFlags::None;
     uint32_t inputTick_ = 0;
 
     std::chrono::steady_clock::time_point lastInputSend_;

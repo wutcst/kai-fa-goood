@@ -137,8 +137,7 @@ bool GameMap::loadFromText(const std::string& text) {
             const TileType type = charToTile(c);
             tiles_[static_cast<std::size_t>(y * width_ + x)] = type;
             if (type == TileType::VanishingPlatform && nextVanishingSlot < MAX_VANISHING_SLOTS) {
-                vanishingSlots_[static_cast<std::size_t>(y * width_ + x)] =
-                    static_cast<int16_t>(nextVanishingSlot++);
+                vanishingSlots_[static_cast<std::size_t>(y * width_ + x)] = static_cast<int16_t>(nextVanishingSlot++);
             }
 
             if (c == 'f') {

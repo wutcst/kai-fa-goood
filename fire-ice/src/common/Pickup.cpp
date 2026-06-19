@@ -11,6 +11,8 @@ namespace fireice {
 
 namespace {
 
+constexpr float kPickupHitboxScale = 0.42f;
+
 float attrFloat(const std::string& tag, const char* name, float fallback) {
     const std::string key = std::string(name) + "=\"";
     const std::size_t pos = tag.find(key);
@@ -151,13 +153,16 @@ void collectPickups(PlayerState& player, const std::vector<Pickup>& pickups, uin
         if (word > 2) {
             continue;
         }
-        const uint32_t maskWord =
-            word == 0 ? collectedMask : (word == 1 ? collectedMaskHi : collectedMaskExt);
+        const uint32_t maskWord = word == 0 ? collectedMask : (word == 1 ? collectedMaskHi : collectedMaskExt);
         if (maskWord & bit) {
             continue;
         }
 
-        const AABB pickupBox{pickup.x, pickup.y, pickup.w, pickup.h};
+        const float hitW = pickup.w * kPickupHitboxScale;
+        const float hitH = pickup.h * kPickupHitboxScale;
+        const float hitX = pickup.x + (pickup.w - hitW) * 0.5f;
+        const float hitY = pickup.y + (pickup.h - hitH) * 0.5f;
+        const AABB pickupBox{hitX, hitY, hitW, hitH};
         if (!box.intersects(pickupBox)) {
             continue;
         }

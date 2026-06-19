@@ -45,7 +45,7 @@ const sf::Texture& AssetManager::mapBossIcon(bool unlocked, bool completed) cons
 bool AssetManager::load() {
     ready_ = loadTexture(fireBoy_, "fireman.png") && loadTexture(waterGirl_, "watergirl.png") &&
              loadTexture(gemRed_, "red.png") && loadTexture(gemBlue_, "blue.png") &&
-             loadTexture(lobbyBackground_, "start.png") && loadTexture(gameBackground_, "gamenew.jpg") &&
+             loadTexture(lobbyBackground_, "title_pixel_bg.png") && loadTexture(gameBackground_, "gamenew.jpg") &&
              loadTexture(winScreen_, "winend.png") && loadTexture(winScreenPartial_, "winend2.png") &&
              loadTexture(loseScreen_, "loseend.png");
 

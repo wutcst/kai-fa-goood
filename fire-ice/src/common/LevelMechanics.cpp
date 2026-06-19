@@ -97,7 +97,7 @@ void initLevelRuntime(const GameMap& map, LevelRuntime& runtime) {
         }
     }
 done_vanishing_scan:
-    (void)0;
+    (void) 0;
 }
 
 void triggerVanishingForPlayer(const PlayerState& player, const GameMap& map, LevelRuntime& runtime) {
@@ -153,8 +153,8 @@ void resetLevelRuntime(LevelRuntime& runtime) {
 }
 
 void syncVanishingMask(const LevelRuntime& runtime, WorldState& world) {
-    world.vanishingCount = static_cast<uint16_t>(
-        std::min(runtime.vanishingCoords.size(), static_cast<std::size_t>(MAX_VANISHING_SLOTS)));
+    world.vanishingCount =
+        static_cast<uint16_t>(std::min(runtime.vanishingCoords.size(), static_cast<std::size_t>(MAX_VANISHING_SLOTS)));
     for (int i = 0; i < 9; ++i) {
         world.vanishingHidden[i] = 0;
     }
@@ -202,8 +202,7 @@ void updateLevelMechanics(LevelRuntime& runtime, GameMap& map, WorldState& world
             runtime.mudSpawnTimer = 0.0f;
             const Vec2& spawn = runtime.mudSpawners[static_cast<std::size_t>(
                 runtime.nextMudSpawnIndex % static_cast<int>(runtime.mudSpawners.size()))];
-            runtime.nextMudSpawnIndex =
-                (runtime.nextMudSpawnIndex + 1) % static_cast<int>(runtime.mudSpawners.size());
+            runtime.nextMudSpawnIndex = (runtime.nextMudSpawnIndex + 1) % static_cast<int>(runtime.mudSpawners.size());
 
             for (MudParticle& particle : runtime.mudParticles) {
                 if (particle.active) {
