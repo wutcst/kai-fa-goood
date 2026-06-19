@@ -2,94 +2,89 @@ name: CI - Build & Check
 
 on:
   push:
-    branches: [master]
+    branches: [master, lzh]
   pull_request:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   format-check:
     name: Code Format Check (clang-format)
     runs-on: windows-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
       - name: Check clang-format
         shell: bash
-        run: |
-          echo "Checking C++ source formatting (warnings only)..."
-          SOURCES=$(find fire-ice/src -name '*.cpp' -o -name '*.hpp' | sort)
-          WARNINGS=0
-          for f in $SOURCES; do
-            clang-format --dry-run "$f" 2>&1 || {
-              echo "::warning file=$f::Formatting differs. Run: clang-format -i $f"
-              WARNINGS=1
-            }
-          done
-          if [ "$WARNINGS" -eq 1 ]; then
-            echo "::warning::Some files have formatting differences (non-blocking)."
-          else
-            echo "All source files passed format check."
-          fi
+        run: bash scripts/clang-format-check.sh
 
-  build:
-    name: Build (MSVC x64 Release)
+  build-test-release:
+    name: Build, Test & Release JAR
+    needs: format-check
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: maven
 
       - uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: amd64
 
-      - name: Configure CMake
+      - name: Maven verify and package release JAR
+        shell: bash
+        run: mvn -B -DskipFormatCheck=true verify package
+
+      - name: Verify release JAR
         shell: bash
         run: |
-          cd fire-ice
-          cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+          JAR="target/fire-ice-1.0.0.jar"
+          test -f "$JAR"
+          java -jar "$JAR" --version
+          ls -lh "$JAR"
 
-      - name: Build
-        shell: bash
-        run: |
-          cd fire-ice
-          cmake --build build --config Release --parallel
-
-      - name: Collect artifacts
-        shell: bash
-        run: |
-          mkdir -p artifacts
-          cp fire-ice/build/fireice_server.exe artifacts/ 2>/dev/null || true
-          cp fire-ice/build/fireice_client.exe artifacts/ 2>/dev/null || true
-          cp fire-ice/build/*.dll artifacts/ 2>/dev/null || true
-          mkdir -p artifacts/levels
-          cp -r fire-ice/assets/levels/* artifacts/levels/ 2>/dev/null || true
-          mkdir -p artifacts/textures
-          cp -r fire-ice/assets/textures/* artifacts/textures/ 2>/dev/null || true
-          echo "Artifacts collected:"
-          ls -la artifacts/
-
-      - name: Upload artifacts
+      - name: Upload release JAR
         uses: actions/upload-artifact@v4
         with:
-          name: fireice-release
-          path: artifacts/
+          name: fire-ice-release-jar
+          path: target/fire-ice-1.0.0.jar
+          retention-days: 30
+
+      - name: Upload native binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: fire-ice-native-bin
+          path: |
+            fire-ice/build/fireice_server.exe
+            fire-ice/build/fireice_client.exe
+            fire-ice/build/*.dll
           retention-days: 7
 
-  test:
-    name: Smoke Test
-    needs: build
-    runs-on: windows-latest
-    continue-on-error: true
+  publish-release:
+    name: Publish GitHub Release
+    needs: build-test-release
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
-          name: fireice-release
-          path: test-bin/
+          name: fire-ice-release-jar
+          path: dist/
 
-      - name: Verify server starts
-        shell: bash
-        run: |
-          cd test-bin
-          echo "Starting server for smoke test..."
-          timeout 5 ./fireice_server.exe 2>&1 || true
-          echo "Server smoke test finished."
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Fire-Ice Online v1.0.${{ github.run_number }}
+          generate_release_notes: true
+          files: dist/fire-ice-1.0.0.jar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
