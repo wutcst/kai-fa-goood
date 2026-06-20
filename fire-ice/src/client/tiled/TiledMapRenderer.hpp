@@ -13,7 +13,7 @@ namespace fireice {
 class TiledMapRenderer {
 public:
     bool load(const std::string& tmxPath);
-    void bake();  // 预渲染静态层到纹理，运行时只 draw 一次
+    void bake();  // 预渲染静态层到纹理，用于选关缩略图
     void drawStatic(sf::RenderWindow& window, const std::function<bool(int, int)>& skipTile = {}) const;
     void drawCollectibles(sf::RenderWindow& window, uint32_t collectedMask, uint32_t collectedMaskHi = 0,
                           uint32_t collectedMaskExt = 0) const;
@@ -65,7 +65,8 @@ private:
     };
 
     const TilesetRef* findTileset(int gid) const;
-    void drawLayerToTarget(sf::RenderTexture& target, const Layer& layer) const;
+    void drawLayerToTarget(sf::RenderTexture& target, const Layer& layer,
+                           const std::function<bool(int, int)>& excludeTile = {}) const;
     void drawImageLayersToTarget(sf::RenderTexture& target, float scale) const;
     void drawImageLayersToWindow(sf::RenderWindow& window) const;
     void drawObjectTilesToTarget(sf::RenderTexture& target) const;
@@ -73,6 +74,7 @@ private:
     void drawGidSpriteToWindow(sf::RenderWindow& window, int gid, float x, float y, float width, float height) const;
     void drawTileLayersToWindow(sf::RenderWindow& window, const std::function<bool(int, int)>& skipTile) const;
     void drawObjectTilesToWindow(sf::RenderWindow& window) const;
+    void drawCachedGrassToTarget(sf::RenderTexture& target, float mapPixelW, float mapPixelH) const;
     bool loadImageLayerTexture(const std::string& mapDir, const tmx::ImageLayerData& source, ImageLayer& out) const;
     void drawGrassUnderlay(sf::RenderWindow& window, float mapPixelW, float mapPixelH) const;
     void drawImageLayerRepeating(sf::RenderWindow& window, const ImageLayer& layer, float mapPixelW,
@@ -91,6 +93,8 @@ private:
     std::vector<ObjectTile> objectTiles_;
     std::vector<CollectibleObjectTile> collectibleObjectTiles_;
     std::string mapDirectory_;
+    ImageLayer cachedGrass_;
+    bool hasCachedGrass_ = false;
     sf::RenderTexture bakedTexture_;
     sf::Sprite bakedSprite_;
     bool isLoaded_ = false;

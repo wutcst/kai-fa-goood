@@ -57,6 +57,7 @@ add_executable(fireice_client
     src/client/GameClient.cpp
     src/client/UiHelper.cpp
     src/client/AssetManager.cpp
+    src/client/CharacterAnimator.cpp
     src/client/tiled/TmxUtil.cpp
     src/client/tiled/TiledMapRenderer.cpp
     src/client/main.cpp

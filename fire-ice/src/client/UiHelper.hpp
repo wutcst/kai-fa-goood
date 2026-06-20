@@ -31,12 +31,16 @@ public:
                           sf::Color color, float maxWidth, float lineSpacing = 4.0f) const;
     void drawTitleMenuItem(sf::RenderWindow& window, const std::string& text, float centerX, float y, unsigned size,
                            bool selected) const;
+    void drawArtTitleCentered(sf::RenderWindow& window, const std::string& text, float centerX, float y, unsigned size,
+                              float animPhase = 0.f) const;
 
     bool hasFont() const { return fontLoaded_; }
 
 private:
     mutable sf::Font font_;
+    mutable sf::Font boldFont_;
     bool fontLoaded_ = false;
+    bool boldFontLoaded_ = false;
 };
 
 }  // namespace fireice

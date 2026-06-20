@@ -17,6 +17,7 @@ namespace fireice {
 namespace {
 
 constexpr float COUNTDOWN_SECONDS = 3.0f;
+constexpr float COYOTE_TIME = 0.12f;
 
 }  // namespace
 
@@ -111,6 +112,8 @@ void Room::resetWorld() {
     for (ClientSlot& client : clients) {
         client.jumpHeld = false;
         client.airJumpUsedThisHold = false;
+        client.groundJumpConsumed = false;
+        client.coyoteTimer = 0.0f;
     }
 
     for (const SpawnPoint& spawn : map.spawns()) {
@@ -376,14 +379,33 @@ void Room::simulateTick() {
             continue;
 
         PlayerState& player = world.players[i];
-        const bool jumpNow = hasFlag(clients[i].pendingInput, InputFlags::Jump);
-        const bool jumpPressed = jumpNow && !clients[i].jumpHeld;
-        if (!jumpNow)
-            clients[i].airJumpUsedThisHold = false;
-        clients[i].jumpHeld = jumpNow;
-        applyInput(player, clients[i].pendingInput, TICK_DT, jumpPressed, jumpNow, clients[i].airJumpUsedThisHold);
+        ClientSlot& client = clients[i];
+        const bool jumpNow = hasFlag(client.pendingInput, InputFlags::Jump);
+        const bool jumpPressed = jumpNow && !client.jumpHeld;
+        client.jumpHeld = jumpNow;
+
+        if (!jumpNow) {
+            client.airJumpUsedThisHold = false;
+            client.groundJumpConsumed = false;
+        }
+
+        // Coyote Time：离地后短暂窗口内仍视为在地面，可触发一次跳跃
+        const bool grounded = player.onGround || client.coyoteTimer > 0.0f;
+        bool groundJump = false;
+        if (jumpNow && grounded && !client.groundJumpConsumed) {
+            groundJump = true;
+            client.groundJumpConsumed = true;
+        }
+
+        const bool airJump = jumpPressed && !grounded;
+        applyInput(player, client.pendingInput, TICK_DT, groundJump, airJump, client.airJumpUsedThisHold);
         applyFanZones(player, levelRuntime.fanZones, TICK_DT);
         integratePlayer(player, map, world, TICK_DT);
+        if (player.onGround) {
+            client.coyoteTimer = COYOTE_TIME;
+        } else {
+            client.coyoteTimer = std::max(0.0f, client.coyoteTimer - TICK_DT);
+        }
         triggerVanishingForPlayer(player, map, levelRuntime);
 
         if (sampleHazard(map, player, world))

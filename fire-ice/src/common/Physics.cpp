@@ -101,7 +101,16 @@ AABB playerBounds(const PlayerState& player) {
     return {player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT};
 }
 
-void applyInput(PlayerState& player, InputFlags input, float dt, bool jumpPressed, bool jumpHeld,
+// 宝石拾取判定区域，比碰撞盒更宽更高
+AABB playerCollectBounds(const PlayerState& player) {
+    constexpr float kCollectWidth = TILE_SIZE * 1.35f;
+    constexpr float kCollectHeight = TILE_SIZE * 2.25f;
+    const float x = player.x + (PLAYER_WIDTH - kCollectWidth) * 0.5f;
+    const float y = player.y + PLAYER_HEIGHT - kCollectHeight;
+    return {x, y, kCollectWidth, kCollectHeight};
+}
+
+void applyInput(PlayerState& player, InputFlags input, float dt, bool groundJump, bool airJump,
                 bool& airJumpUsedThisHold) {
     if (!player.alive) {
         return;
@@ -117,12 +126,12 @@ void applyInput(PlayerState& player, InputFlags input, float dt, bool jumpPresse
 
     player.vx = move * MOVE_SPEED;
 
-    if (jumpPressed && player.onGround) {
+    if (groundJump) {
         player.vy = -JUMP_SPEED;
         player.onGround = false;
         player.airJumpsLeft = MAX_AIR_JUMPS;
         airJumpUsedThisHold = false;
-    } else if (!player.onGround && player.airJumpsLeft > 0 && jumpPressed) {
+    } else if (airJump && !player.onGround && player.airJumpsLeft > 0 && !airJumpUsedThisHold) {
         player.vy = -JUMP_SPEED;
         --player.airJumpsLeft;
         airJumpUsedThisHold = true;
@@ -134,6 +143,43 @@ void applyInput(PlayerState& player, InputFlags input, float dt, bool jumpPresse
 
     (void) dt;
 }
+
+namespace {
+
+// 低速跨越 tile 边界时吸附落地，减少边缘抖动
+bool snapPlayerToGround(PlayerState& player, const GameMap& map, const WorldState& world) {
+    if (!player.alive || player.vy > 80.0f) {
+        return false;
+    }
+
+    const float probeX = player.x + PLAYER_WIDTH * 0.5f;
+    const float feet = player.y + PLAYER_HEIGHT;
+    const int tx = static_cast<int>(std::floor(probeX / TILE_SIZE));
+    const int ty = static_cast<int>(std::floor((feet + 2.0f) / TILE_SIZE));
+    const float tileTop = static_cast<float>(ty) * TILE_SIZE;
+
+    if (feet < tileTop - 3.0f || feet > tileTop + 6.0f) {
+        return false;
+    }
+
+    const TileType type = map.tileAt(tx, ty);
+    if (type == TileType::Empty || type == TileType::Gem) {
+        return false;
+    }
+    if (type == TileType::OneWayPlatform || type == TileType::VanishingPlatform) {
+        return false;
+    }
+    if (!map.blocksPlayer(type, player.role, world.fireDoorOpen, world.waterDoorOpen, world.poisonDoorOpen)) {
+        return false;
+    }
+
+    player.y = tileTop - PLAYER_HEIGHT;
+    player.vy = 0.0f;
+    player.onGround = true;
+    return true;
+}
+
+}  // namespace
 
 void integratePlayer(PlayerState& player, const GameMap& map, WorldState& world, float dt) {
     if (!player.alive) {
@@ -149,6 +195,10 @@ void integratePlayer(PlayerState& player, const GameMap& map, WorldState& world,
 
     player.y += player.vy * dt;
     resolveAxis(player, map, world, false);
+
+    if (!player.onGround) {
+        snapPlayerToGround(player, map, world);
+    }
 
     if (player.onGround) {
         player.airJumpsLeft = 0;
@@ -234,7 +284,7 @@ void collectGems(PlayerState& player, GameMap& map) {
         return;
     }
 
-    const AABB box = playerBounds(player);
+    const AABB box = playerCollectBounds(player);
     const int minX = static_cast<int>(std::floor(box.left() / TILE_SIZE));
     const int maxX = static_cast<int>(std::floor((box.right() - 0.01f) / TILE_SIZE));
     const int minY = static_cast<int>(std::floor(box.top() / TILE_SIZE));

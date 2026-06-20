@@ -59,8 +59,9 @@ private:
     InputFlags readLocalInput() const;
     void render();
     void renderTitleScreen();
+    void renderTitleBackground();
+    void renderTitleEffects();
     void renderTitleCharacters();
-    void renderTitleSpotlight();
     void drawLobbyBackdrop(sf::Color top, sf::Color bottom);
     void renderHelpOverlay();
     void renderCreditsOverlay();
@@ -136,6 +137,8 @@ private:
     std::string playerName_;
     std::string typedRoomCode_;
     float roomAnimTimer_ = 0.0f;
+    float animTime_ = 0.0f;
+    sf::Clock animClock_;
 
     InputFlags currentInput_ = InputFlags::None;
     InputFlags lastSentInput_ = InputFlags::None;

@@ -1,6 +1,8 @@
 #include "UiHelper.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <vector>
 
 namespace fireice {
 
@@ -17,17 +19,50 @@ const char* kFontCandidates[] = {
     "C:/Windows/Fonts/simhei.ttf",
 };
 
+const char* kBoldFontCandidates[] = {
+    "C:/Windows/Fonts/msyhbd.ttc",
+    "C:/Windows/Fonts/simhei.ttf",
+    "C:/Windows/Fonts/msyh.ttc",
+};
+
+std::vector<std::string> splitUtf8Chars(const std::string& text) {
+    std::vector<std::string> chars;
+    for (std::size_t i = 0; i < text.size();) {
+        const unsigned char lead = static_cast<unsigned char>(text[i]);
+        std::size_t charLen = 1;
+        if (lead >= 0xF0) {
+            charLen = 4;
+        } else if (lead >= 0xE0) {
+            charLen = 3;
+        } else if (lead >= 0xC0) {
+            charLen = 2;
+        }
+        chars.push_back(text.substr(i, charLen));
+        i += charLen;
+    }
+    return chars;
+}
+
 }  // namespace
 
 bool UiHelper::loadFont() {
     for (const char* path : kFontCandidates) {
         if (font_.loadFromFile(path)) {
             fontLoaded_ = true;
-            return true;
+            break;
         }
     }
-    fontLoaded_ = false;
-    return false;
+    for (const char* path : kBoldFontCandidates) {
+        if (boldFont_.loadFromFile(path)) {
+            boldFontLoaded_ = true;
+            break;
+        }
+    }
+    if (!boldFontLoaded_ && fontLoaded_) {
+        boldFont_ = font_;
+        boldFontLoaded_ = true;
+    }
+    return fontLoaded_;
 }
 
 void UiHelper::drawPanel(sf::RenderWindow& window, const sf::FloatRect& area, sf::Color fill, float alpha) const {
@@ -299,6 +334,57 @@ void UiHelper::drawTitleMenuItem(sf::RenderWindow& window, const std::string& te
         window.draw(cursor);
         cursor.setPosition(centerX + textHalfWidth + 10.0f, midY);
         window.draw(cursor);
+    }
+}
+
+void UiHelper::drawArtTitleCentered(sf::RenderWindow& window, const std::string& text, float centerX, float y,
+                                    unsigned size, float animPhase) const {
+    if (!fontLoaded_ && !boldFontLoaded_) {
+        drawOutlinedCenteredText(window, text, centerX, y, size, sf::Color(255, 230, 90), sf::Color(80, 30, 10), 4.0f);
+        return;
+    }
+
+    const sf::Font& titleFont = boldFontLoaded_ ? boldFont_ : font_;
+    const auto chars = splitUtf8Chars(text);
+    if (chars.empty()) {
+        return;
+    }
+
+    float totalWidth = 0.f;
+    std::vector<float> charWidths;
+    charWidths.reserve(chars.size());
+    for (const std::string& ch : chars) {
+        sf::Text probe(toSfString(ch), titleFont, size);
+        const float width = probe.getLocalBounds().width;
+        charWidths.push_back(width);
+        totalWidth += width;
+    }
+    const float letterSpacing = static_cast<float>(size) * 0.08f;
+    totalWidth += letterSpacing * static_cast<float>(chars.size() > 0 ? chars.size() - 1 : 0);
+
+    float cursorX = centerX - totalWidth * 0.5f;
+    for (std::size_t i = 0; i < chars.size(); ++i) {
+        const float wave = std::sin(animPhase * 1.6f + static_cast<float>(i) * 0.85f) * 3.0f;
+        const float charY = y + wave + static_cast<float>((i % 2) * 2);
+        const sf::Color outlineColor(130, 48, 12);
+        const sf::Color fillColor = (i % 2 == 0) ? sf::Color(255, 236, 96) : sf::Color(255, 196, 72);
+        const sf::Color highlightColor(255, 252, 210, 150);
+
+        auto drawLayer = [&](float dx, float dy, unsigned layerSize, sf::Color fill, sf::Color outline,
+                             float thickness) {
+            sf::Text label(toSfString(chars[i]), titleFont, layerSize);
+            label.setFillColor(fill);
+            label.setOutlineColor(outline);
+            label.setOutlineThickness(thickness);
+            label.setPosition(cursorX + dx, charY + dy);
+            window.draw(label);
+        };
+
+        drawLayer(3.f, 5.f, size, sf::Color(20, 6, 30, 200), sf::Color(20, 6, 30), 6.f);
+        drawLayer(0.f, 0.f, size, fillColor, outlineColor, 5.f);
+        drawLayer(-1.f, -2.f, size, highlightColor, sf::Color(0, 0, 0, 0), 0.f);
+
+        cursorX += charWidths[i] + letterSpacing;
     }
 }
 

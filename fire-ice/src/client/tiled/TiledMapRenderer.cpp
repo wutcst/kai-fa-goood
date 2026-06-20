@@ -59,6 +59,7 @@ bool loadTilesetFromTsx(const std::string& tsxPath, int firstGid, TilesetLoadDat
         std::cerr << "[TiledMapRenderer] Failed to load tileset image: " << imagePath << std::endl;
         return false;
     }
+    out.texture.setSmooth(false);
     if (out.columns <= 0) {
         const unsigned texWidth = out.texture.getSize().x;
         out.columns = static_cast<int>(texWidth / static_cast<unsigned>(out.tileWidth));
@@ -93,6 +94,7 @@ bool loadTilesetFromTsj(const std::string& tsjPath, int firstGid, TilesetLoadDat
         std::cerr << "[TiledMapRenderer] Failed to load tileset image: " << imagePath << std::endl;
         return false;
     }
+    out.texture.setSmooth(false);
     if (out.columns <= 0) {
         const unsigned texWidth = out.texture.getSize().x;
         out.columns = static_cast<int>(texWidth / static_cast<unsigned>(out.tileWidth));
@@ -137,6 +139,7 @@ int TiledMapRenderer::decodeGid(int rawGid) {
 bool TiledMapRenderer::load(const std::string& tmxPath) {
     isLoaded_ = false;
     isBaked_ = false;
+    hasCachedGrass_ = false;
     tilesets_.clear();
     visualLayers_.clear();
     imageLayers_.clear();
@@ -264,6 +267,12 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
     } else if (tilesets_.empty()) {
         std::cerr << "[TiledMapRenderer] No tilesets loaded for map: " << resolvedTmx << std::endl;
     }
+
+    tmx::ImageLayerData grassSource;
+    grassSource.imageSource = "shared/grass_background.png";
+    grassSource.repeatX = true;
+    grassSource.repeatY = true;
+    hasCachedGrass_ = loadImageLayerTexture(mapDirectory_, grassSource, cachedGrass_);
 
     isLoaded_ = !tilesets_.empty() && !visualLayers_.empty();
     return isLoaded_;
@@ -416,15 +425,42 @@ void TiledMapRenderer::drawGidSpriteToWindow(sf::RenderWindow& window, int rawGi
     window.draw(sprite);
 }
 
-void TiledMapRenderer::drawLayerToTarget(sf::RenderTexture& target, const Layer& layer) const {
+void TiledMapRenderer::drawLayerToTarget(sf::RenderTexture& target, const Layer& layer,
+                                         const std::function<bool(int, int)>& excludeTile) const {
     for (int y = 0; y < mapHeight_; ++y) {
         for (int x = 0; x < mapWidth_; ++x) {
+            if (excludeTile && excludeTile(x, y)) {
+                continue;
+            }
             const int gid = layer.gids[static_cast<std::size_t>(y * mapWidth_ + x)];
             if (gid <= 0) {
                 continue;
             }
             drawGidSprite(target, gid, static_cast<float>(x * tileWidth_), static_cast<float>((y + 1) * tileHeight_),
                           static_cast<float>(tileWidth_), static_cast<float>(tileHeight_));
+        }
+    }
+}
+
+// 平铺绘制预缓存的草地背景，供 bake 与实时渲染共用
+void TiledMapRenderer::drawCachedGrassToTarget(sf::RenderTexture& target, float mapPixelW, float mapPixelH) const {
+    if (!hasCachedGrass_) {
+        return;
+    }
+
+    const sf::Vector2u texSize = cachedGrass_.texture.getSize();
+    if (texSize.x == 0 || texSize.y == 0) {
+        return;
+    }
+
+    const float stampW = static_cast<float>(cachedGrass_.imageWidth) * 1.0f;
+    const float stampH = static_cast<float>(cachedGrass_.imageHeight) * 1.0f;
+    for (float y = 0.0f; y < mapPixelH; y += stampH) {
+        for (float x = 0.0f; x < mapPixelW; x += stampW) {
+            sf::Sprite sprite(cachedGrass_.texture);
+            sprite.setScale(stampW / static_cast<float>(texSize.x), stampH / static_cast<float>(texSize.y));
+            sprite.setPosition(x, y);
+            target.draw(sprite);
         }
     }
 }
@@ -499,7 +535,6 @@ void TiledMapRenderer::drawObjectTilesToWindow(sf::RenderWindow& window) const {
 }
 
 void TiledMapRenderer::bake() {
-    // 仅用于选关缩略图；游戏中通过 drawTileLayersToWindow 逐帧绘制
     isBaked_ = false;
     if (mapWidth_ <= 0 || mapHeight_ <= 0 || visualLayers_.empty()) {
         return;
@@ -513,26 +548,9 @@ void TiledMapRenderer::bake() {
     }
 
     bakedTexture_.clear(sf::Color(88, 140, 72));
-    ImageLayer grass;
-    tmx::ImageLayerData grassSource;
-    grassSource.imageSource = "shared/grass_background.png";
-    grassSource.repeatX = true;
-    grassSource.repeatY = true;
-    if (loadImageLayerTexture(mapDirectory_, grassSource, grass)) {
-        const float mapPixelW = static_cast<float>(mapWidth_ * tileWidth_);
-        const float mapPixelH = static_cast<float>(mapHeight_ * tileHeight_);
-        const sf::Vector2u texSize = grass.texture.getSize();
-        const float stampW = static_cast<float>(grass.imageWidth) * 1.0f;
-        const float stampH = static_cast<float>(grass.imageHeight) * 1.0f;
-        for (float y = 0.0f; y < mapPixelH; y += stampH) {
-            for (float x = 0.0f; x < mapPixelW; x += stampW) {
-                sf::Sprite sprite(grass.texture);
-                sprite.setScale(stampW / static_cast<float>(texSize.x), stampH / static_cast<float>(texSize.y));
-                sprite.setPosition(x, y);
-                bakedTexture_.draw(sprite);
-            }
-        }
-    }
+    const float mapPixelW = static_cast<float>(mapWidth_ * tileWidth_);
+    const float mapPixelH = static_cast<float>(mapHeight_ * tileHeight_);
+    drawCachedGrassToTarget(bakedTexture_, mapPixelW, mapPixelH);
     drawImageLayersToTarget(bakedTexture_, 1.0f);
     for (const Layer& layer : visualLayers_) {
         drawLayerToTarget(bakedTexture_, layer);
@@ -547,13 +565,8 @@ void TiledMapRenderer::bake() {
 }
 
 void TiledMapRenderer::drawGrassUnderlay(sf::RenderWindow& window, float mapPixelW, float mapPixelH) const {
-    ImageLayer grass;
-    tmx::ImageLayerData grassSource;
-    grassSource.imageSource = "shared/grass_background.png";
-    grassSource.repeatX = true;
-    grassSource.repeatY = true;
-    if (loadImageLayerTexture(mapDirectory_, grassSource, grass)) {
-        drawImageLayerRepeating(window, grass, mapPixelW, mapPixelH);
+    if (hasCachedGrass_) {
+        drawImageLayerRepeating(window, cachedGrass_, mapPixelW, mapPixelH);
         return;
     }
     sf::RectangleShape bg({mapPixelW, mapPixelH});
@@ -566,6 +579,7 @@ void TiledMapRenderer::drawStatic(sf::RenderWindow& window, const std::function<
     if (!isLoaded_) {
         return;
     }
+
     const float mapPixelW = static_cast<float>(mapWidth_) * TILE_SIZE;
     const float mapPixelH = static_cast<float>(mapHeight_) * TILE_SIZE;
     drawGrassUnderlay(window, mapPixelW, mapPixelH);

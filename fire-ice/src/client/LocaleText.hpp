@@ -16,7 +16,17 @@ inline std::string utf8(std::initializer_list<unsigned char> bytes) {
 }
 
 inline const std::string& windowTitle() {
-    static const std::string value = "Fire & Ice - Forest Temple";
+    static const std::string value = utf8({0xE5, 0x83, 0x8F, 0xE7, 0xB4, 0xA0, 0xE5, 0xA4, 0x9A, 0xE4, 0xBA, 0xBA, 0xE5,
+                                           0x86, 0x92, 0xE9, 0x99, 0xA9});  // 像素多人冒险
+    return value;
+}
+
+inline const std::string& gameTitle() {
+    return windowTitle();
+}
+
+inline const std::string& gameSubtitle() {
+    static const std::string value = "Pixel Duo Adventure";
     return value;
 }
 
@@ -32,12 +42,12 @@ inline const std::array<std::string, 5>& titleMenuItems() {
 }
 
 inline const std::string& fireBoy() {
-    static const std::string value = utf8({0xE7, 0x81, 0xAB, 0xE5, 0xA8, 0x83});
+    static const std::string value = utf8({0xE5, 0xBF, 0x8D, 0xE8, 0x80, 0x85, 0xE8, 0x9B, 0x99});  // 忍者蛙
     return value;
 }
 
 inline const std::string& waterGirl() {
-    static const std::string value = utf8({0xE5, 0x86, 0xB0, 0xE5, 0xA8, 0x83});
+    static const std::string value = utf8({0xE7, 0xB2, 0x89, 0xE7, 0xBA, 0xA2, 0xE4, 0xBE, 0xA0});  // 粉红侠
     return value;
 }
 
@@ -47,8 +57,7 @@ inline const std::string& venture() {
 }
 
 inline const std::string& forestTemple() {
-    static const std::string value = utf8({0xE6, 0xA3, 0xAE, 0xE6, 0x9E, 0x97, 0xE7, 0xA5, 0x9E, 0xE6, 0xAE, 0xBF});
-    return value;
+    return gameTitle();
 }
 
 inline const std::string& currentRolePrefix() {
