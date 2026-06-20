@@ -37,6 +37,9 @@ public:
     void disconnect();
     bool startHosting();
     void stopHosting();
+    void usePublicServer();
+    void toggleWaitingReadyLocal();
+    bool isPlayerSlotConnected(uint8_t slot) const;
 
 private:
     void pollNetwork();
