@@ -16,51 +16,13 @@ inline std::string utf8(std::initializer_list<unsigned char> bytes) {
 }
 
 inline const std::string& windowTitle() {
-    static const std::string value = utf8({
-        0xE5,
-        0x83,
-        0x8F,
-        0xE7,
-        0xB4,
-        0xA0,
-        0xE5,
-        0xA4,
-        0x9A,
-        0xE4,
-        0xBA,
-        0xBA,
-        0xE5,
-        0x86,
-        0x92,
-        0xE9,
-        0x99,
-        0xA9,  // 像素多人冒险
-    });
+    static const std::string value = utf8({0xE5, 0x83, 0x8F, 0xE7, 0xB4, 0xA0, 0xE5, 0xA4, 0x9A, 0xE4, 0xBA, 0xBA, 0xE5,
+                                           0x86, 0x92, 0xE9, 0x99, 0xA9});  // 像素多人冒险
     return value;
 }
 
 inline const std::string& gameTitle() {
-    static const std::string value = utf8({
-        0xE5,
-        0x83,
-        0x8F,
-        0xE7,
-        0xB4,
-        0xA0,
-        0xE5,
-        0xA4,
-        0x9A,
-        0xE4,
-        0xBA,
-        0xBA,
-        0xE5,
-        0x86,
-        0x92,
-        0xE9,
-        0x99,
-        0xA9,  // 像素多人冒险
-    });
-    return value;
+    return windowTitle();
 }
 
 inline const std::string& gameSubtitle() {
