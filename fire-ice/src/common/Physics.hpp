@@ -11,7 +11,8 @@ constexpr float PLAYER_HEIGHT = TILE_SIZE * 0.5f;
 constexpr uint8_t MAX_AIR_JUMPS = 1;  // 空中可再跳次数（二段跳）
 
 AABB playerBounds(const PlayerState& player);
-void applyInput(PlayerState& player, InputFlags input, float dt, bool jumpPressed, bool jumpHeld,
+AABB playerCollectBounds(const PlayerState& player);
+void applyInput(PlayerState& player, InputFlags input, float dt, bool groundJump, bool airJump,
                 bool& airJumpUsedThisHold);
 void integratePlayer(PlayerState& player, const GameMap& map, WorldState& world, float dt);
 void applyFanZones(PlayerState& player, const std::vector<FanZone>& fans, float dt);

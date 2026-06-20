@@ -33,7 +33,6 @@ assets/maps/
 │   ├── Terrain/
 │   ├── Traps/
 │   └── …
-└── sources/                       # 原始 Tiled 工程归档（map1/2/3）
 ```
 
 **level01 示例：**
@@ -65,19 +64,11 @@ level01/
 
 ## 4. 从 Tiled 导出目录导入新关卡
 
-若你在 Tiled 里另存了一个文件夹（含 `.tmj`、`.tsj`、`.png`），可放在 `assets/maps/sources/` 下再导入：
+若你在 Tiled 里另存了一个文件夹（含 `.tmj`、`.tsj`、`.png`），可用导入脚本合并到 `levelXX/` 并导出碰撞：
 
 ```bat
-python tools/import_tiled_level.py "assets/maps/sources/map1" --level 1
+python tools/import_tiled_level.py "你的Tiled文件夹路径" --level 1
 ```
-
-整理目录（合并共享素材、生成 levelXX 布局）：
-
-```bat
-python tools/reorganize_maps.py
-```
-
-会自动：复制资源 → 生成 `level01.tmx` → 导出 `level01_collision.txt`。
 
 修改已有地图后，只需重新导出碰撞：
 

@@ -27,6 +27,8 @@ struct ClientSlot {
     InputFlags pendingInput = InputFlags::None;
     bool jumpHeld = false;
     bool airJumpUsedThisHold = false;
+    bool groundJumpConsumed = false;
+    float coyoteTimer = 0.0f;
     std::string name;
 };
 

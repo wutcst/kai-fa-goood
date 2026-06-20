@@ -1,10 +1,19 @@
 #pragma once
 
+#include "CharacterAnimator.hpp"
+
 #include <SFML/Graphics.hpp>
 #include <array>
 #include <string>
+#include <vector>
 
 namespace fireice {
+
+// 标题界面单层视差背景及其横向滚动速度
+struct TitleParallaxLayer {
+    sf::Texture texture;
+    float scrollSpeed = 0.f;
+};
 
 class AssetManager {
 public:
@@ -12,11 +21,12 @@ public:
 
     bool ready() const { return ready_; }
 
-    const sf::Texture& fireBoy() const { return fireBoy_; }
-    const sf::Texture& waterGirl() const { return waterGirl_; }
+    const CharacterAnimator& character(PlayerRole role) const;
     const sf::Texture& gemRed() const { return gemRed_; }
     const sf::Texture& gemBlue() const { return gemBlue_; }
     const sf::Texture& lobbyBackground() const { return lobbyBackground_; }
+    bool hasTitleParallax() const { return titleParallaxReady_; }
+    const std::vector<TitleParallaxLayer>& titleParallaxLayers() const { return titleParallax_; }
     const sf::Texture& gameBackground() const { return gameBackground_; }
     const sf::Texture& winScreen() const { return winScreen_; }
     const sf::Texture& winScreenPartial() const { return winScreenPartial_; }
@@ -40,13 +50,17 @@ public:
 
 private:
     bool loadTexture(sf::Texture& texture, const std::string& fileName);
+    bool loadPixelTexture(sf::Texture& texture, const std::string& fileName);
     bool loadMapIcons();
+    bool loadTitleParallax();
 
-    sf::Texture fireBoy_;
-    sf::Texture waterGirl_;
+    CharacterAnimator playerFire_;
+    CharacterAnimator playerWater_;
+    CharacterAnimator playerPoison_;
     sf::Texture gemRed_;
     sf::Texture gemBlue_;
     sf::Texture lobbyBackground_;
+    std::vector<TitleParallaxLayer> titleParallax_;
     sf::Texture gameBackground_;
     sf::Texture winScreen_;
     sf::Texture winScreenPartial_;
@@ -65,6 +79,7 @@ private:
     sf::Texture mapBossCompleted_;
     std::string musicPath_;
     bool ready_ = false;
+    bool titleParallaxReady_ = false;
     bool buttonsReady_ = false;
     bool mapIconsReady_ = false;
     bool pauseIconReady_ = false;

@@ -15,7 +15,6 @@ assets/maps/
 │   ├── Main Characters/
 │   ├── Menu/
 │   └── Other/
-└── sources/                    # 原始 Tiled 工程归档（map1/2/3）
 ```
 
 ## 编辑流程

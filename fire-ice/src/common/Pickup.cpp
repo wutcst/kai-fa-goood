@@ -11,7 +11,7 @@ namespace fireice {
 
 namespace {
 
-constexpr float kPickupHitboxScale = 0.42f;
+constexpr float kPickupHitboxScale = 0.88f;
 
 float attrFloat(const std::string& tag, const char* name, float fallback) {
     const std::string key = std::string(name) + "=\"";
@@ -146,7 +146,7 @@ void collectPickups(PlayerState& player, const std::vector<Pickup>& pickups, uin
         return;
     }
 
-    const AABB box = playerBounds(player);
+    const AABB box = playerCollectBounds(player);
     for (const Pickup& pickup : pickups) {
         const uint32_t bit = 1u << (pickup.index % 32u);
         const uint8_t word = pickup.index / 32u;
