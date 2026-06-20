@@ -22,8 +22,8 @@ void printUsage(const char* program) {
     std::cout << "Usage:\n"
               << "  " << program << " [host] [role]\n\n"
               << "Examples:\n"
-              << "  " << program << "                  # localhost, fire boy\n"
-              << "  " << program << " 127.0.0.1 water  # localhost, water girl\n\n"
+              << "  " << program << "                  # public server, fire boy\n"
+              << "  " << program << " 8.141.101.126 water  # custom server, water girl\n\n"
               << "Title screen:\n"
               << "  Up/Down         Select menu item\n"
               << "  Enter           Confirm\n"
@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    std::string host = "127.0.0.1";
+    std::string host = fireice::DEFAULT_SERVER_HOST;
     fireice::PlayerRole role = fireice::PlayerRole::Fire;
     bool autoConnect = false;
 

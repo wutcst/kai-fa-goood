@@ -239,10 +239,11 @@ std::array<sf::FloatRect, 3> roomActionButtonAreas() {
 }  // namespace
 
 bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, bool autoConnect) {
-    host_ = host;
-    serverAddress_ = sf::IpAddress(host);
+    host_ = host.empty() ? DEFAULT_SERVER_HOST : host;
+    serverAddress_ = sf::IpAddress(host_);
     if (serverAddress_ == sf::IpAddress::None) {
-        serverAddress_ = sf::IpAddress::LocalHost;
+        host_ = DEFAULT_SERVER_HOST;
+        serverAddress_ = sf::IpAddress(DEFAULT_SERVER_HOST);
     }
     preferredRole_ = preferredRole;
     role_ = preferredRole;
@@ -290,10 +291,10 @@ bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, b
     lastConnectRetry_ = std::chrono::steady_clock::now();
     lastInputSend_ = lastConnectRetry_;
 
-    std::cout << "[Client] Title screen ready. Server: " << serverAddress_.toString() << ":" << SERVER_PORT
+    std::cout << "[Client] Title screen ready. Public server: " << DEFAULT_SERVER_HOST << ":" << SERVER_PORT
               << "  Role: " << roleName(preferredRole_) << std::endl;
 
-    if (autoConnect && host_ != "127.0.0.1") {
+    if (autoConnect && host_ != DEFAULT_SERVER_HOST) {
         std::cout << "[Client] Auto-connecting to " << host_ << "..." << std::endl;
         typedRoomCode_.clear();
         beginConnect();
@@ -361,20 +362,14 @@ void GameClient::handleTitleMenuSelect(int index) {
     switch (index) {
         case 0:
             typedRoomCode_.clear();
-            host_ = "127.0.0.1";
-            serverAddress_ = sf::IpAddress::LocalHost;
-            if (startHosting()) {
-                beginConnect();
-            } else {
-                clientScreen_ = ClientScreen::Title;
-            }
+            usePublicServer();
+            beginConnect();
             break;
         case 1:
             typedRoomCode_.clear();
             discoveredRooms_.clear();
             selectedDiscoveredRoom_ = -1;
             clientScreen_ = ClientScreen::JoinRoom;
-            broadcastDiscovery();
             break;
         case 2:
             clientScreen_ = ClientScreen::Help;
@@ -413,31 +408,13 @@ void GameClient::handleTitleInput(const sf::Event& event) {
             typedRoomCode_.clear();
             discoveredRooms_.clear();
             clientScreen_ = ClientScreen::Title;
-        } else if (event.key.code == sf::Keyboard::F5) {
-            broadcastDiscovery();
-        } else if (event.key.code == sf::Keyboard::Up) {
-            if (!discoveredRooms_.empty() && selectedDiscoveredRoom_ > 0) {
-                selectedDiscoveredRoom_--;
-                typedRoomCode_.clear();
-            }
-        } else if (event.key.code == sf::Keyboard::Down) {
-            if (!discoveredRooms_.empty() && selectedDiscoveredRoom_ < static_cast<int>(discoveredRooms_.size()) - 1) {
-                selectedDiscoveredRoom_++;
-                typedRoomCode_.clear();
-            }
         } else if (event.key.code == sf::Keyboard::Enter) {
-            if (selectedDiscoveredRoom_ >= 0 && selectedDiscoveredRoom_ < static_cast<int>(discoveredRooms_.size())) {
-                const auto& room = discoveredRooms_[selectedDiscoveredRoom_];
-                host_ = room.address;
-                serverAddress_ = sf::IpAddress(host_);
-                typedRoomCode_ = room.roomCode;
-                beginConnect();
-            } else if (typedRoomCode_.size() == 6 || typedRoomCode_.empty()) {
+            if (typedRoomCode_.size() == 6) {
+                usePublicServer();
                 beginConnect();
             }
         } else if (event.key.code == sf::Keyboard::Backspace && !typedRoomCode_.empty()) {
             typedRoomCode_.pop_back();
-            selectedDiscoveredRoom_ = -1;
         }
         return;
     }
@@ -680,6 +657,18 @@ void GameClient::stopHosting() {
     localIp_.clear();
 
     std::cout << "[Client] Internal server stopped" << std::endl;
+}
+
+void GameClient::usePublicServer() {
+    if (isHosting_) {
+        stopHosting();
+    }
+
+    host_ = DEFAULT_SERVER_HOST;
+    serverAddress_ = sf::IpAddress(host_);
+    if (serverAddress_ == sf::IpAddress::None) {
+        serverAddress_ = sf::IpAddress(DEFAULT_SERVER_HOST);
+    }
 }
 
 void GameClient::broadcastDiscovery() {
@@ -939,13 +928,14 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         if (event.mouseButton.button != sf::Mouse::Left) {
             return;
         }
-        const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
+        const sf::Vector2f mouse = window_.mapPixelToCoords({event.mouseButton.x, event.mouseButton.y});
         const auto buttons = roomActionButtonAreas();
         const sf::FloatRect& readyArea = buttons[0];
         const sf::FloatRect& nextArea = buttons[1];
         const sf::FloatRect& leaveArea = buttons[2];
 
         if (readyArea.contains(mouse)) {
+            toggleWaitingReadyLocal();
             sendAction(PlayerAction::WaitingReady);
             return;
         }
@@ -1055,6 +1045,7 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
 
     if (connected_ && renderWorld_.phase == GamePhase::Lobby && renderWorld_.lobbyStep == 0) {
         if (event.key.code == sf::Keyboard::Enter && !localWaitingReady()) {
+            toggleWaitingReadyLocal();
             sendAction(PlayerAction::WaitingReady);
             return;
         }
@@ -1062,8 +1053,13 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
             sendAction(PlayerAction::ProceedToMapSelect);
             return;
         }
-        if (event.key.code == sf::Keyboard::Enter && localWaitingReady() && !allPlayersWaitingReady()) {
+        if (event.key.code == sf::Keyboard::Space && !localWaitingReady()) {
+            toggleWaitingReadyLocal();
             sendAction(PlayerAction::WaitingReady);
+            return;
+        }
+        if (event.key.code == sf::Keyboard::Space && localWaitingReady() && allPlayersWaitingReady()) {
+            sendAction(PlayerAction::ProceedToMapSelect);
             return;
         }
         return;
@@ -1478,6 +1474,16 @@ void GameClient::drawTitleBackgroundSprite(sf::RenderWindow& window, const sf::T
     window.draw(sprite);
 }
 
+bool GameClient::isPlayerSlotConnected(uint8_t slot) const {
+    return slot < MAX_PLAYERS && renderWorld_.playerNames[slot][0] != '\0';
+}
+
+void GameClient::toggleWaitingReadyLocal() {
+    const uint8_t bit = static_cast<uint8_t>(1u << slot_);
+    renderWorld_.waitingReadyMask ^= bit;
+    world_.waitingReadyMask = renderWorld_.waitingReadyMask;
+}
+
 bool GameClient::localWaitingReady() const {
     // waitingReadyMask：等待室准备状态（与选关 readyMask 分开）
     return (renderWorld_.waitingReadyMask & (1u << slot_)) != 0;
@@ -1487,13 +1493,19 @@ bool GameClient::allPlayersWaitingReady() const {
     if (renderWorld_.connectedCount == 0) {
         return false;
     }
-    uint8_t readyCount = 0;
-    for (uint8_t i = 0; i < renderWorld_.connectedCount; ++i) {
+
+    uint8_t connected = 0;
+    uint8_t ready = 0;
+    for (uint8_t i = 0; i < MAX_PLAYERS; ++i) {
+        if (!isPlayerSlotConnected(i)) {
+            continue;
+        }
+        ++connected;
         if ((renderWorld_.waitingReadyMask & (1u << i)) != 0) {
-            ++readyCount;
+            ++ready;
         }
     }
-    return readyCount >= renderWorld_.connectedCount;
+    return connected > 0 && ready >= connected;
 }
 
 void GameClient::trySelectLevel(uint8_t index) {
@@ -1755,79 +1767,27 @@ void GameClient::renderJoinRoomScreen() {
     dim.setFillColor(sf::Color(0, 0, 0, 120));
     window_.draw(dim);
 
-    const float panelW = std::min(w * 0.72f, lobbyScaled(780.0f));
-    const float panelH = std::min(h * 0.78f, lobbyScaled(560.0f));
+    const float panelW = std::min(w * 0.72f, lobbyScaled(680.0f));
+    const float panelH = std::min(h * 0.62f, lobbyScaled(420.0f));
     const float panelX = (w - panelW) / 2.0f;
     const float panelY = (h - panelH) / 2.0f;
     const sf::FloatRect dialog{panelX, panelY, panelW, panelH};
     ui_.drawPanel(window_, dialog, sf::Color(20, 28, 44, 240), 240.0f);
-    ui_.drawOutlinedCenteredText(window_, "加入房间 (局域网自动发现)", w / 2.0f, dialog.top + lobbyScaled(16.0f),
-                                 static_cast<unsigned>(lobbyScaled(26.0f)), sf::Color(255, 230, 100),
+    ui_.drawOutlinedCenteredText(window_, "加入房间", w / 2.0f, dialog.top + lobbyScaled(20.0f),
+                                 static_cast<unsigned>(lobbyScaled(28.0f)), sf::Color(255, 230, 100),
                                  sf::Color(80, 50, 10), 2.5f);
 
-    const float listX = panelX + lobbyScaled(20.0f);
-    const float listY = dialog.top + lobbyScaled(56.0f);
-    const float listW = panelW - lobbyScaled(40.0f);
-    const float listH = panelH * 0.46f;
+    ui_.drawCenteredText(window_, "请输入房主提供的 6 位房间号", w / 2.0f, dialog.top + lobbyScaled(72.0f), 18,
+                         sf::Color(180, 200, 230));
+    ui_.drawCenteredText(window_, std::string("联机服务器: ") + DEFAULT_SERVER_HOST, w / 2.0f,
+                         dialog.top + lobbyScaled(102.0f), 15, sf::Color(140, 170, 210));
+    ui_.drawCenteredText(window_, "支持不同网络下的玩家加入同一房间", w / 2.0f, dialog.top + lobbyScaled(128.0f), 14,
+                         sf::Color(120, 150, 180));
 
-    sf::RectangleShape listBg({listW, listH});
-    listBg.setPosition(listX, listY);
-    listBg.setFillColor(sf::Color(12, 16, 28, 230));
-    listBg.setOutlineThickness(1.0f);
-    listBg.setOutlineColor(sf::Color(60, 80, 120));
-    window_.draw(listBg);
-
-    const float roomRowH = lobbyScaled(48.0f);
-    if (discoveryActive_) {
-        const int dots = (static_cast<int>(roomAnimTimer_ * 3.0f) % 3) + 1;
-        std::string scanMsg = "正在扫描局域网";
-        for (int i = 0; i < dots; ++i) {
-            scanMsg += ".";
-        }
-        ui_.drawCenteredText(window_, scanMsg, w / 2.0f, listY + listH / 2.0f - 14.0f, 22, sf::Color(180, 200, 255));
-        ui_.drawCenteredText(window_, "自动发现同一网络下的游戏房间", w / 2.0f, listY + listH / 2.0f + 18.0f, 14,
-                             sf::Color(120, 140, 180));
-    } else if (discoveredRooms_.empty()) {
-        ui_.drawCenteredText(window_, "未发现局域网房间", w / 2.0f, listY + listH / 2.0f - 14.0f, 20,
-                             sf::Color(180, 160, 120));
-        ui_.drawCenteredText(window_, "请确认主机在同一网络下已创建房间，或手动输入房间号", w / 2.0f,
-                             listY + listH / 2.0f + 18.0f, 14, sf::Color(140, 150, 170));
-    } else {
-        ui_.drawText(window_, "发现 " + std::to_string(discoveredRooms_.size()) + " 个房间  [↑↓] 选择  [Enter] 加入",
-                     listX + 8.0f, listY + 6.0f, 14, sf::Color(160, 190, 230));
-
-        const int visibleStart = std::max(0, selectedDiscoveredRoom_ - 3);
-        const int maxVisible = static_cast<int>(listH / roomRowH) - 1;
-        const int visibleEnd = std::min(static_cast<int>(discoveredRooms_.size()), visibleStart + maxVisible);
-
-        for (int i = visibleStart; i < visibleEnd; ++i) {
-            const float rowY2 = listY + 26.0f + (i - visibleStart) * roomRowH;
-            const bool sel = i == selectedDiscoveredRoom_;
-
-            sf::RectangleShape row({listW - 16.0f, roomRowH - 6.0f});
-            row.setPosition(listX + 8.0f, rowY2);
-            row.setFillColor(sel ? sf::Color(55, 95, 150) : sf::Color(30, 38, 55));
-            row.setOutlineThickness(sel ? 2.0f : 1.0f);
-            row.setOutlineColor(sel ? sf::Color(140, 200, 255) : sf::Color(60, 70, 100));
-            window_.draw(row);
-
-            const auto& room = discoveredRooms_[i];
-            const std::string label = "房间 " + room.roomCode + "  |  " + room.levelName + "  |  玩家 " +
-                                      std::to_string(room.playerCount) + "/" + std::to_string(room.maxPlayers) +
-                                      "  |  " + room.address;
-            ui_.drawText(window_, label, listX + 18.0f, rowY2 + 6.0f, 16,
-                         sel ? sf::Color::White : sf::Color(200, 210, 220));
-        }
-    }
-
-    const float dividerY = listY + listH + lobbyScaled(12.0f);
-    ui_.drawCenteredText(window_, "—— 或手动输入房间号 ——", w / 2.0f, dividerY,
-                         static_cast<unsigned>(lobbyScaled(14.0f)), sf::Color(140, 155, 180));
-
-    const float boxW = lobbyScaled(260.0f);
-    const float boxH = lobbyScaled(46.0f);
+    const float boxW = lobbyScaled(280.0f);
+    const float boxH = lobbyScaled(52.0f);
     const float boxX = w / 2.0f - boxW / 2.0f;
-    const float boxY = dividerY + 26.0f;
+    const float boxY = dialog.top + panelH * 0.46f;
     sf::RectangleShape inputBox({boxW, boxH});
     inputBox.setPosition(boxX, boxY);
     inputBox.setFillColor(sf::Color(12, 16, 28));
@@ -1846,12 +1806,19 @@ void GameClient::renderJoinRoomScreen() {
             displayCode.push_back(' ');
         }
     }
-    ui_.drawOutlinedCenteredText(window_, displayCode, w / 2.0f, boxY + lobbyScaled(8.0f),
-                                 static_cast<unsigned>(lobbyScaled(26.0f)), sf::Color(255, 255, 255),
+    ui_.drawOutlinedCenteredText(window_, displayCode, w / 2.0f, boxY + lobbyScaled(10.0f),
+                                 static_cast<unsigned>(lobbyScaled(28.0f)), sf::Color(255, 255, 255),
                                  sf::Color(40, 40, 80), 2.0f);
 
-    ui_.drawCenteredText(window_, "[数字键] 输入  [F5] 重新扫描  [Enter] 确认  [Esc] 返回", w / 2.0f,
-                         dialog.top + panelH - lobbyScaled(36.0f), static_cast<unsigned>(lobbyScaled(15.0f)),
+    const bool readyToJoin = typedRoomCode_.size() == 6;
+    ui_.drawCenteredText(
+        window_,
+        readyToJoin ? "按 Enter 加入房间" : "还需输入 " + std::to_string(6 - typedRoomCode_.size()) + " 位数字",
+        w / 2.0f, boxY + boxH + lobbyScaled(24.0f), 16,
+        readyToJoin ? sf::Color(120, 255, 160) : sf::Color(160, 170, 190));
+
+    ui_.drawCenteredText(window_, "[数字键] 输入  [Backspace] 删除  [Enter] 加入  [Esc] 返回", w / 2.0f,
+                         dialog.top + panelH - lobbyScaled(34.0f), static_cast<unsigned>(lobbyScaled(15.0f)),
                          sf::Color(160, 170, 190));
 }
 
@@ -1900,12 +1867,7 @@ void GameClient::renderRoomScreen() {
     const float infoY = (headerH - infoBlockH) / 2.0f;
     ui_.drawText(window_, roomCodeStr, infoRight - lobbyScaled(180.0f), infoY, infoTitleSize, sf::Color(100, 255, 140));
 
-    std::string ipStr;
-    if (isHosting_ && !localIp_.empty()) {
-        ipStr = "主机IP: " + localIp_ + ":" + std::to_string(SERVER_PORT);
-    } else {
-        ipStr = "服务器: " + host_ + ":" + std::to_string(SERVER_PORT);
-    }
+    std::string ipStr = std::string("联机服务器: ") + DEFAULT_SERVER_HOST + ":" + std::to_string(SERVER_PORT);
     ui_.drawText(window_, ipStr, infoRight - lobbyScaled(180.0f),
                  infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f), infoLineSize, sf::Color(180, 200, 255));
 
@@ -1934,9 +1896,9 @@ void GameClient::renderRoomScreen() {
                   220.0f);
 
     // Players connected status
-    const bool fireConnected = renderWorld_.connectedCount >= 1;
-    const bool waterConnected = renderWorld_.connectedCount >= 2;
-    const bool poisonConnected = renderWorld_.connectedCount >= 3;
+    const bool fireConnected = isPlayerSlotConnected(0);
+    const bool waterConnected = isPlayerSlotConnected(1);
+    const bool poisonConnected = isPlayerSlotConnected(2);
     const bool fireReady = (renderWorld_.waitingReadyMask & 0x01) != 0;
     const bool waterReady = (renderWorld_.waitingReadyMask & 0x02) != 0;
     const bool poisonReady = (renderWorld_.waitingReadyMask & 0x04) != 0;
@@ -1980,21 +1942,18 @@ void GameClient::renderRoomScreen() {
     // 等待提示放在状态面板底部内侧，避免与下方按钮重叠
     const float waitMsgY = statusY + statusH - lobbyScaled(34.0f);
 
-    if (renderWorld_.connectedCount < MAX_PLAYERS) {
-        const std::string waitMsg = "等待其他玩家加入房间... (当前 " + std::to_string(renderWorld_.connectedCount) +
-                                    "/" + std::to_string(MAX_PLAYERS) + ")";
-        ui_.drawOutlinedCenteredText(window_, waitMsg, w / 2.0f, waitMsgY, waitMsgSize, sf::Color(255, 220, 100),
-                                     sf::Color(80, 50, 10), 2.0f);
-        const int dotCount = (static_cast<int>(roomAnimTimer_ * 2.0f) % 3) + 1;
-        std::string dots;
-        for (int i = 0; i < dotCount; ++i) {
-            dots += ".";
+    if (!canProceed) {
+        ui_.drawOutlinedCenteredText(window_, "请先点击「我已准备」，等待全员准备后可进入选关", w / 2.0f, waitMsgY,
+                                     waitMsgSize, sf::Color(255, 220, 100), sf::Color(80, 50, 10), 2.0f);
+        if (renderWorld_.connectedCount < MAX_PLAYERS) {
+            ui_.drawCenteredText(window_,
+                                 "当前 " + std::to_string(renderWorld_.connectedCount) + "/" +
+                                     std::to_string(MAX_PLAYERS) + " 人，可继续等待或直接开始",
+                                 w / 2.0f, waitMsgY + lobbyScaled(28.0f), 14, sf::Color(160, 180, 210));
         }
-        ui_.drawText(window_, dots, w / 2.0f + lobbyScaled(210.0f), waitMsgY + lobbyScaled(4.0f), waitMsgSize,
-                     sf::Color(255, 220, 100));
-    } else if (canProceed) {
-        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击下一步选择关卡", w / 2.0f, waitMsgY, waitMsgSize,
-                                     sf::Color(255, 220, 100), sf::Color(80, 50, 10), 2.0f);
+    } else {
+        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击「下一步」选择关卡", w / 2.0f, waitMsgY, waitMsgSize,
+                                     sf::Color(120, 255, 160), sf::Color(40, 80, 50), 2.0f);
     }
 
     const float bottomBarY = roomBottomBarY();
@@ -2018,7 +1977,7 @@ void GameClient::renderRoomScreen() {
 
 void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH, int playerSlot,
                                        PlayerRole expectedRole) {
-    const bool isConnected = renderWorld_.connectedCount > static_cast<uint8_t>(playerSlot);
+    const bool isConnected = isPlayerSlotConnected(static_cast<uint8_t>(playerSlot));
     const bool isReady = (renderWorld_.waitingReadyMask & (1u << playerSlot)) != 0;
     const bool isSelf = (playerSlot == static_cast<int>(slot_)) && connected_;
 

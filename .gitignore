@@ -3,6 +3,7 @@
 /.idea/*
 /fire-ice/build/*
 /fire-ice/build/
+/fire-ice/dist/
 
 # 忽略以下文件
 *.iml

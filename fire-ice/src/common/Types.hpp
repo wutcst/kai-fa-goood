@@ -11,6 +11,7 @@ constexpr float JUMP_SPEED = 520.0f;
 constexpr float MAX_FALL_SPEED = 900.0f;
 
 constexpr uint16_t SERVER_PORT = 24567;
+constexpr const char* DEFAULT_SERVER_HOST = "8.141.101.126";
 constexpr uint8_t MIN_PLAYERS_TO_START = 1;
 constexpr float TICK_RATE = 60.0f;  // 服务端物理帧率
 constexpr float TICK_DT = 1.0f / TICK_RATE;

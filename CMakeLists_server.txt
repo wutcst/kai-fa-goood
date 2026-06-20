@@ -25,6 +25,8 @@ add_library(fireice_common STATIC
     src/common/Physics.cpp
     src/common/Paths.cpp
     src/common/LevelCatalog.cpp
+    src/common/Pickup.cpp
+    src/common/LevelMechanics.cpp
 )
 target_include_directories(fireice_common PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/common

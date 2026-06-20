@@ -758,8 +758,10 @@ void GameServer::processPackets() {
                     }
                 } else if (header->type == PacketType::Action) {
                     ActionPacket pkt{};
-                    if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot)
+                    if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot) {
                         foundRoom->handleAction(foundSlot, pkt.action, pkt.value);
+                        foundRoom->broadcastState(socket_);
+                    }
                 } else if (header->type == PacketType::Disconnect) {
                     DisconnectPacket pkt{};
                     if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot) {
