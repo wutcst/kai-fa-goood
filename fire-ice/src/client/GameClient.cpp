@@ -1,4 +1,4 @@
-﻿#include "GameClient.hpp"
+#include "GameClient.hpp"
 #include "ClientVisuals.hpp"
 #include "LevelCatalog.hpp"
 #include "LevelMapLayout.hpp"
@@ -247,6 +247,7 @@ bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, b
     }
     preferredRole_ = preferredRole;
     role_ = preferredRole;
+    localServerMode_ = (host_ == "127.0.0.1" || host_ == "localhost");
     playerName_ = preferredRole == PlayerRole::Fire ? "NinjaFrog" : "PinkMan";
     roomAnimTimer_ = 0.0f;
     clientScreen_ = ClientScreen::Title;
@@ -362,7 +363,9 @@ void GameClient::handleTitleMenuSelect(int index) {
     switch (index) {
         case 0:
             typedRoomCode_.clear();
-            usePublicServer();
+            if (!localServerMode_) {
+                usePublicServer();
+            }
             beginConnect();
             break;
         case 1:
@@ -410,7 +413,9 @@ void GameClient::handleTitleInput(const sf::Event& event) {
             clientScreen_ = ClientScreen::Title;
         } else if (event.key.code == sf::Keyboard::Enter) {
             if (typedRoomCode_.size() == 6) {
-                usePublicServer();
+                if (!localServerMode_) {
+                    usePublicServer();
+                }
                 beginConnect();
             }
         } else if (event.key.code == sf::Keyboard::Backspace && !typedRoomCode_.empty()) {
@@ -512,10 +517,8 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
     const uint8_t playerCount = std::max(uint8_t{1}, renderWorld_.connectedCount);
     const uint8_t globalIndex = catalog.filteredIndexToGlobalIndex(levelIndex, playerCount);
     const std::string visualPath = catalog.resolveVisualPath(globalIndex);
-    if (globalIndex == loadedLevelIndex_) {
-        if (visualPath.empty() || tiledMap_.ready()) {
-            return;
-        }
+    if (globalIndex == loadedLevelIndex_ && visualPath == loadedVisualPath_ && tiledMap_.ready()) {
+        return;
     }
 
     const std::string path = catalog.resolvePath(globalIndex);
@@ -527,6 +530,8 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
     if (!visualPath.empty() && tiledMap_.load(visualPath)) {
         tiledMap_.bake();
         sawTraps_ = loadSawTrapsFromTmx(visualPath, 16);
+        std::cout << "[Client] Visual map ready for level " << static_cast<int>(globalIndex + 1)
+                  << " customBg=" << (tiledMap_.hasCustomBackground() ? "yes" : "no") << std::endl;
     } else if (!visualPath.empty()) {
         std::cerr << "[Client] Failed to load tiled visual map: " << visualPath << std::endl;
         sawTraps_.clear();
@@ -535,6 +540,7 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
     }
 
     loadedLevelIndex_ = globalIndex;
+    loadedVisualPath_ = visualPath;
     if (resizeWindow && !lobbyLayout_) {
         useGameLayout();
     }
@@ -1173,7 +1179,7 @@ InputFlags GameClient::readLocalInput() const {
 
 void GameClient::render() {
     if (tiledMap_.ready() && connected_ && renderWorld_.phase != GamePhase::Lobby) {
-        window_.clear(sf::Color(88, 140, 72));
+        window_.clear(tiledMap_.hasCustomBackground() ? sf::Color(24, 32, 28) : sf::Color(88, 140, 72));
     } else {
         window_.clear(sf::Color(12, 18, 14));
     }

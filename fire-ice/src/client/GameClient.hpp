@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "AssetManager.hpp"
 #include "GameServer.hpp"
@@ -122,6 +122,7 @@ private:
     WorldState world_{};
     WorldState renderWorld_{};
     uint8_t loadedLevelIndex_ = 255;
+    std::string loadedVisualPath_;
     bool lobbyLayout_ = true;
     bool musicEnabled_ = false;
 
@@ -155,6 +156,7 @@ private:
     std::chrono::steady_clock::time_point lastInputSend_;
     std::chrono::steady_clock::time_point lastConnectRetry_;
 
+    bool localServerMode_ = false;
     bool isHosting_ = false;
     std::unique_ptr<GameServer> server_;
     std::thread serverThread_;

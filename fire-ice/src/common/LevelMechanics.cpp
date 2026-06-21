@@ -1,4 +1,4 @@
-﻿#include "LevelMechanics.hpp"
+#include "LevelMechanics.hpp"
 
 #include "Paths.hpp"
 #include "Physics.hpp"
@@ -379,20 +379,103 @@ AABB rockHeadHitbox(const RockHeadTrap& rock) {
 
 namespace {
 
-bool rockTouchesSolid(const GameMap& map, const RockHeadTrap& rock, float nextX, float nextY) {
-    const AABB box{nextX + 2.0f, nextY + 2.0f, std::max(1.0f, rock.width - 4.0f), std::max(1.0f, rock.height - 4.0f)};
-    const int minX = static_cast<int>(std::floor(box.left() / TILE_SIZE));
-    const int maxX = static_cast<int>(std::floor((box.right() - 0.01f) / TILE_SIZE));
-    const int minY = static_cast<int>(std::floor(box.top() / TILE_SIZE));
-    const int maxY = static_cast<int>(std::floor((box.bottom() - 0.01f) / TILE_SIZE));
+constexpr float ROCK_HEAD_EDGE_INSET = 2.0f;
+constexpr float ROCK_HEAD_SCAN_STEP = 1.0f;
+constexpr float ROCK_HEAD_FLOOR_SKIP = TILE_SIZE * 0.5f;
+constexpr float ROCK_HEAD_WALL_SKIP = TILE_SIZE * 0.5f;
+
+bool rockColumnHasSolid(const GameMap& map, float x, float top, float bottom) {
+    const int tx = static_cast<int>(std::floor(x / TILE_SIZE));
+    const int minY = static_cast<int>(std::floor(top / TILE_SIZE));
+    const int maxY = static_cast<int>(std::floor((bottom - 0.01f) / TILE_SIZE));
     for (int ty = minY; ty <= maxY; ++ty) {
-        for (int tx = minX; tx <= maxX; ++tx) {
-            if (map.isSolid(map.tileAt(tx, ty))) {
-                return true;
-            }
+        if (map.isSolid(map.tileAt(tx, ty))) {
+            return true;
         }
     }
     return false;
+}
+
+bool rockRowHasSolid(const GameMap& map, float left, float right, float y) {
+    const int ty = static_cast<int>(std::floor(y / TILE_SIZE));
+    const int minX = static_cast<int>(std::floor(left / TILE_SIZE));
+    const int maxX = static_cast<int>(std::floor((right - 0.01f) / TILE_SIZE));
+    for (int tx = minX; tx <= maxX; ++tx) {
+        if (map.isSolid(map.tileAt(tx, ty))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool rockMovementBlocked(const GameMap& map, const RockHeadTrap& rock, float nextX, float nextY, int dirX, int dirY) {
+    const float inset = ROCK_HEAD_EDGE_INSET;
+    const float top = nextY + inset;
+    const float bottom = nextY + rock.height - inset;
+
+    if (dirX > 0) {
+        const float sideBottom = std::max(top + 1.0f, bottom - ROCK_HEAD_FLOOR_SKIP);
+        return rockColumnHasSolid(map, nextX + rock.width - inset, top, sideBottom);
+    }
+    if (dirX < 0) {
+        const float sideBottom = std::max(top + 1.0f, bottom - ROCK_HEAD_FLOOR_SKIP);
+        return rockColumnHasSolid(map, nextX + inset, top, sideBottom);
+    }
+    if (dirY > 0) {
+        float left = nextX + inset + ROCK_HEAD_WALL_SKIP;
+        float right = nextX + rock.width - inset - ROCK_HEAD_WALL_SKIP;
+        if (right <= left) {
+            left = nextX + inset;
+            right = nextX + rock.width - inset;
+        }
+        return rockRowHasSolid(map, left, right, nextY + rock.height - inset);
+    }
+    if (dirY < 0) {
+        float left = nextX + inset + ROCK_HEAD_WALL_SKIP;
+        float right = nextX + rock.width - inset - ROCK_HEAD_WALL_SKIP;
+        if (right <= left) {
+            left = nextX + inset;
+            right = nextX + rock.width - inset;
+        }
+        return rockRowHasSolid(map, left, right, nextY + inset);
+    }
+    return false;
+}
+
+float scanRockHorizontalBound(const GameMap& map, const RockHeadTrap& rock, int dirX) {
+    float x = rock.baseX;
+    if (dirX < 0) {
+        while (x > ROCK_HEAD_SCAN_STEP &&
+               !rockMovementBlocked(map, rock, x - ROCK_HEAD_SCAN_STEP, rock.baseY, -1, 0)) {
+            x -= ROCK_HEAD_SCAN_STEP;
+        }
+        return x;
+    }
+
+    const float mapRight = static_cast<float>(map.width()) * TILE_SIZE;
+    while (x + rock.width < mapRight - ROCK_HEAD_SCAN_STEP &&
+           !rockMovementBlocked(map, rock, x + ROCK_HEAD_SCAN_STEP, rock.baseY, 1, 0)) {
+        x += ROCK_HEAD_SCAN_STEP;
+    }
+    return x;
+}
+
+float scanRockVerticalBound(const GameMap& map, const RockHeadTrap& rock, int dirY) {
+    float y = rock.baseY;
+    if (dirY < 0) {
+        while (y > ROCK_HEAD_SCAN_STEP &&
+               !rockMovementBlocked(map, rock, rock.baseX, y - ROCK_HEAD_SCAN_STEP, 0, -1)) {
+            y -= ROCK_HEAD_SCAN_STEP;
+        }
+        return y;
+    }
+
+    const float mapBottom = static_cast<float>(map.height()) * TILE_SIZE;
+    while (y + rock.height < mapBottom - ROCK_HEAD_SCAN_STEP &&
+           !rockMovementBlocked(map, rock, rock.baseX, y + ROCK_HEAD_SCAN_STEP, 0, 1)) {
+        y += ROCK_HEAD_SCAN_STEP;
+    }
+    return y;
 }
 
 bool playerOverlapsSolid(const PlayerState& player, const GameMap& map) {
@@ -468,7 +551,25 @@ void syncRockHeadsToWorld(const LevelRuntime& runtime, WorldState& world) {
     }
 }
 
+void configureRockHeadTravelBoundsImpl(const GameMap& map, std::vector<RockHeadTrap>& rocks) {
+    for (RockHeadTrap& rock : rocks) {
+        if (rock.dirY != 0) {
+            rock.minX = rock.maxX = rock.baseX;
+            rock.minY = scanRockVerticalBound(map, rock, -1);
+            rock.maxY = scanRockVerticalBound(map, rock, 1);
+        } else {
+            rock.minY = rock.maxY = rock.baseY;
+            rock.minX = scanRockHorizontalBound(map, rock, -1);
+            rock.maxX = scanRockHorizontalBound(map, rock, 1);
+        }
+    }
+}
+
 }  // namespace
+
+void configureRockHeadTravelBounds(const GameMap& map, std::vector<RockHeadTrap>& rocks) {
+    configureRockHeadTravelBoundsImpl(map, rocks);
+}
 
 void updateRockHeads(LevelRuntime& runtime, const GameMap& map, WorldState& world, float dt) {
     for (RockHeadTrap& rock : runtime.rockHeads) {
@@ -485,14 +586,18 @@ void updateRockHeads(LevelRuntime& runtime, const GameMap& map, WorldState& worl
         bool hit = false;
 
         if (rock.dirX != 0) {
-            if ((rock.dirX < 0 && nextX <= rock.minX) || (rock.dirX > 0 && nextX >= rock.maxX) ||
-                rockTouchesSolid(map, rock, nextX, rock.y)) {
+            if (rockMovementBlocked(map, rock, nextX, rock.y, rock.dirX, 0)) {
+                hit = true;
+                nextX = rock.x;
+            } else if ((rock.dirX < 0 && nextX <= rock.minX) || (rock.dirX > 0 && nextX >= rock.maxX)) {
                 hit = true;
                 nextX = std::clamp(nextX, rock.minX, rock.maxX);
             }
         } else if (rock.dirY != 0) {
-            if ((rock.dirY < 0 && nextY <= rock.minY) || (rock.dirY > 0 && nextY >= rock.maxY) ||
-                rockTouchesSolid(map, rock, rock.x, nextY)) {
+            if (rockMovementBlocked(map, rock, rock.x, nextY, 0, rock.dirY)) {
+                hit = true;
+                nextY = rock.y;
+            } else if ((rock.dirY < 0 && nextY <= rock.minY) || (rock.dirY > 0 && nextY >= rock.maxY)) {
                 hit = true;
                 nextY = std::clamp(nextY, rock.minY, rock.maxY);
             }
@@ -692,17 +797,15 @@ std::vector<RockHeadTrap> loadRockHeadsFromTmx(const std::string& tmxPath, int t
         });
         for (RockHeadTrap& rock : rocks) {
             if (&rock == &(*rightmost)) {
+                rock.dirX = 0;
                 rock.dirY = -1;
+                rock.startDirX = 0;
                 rock.startDirY = rock.dirY;
-                rock.minX = rock.maxX = rock.x;
-                rock.minY = rock.y - TILE_SIZE * 4.0f;
-                rock.maxY = rock.y + TILE_SIZE * 4.0f;
             } else {
                 rock.dirX = rock.baseX < rightmost->baseX ? 1 : -1;
+                rock.dirY = 0;
                 rock.startDirX = rock.dirX;
-                rock.minX = rock.x - TILE_SIZE * 3.5f;
-                rock.maxX = rock.x + TILE_SIZE * 3.5f;
-                rock.minY = rock.maxY = rock.y;
+                rock.startDirY = 0;
             }
         }
     }

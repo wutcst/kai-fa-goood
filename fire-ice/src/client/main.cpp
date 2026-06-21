@@ -57,7 +57,9 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--help") {
             printUsage(argv[0]);
             return 0;
-        } else if (host == "127.0.0.1" && arg.find('.') != std::string::npos) {
+        } else if (arg == "localhost") {
+            host = "127.0.0.1";
+        } else if (arg.find('.') != std::string::npos) {
             host = arg;
         } else if (arg == "fire" || arg == "water" || arg == "poison" || arg == "f" || arg == "w" || arg == "p" ||
                    arg == "1" || arg == "2" || arg == "3") {

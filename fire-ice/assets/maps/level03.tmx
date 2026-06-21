@@ -8,7 +8,7 @@
  <tileset firstgid="286" source="level03/On (38x38).tsx"/>
  <tileset firstgid="294" source="level03/Chain.tsx"/>
  <imagelayer id="2" name="Background" repeatx="1" repeaty="1">
-  <image source="level03/background.png" width="395" height="63"/>
+  <image source="level03/bule.png" width="64" height="64"/>
  </imagelayer>
  <layer id="1" name="碰撞" width="44" height="24">
   <data encoding="csv">
@@ -98,5 +98,8 @@
   <object id="67" gid="269" x="135.5" y="80.5" width="32" height="32"/>
   <object id="68" gid="269" x="64" y="112" width="32" height="32"/>
   <object id="69" gid="269" x="16" y="64" width="32" height="32"/>
+  <object id="70" name="player1" x="48" y="320" width="16" height="16"/>
+  <object id="71" name="player2" x="64" y="320" width="16" height="16"/>
+  <object id="72" name="poison_spawn" x="80" y="320" width="16" height="16"/>
  </objectgroup>
 </map>

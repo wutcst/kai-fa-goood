@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include "Map.hpp"
 #include "Types.hpp"
@@ -116,6 +116,7 @@ void updateLevelMechanics(LevelRuntime& runtime, GameMap& map, WorldState& world
 bool sampleSpikeHazard(const GameMap& map, const PlayerState& player);
 bool sampleMudHazard(const LevelRuntime& runtime, const PlayerState& player);
 bool sampleSawHazard(const std::vector<SawTrap>& saws, const PlayerState& player, float timeSec);
+void configureRockHeadTravelBounds(const GameMap& map, std::vector<RockHeadTrap>& rocks);
 void updateRockHeads(LevelRuntime& runtime, const GameMap& map, WorldState& world, float dt);
 void updatePendulums(const LevelRuntime& runtime, WorldState& world, float timeSec);
 bool samplePendulumHazard(const std::vector<PendulumTrap>& pendulums, const PlayerState& player, float timeSec);

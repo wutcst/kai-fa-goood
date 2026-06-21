@@ -1,6 +1,7 @@
 #include "LevelCatalog.hpp"
 #include "Map.hpp"
 #include "Protocol.hpp"
+#include "TmxUtil.hpp"
 
 #include <gtest/gtest.h>
 
@@ -84,6 +85,19 @@ TEST(LevelCatalogTest, FilteredIndexRoundTrip) {
         const uint8_t global = catalog.filteredIndexToGlobalIndex(filtered, playerCount);
         EXPECT_EQ(catalog.globalIndexToFilteredIndex(global, playerCount), filtered);
     }
+}
+
+TEST(TmxUtilTest, FindImageLayerInsideImageLayerTag) {
+    const std::string xml =
+        R"(<imagelayer id="2" name="Background" repeatx="1" repeaty="1">
+  <image source="level03/bule.png" width="64" height="64"/>
+ </imagelayer>)";
+
+    const std::vector<fireice::tmx::ImageLayerData> layers = fireice::tmx::findAllImageLayers(xml);
+    ASSERT_EQ(layers.size(), 1u);
+    EXPECT_EQ(layers.front().imageSource, "level03/bule.png");
+    EXPECT_TRUE(layers.front().repeatX);
+    EXPECT_TRUE(layers.front().repeatY);
 }
 
 }  // namespace

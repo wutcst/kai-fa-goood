@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 
@@ -103,11 +104,21 @@ std::string tagName(const std::string& tag) {
 std::vector<std::string> findTags(const std::string& xml, const char* tagName) {
     std::vector<std::string> tags;
     const std::string open = std::string("<") + tagName;
+    const std::size_t nameLen = std::strlen(tagName);
     std::size_t pos = 0;
     while (true) {
         pos = xml.find(open, pos);
         if (pos == std::string::npos) {
             break;
+        }
+        // Avoid matching longer tag names, e.g. "<imagelayer" when searching for "image".
+        const std::size_t afterName = pos + 1 + nameLen;
+        if (afterName < xml.size()) {
+            const char next = xml[afterName];
+            if (std::isalnum(static_cast<unsigned char>(next)) || next == '_' || next == ':') {
+                pos += 1;
+                continue;
+            }
         }
         const std::size_t end = xml.find('>', pos);
         if (end == std::string::npos) {

@@ -14,4 +14,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-start "" /D "%BIN%" "%BIN%\fireice_client.exe"
+echo Starting local server...
+start "Fire-Ice Server" /D "%BIN%" "%BIN%\fireice_server.exe"
+ping 127.0.0.1 -n 2 >nul
+
+echo Starting client (local server 127.0.0.1)...
+start "Fire-Ice" /D "%BIN%" "%BIN%\fireice_client.exe" 127.0.0.1

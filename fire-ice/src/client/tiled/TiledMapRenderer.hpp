@@ -24,6 +24,7 @@ public:
     void drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;  // 选关缩略图
 
     bool ready() const { return isLoaded_; }
+    bool hasCustomBackground() const { return !imageLayers_.empty(); }
     int mapWidth() const { return mapWidth_; }
     int mapHeight() const { return mapHeight_; }
 

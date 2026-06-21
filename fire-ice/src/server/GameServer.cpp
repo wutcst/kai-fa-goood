@@ -49,6 +49,7 @@ void Room::selectLevel(uint8_t index, bool keepMapSelect) {
         visualMapPath.empty() ? std::vector<RockHeadTrap>{} : loadRockHeadsFromTmx(visualMapPath, 16);
     levelRuntime.pendulums =
         visualMapPath.empty() ? std::vector<PendulumTrap>{} : loadPendulumsFromTmx(visualMapPath, 16);
+    configureRockHeadTravelBounds(map, levelRuntime.rockHeads);
     initLevelRuntime(map, levelRuntime);
 
     applyLevelMetadata();
@@ -94,6 +95,7 @@ bool Room::isLevelUnlocked(uint8_t index) const {
 void Room::reloadMap() {
     map.loadFromFile(mapPath);
     applyLevelMetadata();
+    configureRockHeadTravelBounds(map, levelRuntime.rockHeads);
     initLevelRuntime(map, levelRuntime);
 }
 

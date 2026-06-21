@@ -129,7 +129,10 @@ if(FIREICE_BUILD_TESTS)
 
     enable_testing()
 
-    add_executable(fireice_tests tests/unit_tests.cpp)
+    add_executable(fireice_tests tests/unit_tests.cpp src/client/tiled/TmxUtil.cpp)
+    target_include_directories(fireice_tests PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/client/tiled
+    )
     target_link_libraries(fireice_tests PRIVATE fireice_common GTest::gtest_main)
     if(MSVC)
         target_compile_options(fireice_tests PRIVATE /utf-8)

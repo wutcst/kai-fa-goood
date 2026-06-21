@@ -20,7 +20,8 @@ bool tryLoadTextureFromPaths(sf::Texture& texture, const std::vector<std::filesy
         if (candidate.empty()) {
             continue;
         }
-        if (texture.loadFromFile(candidate.generic_string())) {
+        const std::string path = candidate.lexically_normal().string();
+        if (texture.loadFromFile(path)) {
             return true;
         }
     }
@@ -378,6 +379,10 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
         }
         imageLayers_.push_back(std::move(loaded));
     }
+    if (!imageLayers_.empty()) {
+        std::cout << "[TiledMapRenderer] Loaded " << imageLayers_.size() << " background layer(s) for "
+                  << resolvedTmx << std::endl;
+    }
 
     for (const tmx::TileLayerData& tileLayer : tmx::findAllTileLayers(xml)) {
         if (static_cast<int>(tileLayer.gids.size()) != mapWidth_ * mapHeight_) {
@@ -437,7 +442,11 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
     grassSource.imageSource = "shared/grass_background.png";
     grassSource.repeatX = true;
     grassSource.repeatY = true;
-    hasCachedGrass_ = loadImageLayerTexture(mapDirectory_, grassSource, cachedGrass_);
+    if (imageLayers_.empty()) {
+        hasCachedGrass_ = loadImageLayerTexture(mapDirectory_, grassSource, cachedGrass_);
+    } else {
+        hasCachedGrass_ = false;
+    }
 
     isLoaded_ = !tilesets_.empty() && !visualLayers_.empty();
     return isLoaded_;
@@ -445,22 +454,29 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
 
 bool TiledMapRenderer::loadImageLayerTexture(const std::string& mapDir, const tmx::ImageLayerData& source,
                                              ImageLayer& out) const {
-    const std::filesystem::path sourcePath(source.imageSource);
-    const std::vector<std::filesystem::path> candidates = {
-        std::filesystem::path(mapDir) / sourcePath,
-        std::filesystem::path(mapDirectory_) / sourcePath,
-        std::filesystem::path(resolveAssetPath(tmx::joinPath(mapDir, source.imageSource))),
-        std::filesystem::path(resolveAssetPath("maps/shared/grass_background.png")),
-    };
+    std::vector<std::filesystem::path> candidates;
+    if (!mapDirectory_.empty()) {
+        candidates.emplace_back(std::filesystem::path(mapDirectory_) / source.imageSource);
+    }
+    if (!mapDir.empty()) {
+        candidates.emplace_back(resolveAssetPath(tmx::joinPath(mapDir, source.imageSource)));
+    }
+    candidates.emplace_back(resolveAssetPath(std::string("maps/") + source.imageSource));
 
     if (!tryLoadTextureFromPaths(out.texture, candidates)) {
+        for (const std::filesystem::path& candidate : candidates) {
+            if (!candidate.empty()) {
+                std::cerr << "[TiledMapRenderer] Failed to load image layer texture: "
+                          << candidate.lexically_normal().string() << std::endl;
+            }
+        }
         return false;
     }
 
     out.texture.setSmooth(false);
     const sf::Vector2u texSize = out.texture.getSize();
-    out.imageWidth = static_cast<int>(texSize.x);
-    out.imageHeight = static_cast<int>(texSize.y);
+    out.imageWidth = source.imageWidth > 0 ? source.imageWidth : static_cast<int>(texSize.x);
+    out.imageHeight = source.imageHeight > 0 ? source.imageHeight : static_cast<int>(texSize.y);
     out.offsetX = source.offsetX;
     out.offsetY = source.offsetY;
     out.repeatX = source.repeatX;
@@ -748,10 +764,12 @@ void TiledMapRenderer::bake() {
         return;
     }
 
-    bakedTexture_.clear(sf::Color(88, 140, 72));
+    bakedTexture_.clear(imageLayers_.empty() ? sf::Color(88, 140, 72) : sf::Color(24, 32, 28));
     const float mapPixelW = static_cast<float>(mapWidth_ * tileWidth_);
     const float mapPixelH = static_cast<float>(mapHeight_ * tileHeight_);
-    drawCachedGrassToTarget(bakedTexture_, mapPixelW, mapPixelH);
+    if (imageLayers_.empty()) {
+        drawCachedGrassToTarget(bakedTexture_, mapPixelW, mapPixelH);
+    }
     drawImageLayersToTarget(bakedTexture_, 1.0f);
     for (const Layer& layer : visualLayers_) {
         drawLayerToTarget(bakedTexture_, layer);
@@ -783,8 +801,9 @@ void TiledMapRenderer::drawStatic(sf::RenderWindow& window, const std::function<
 
     const float mapPixelW = static_cast<float>(mapWidth_) * TILE_SIZE;
     const float mapPixelH = static_cast<float>(mapHeight_) * TILE_SIZE;
-    drawGrassUnderlay(window, mapPixelW, mapPixelH);
-    if (!imageLayers_.empty()) {
+    if (imageLayers_.empty()) {
+        drawGrassUnderlay(window, mapPixelW, mapPixelH);
+    } else {
         drawImageLayersToWindow(window);
     }
     drawTileLayersToWindow(window, skipTile);
