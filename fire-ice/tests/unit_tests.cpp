@@ -47,7 +47,7 @@ TEST(ProtocolTest, PackAndUnpackInputPacket) {
     original.tick = 42;
     original.flags = 0b1010;
 
-    std::array<char, 768> buffer{};
+    std::array<char, fireice::PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     ASSERT_TRUE(fireice::packPacket(original, buffer, size));
 
@@ -60,7 +60,7 @@ TEST(ProtocolTest, PackAndUnpackInputPacket) {
 
 TEST(ProtocolTest, RejectsTruncatedPacket) {
     fireice::InputPacket packet{};
-    std::array<char, 768> buffer{};
+    std::array<char, fireice::PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     ASSERT_TRUE(fireice::packPacket(packet, buffer, size));
 

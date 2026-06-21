@@ -15,15 +15,192 @@ namespace fireice {
 
 namespace {
 
-struct TilesetLoadData {
-    int firstGid = 0;
-    int tileWidth = 32;
-    int tileHeight = 32;
-    int columns = 0;
-    sf::Texture texture;
-};
+bool tryLoadTextureFromPaths(sf::Texture& texture, const std::vector<std::filesystem::path>& candidates) {
+    for (const std::filesystem::path& candidate : candidates) {
+        if (candidate.empty()) {
+            continue;
+        }
+        if (texture.loadFromFile(candidate.generic_string())) {
+            return true;
+        }
+    }
+    return false;
+}
 
-bool loadTilesetFromTsx(const std::string& tsxPath, int firstGid, TilesetLoadData& out) {
+}  // namespace
+
+void TiledMapRenderer::parseTileAnimationsFromTsx(const std::string& xml, TilesetRef& tileset) {
+    tileset.animations.clear();
+    tileset.animationOwnerByFrame.clear();
+
+    const std::string tileOpen = "<tile";
+    std::size_t pos = 0;
+    while (true) {
+        pos = xml.find(tileOpen, pos);
+        if (pos == std::string::npos) {
+            break;
+        }
+        const std::size_t tileEnd = xml.find("</tile>", pos);
+        if (tileEnd == std::string::npos) {
+            break;
+        }
+        const std::string tileBlock = xml.substr(pos, tileEnd - pos + 7);
+        pos = tileEnd + 7;
+
+        const auto idAttr = tmx::attributeValue(tileBlock.substr(0, tileBlock.find('>') + 1), "id");
+        if (!idAttr) {
+            continue;
+        }
+        const int baseId = std::stoi(*idAttr);
+        const std::size_t animPos = tileBlock.find("<animation>");
+        if (animPos == std::string::npos) {
+            continue;
+        }
+        const std::size_t animEnd = tileBlock.find("</animation>", animPos);
+        if (animEnd == std::string::npos) {
+            continue;
+        }
+        const std::string animBlock = tileBlock.substr(animPos, animEnd - animPos);
+
+        TileAnimation anim;
+        const std::string frameOpen = "<frame";
+        std::size_t framePos = 0;
+        while (true) {
+            framePos = animBlock.find(frameOpen, framePos);
+            if (framePos == std::string::npos) {
+                break;
+            }
+            const std::size_t frameTagEnd = animBlock.find("/>", framePos);
+            if (frameTagEnd == std::string::npos) {
+                break;
+            }
+            const std::string frameTag = animBlock.substr(framePos, frameTagEnd - framePos + 2);
+            framePos = frameTagEnd + 2;
+
+            const auto frameId = tmx::attributeValue(frameTag, "tileid");
+            const auto duration = tmx::attributeValue(frameTag, "duration");
+            if (!frameId || !duration) {
+                continue;
+            }
+            anim.frames.push_back(std::stoi(*frameId));
+            anim.durationsMs.push_back(std::stoi(*duration));
+            anim.totalMs += std::stoi(*duration);
+        }
+        if (anim.frames.empty()) {
+            continue;
+        }
+
+        tileset.animations[baseId] = std::move(anim);
+        for (int frameId : tileset.animations[baseId].frames) {
+            tileset.animationOwnerByFrame[frameId] = baseId;
+        }
+    }
+}
+
+void TiledMapRenderer::parseTileAnimationsFromTsj(const std::string& json, TilesetRef& tileset) {
+    tileset.animations.clear();
+    tileset.animationOwnerByFrame.clear();
+
+    const std::string tilesKey = "\"tiles\":";
+    std::size_t tilesPos = json.find(tilesKey);
+    if (tilesPos == std::string::npos) {
+        return;
+    }
+    const std::size_t arrayStart = json.find('[', tilesPos);
+    if (arrayStart == std::string::npos) {
+        return;
+    }
+
+    std::size_t pos = arrayStart + 1;
+    int depth = 1;
+    while (pos < json.size() && depth > 0) {
+        const std::size_t objStart = json.find('{', pos);
+        if (objStart == std::string::npos || depth == 0) {
+            break;
+        }
+        std::size_t objEnd = objStart + 1;
+        int objDepth = 1;
+        while (objEnd < json.size() && objDepth > 0) {
+            if (json[objEnd] == '{') {
+                ++objDepth;
+            } else if (json[objEnd] == '}') {
+                --objDepth;
+            }
+            ++objEnd;
+        }
+        const std::string tileObj = json.substr(objStart, objEnd - objStart);
+
+        const auto baseId = tmx::jsonIntField(tileObj, "id");
+        const std::size_t animPos = tileObj.find("\"animation\":");
+        if (baseId && animPos != std::string::npos) {
+            const std::size_t animArrayStart = tileObj.find('[', animPos);
+            const std::size_t animArrayEnd = tileObj.find(']', animArrayStart);
+            if (animArrayStart != std::string::npos && animArrayEnd != std::string::npos) {
+                const std::string animArray = tileObj.substr(animArrayStart, animArrayEnd - animArrayStart + 1);
+                TileAnimation anim;
+                std::size_t framePos = 0;
+                while (true) {
+                    framePos = animArray.find('{', framePos);
+                    if (framePos == std::string::npos) {
+                        break;
+                    }
+                    const std::size_t frameEnd = animArray.find('}', framePos);
+                    if (frameEnd == std::string::npos) {
+                        break;
+                    }
+                    const std::string frameObj = animArray.substr(framePos, frameEnd - framePos + 1);
+                    framePos = frameEnd + 1;
+
+                    const auto frameId = tmx::jsonIntField(frameObj, "tileid");
+                    const auto duration = tmx::jsonIntField(frameObj, "duration");
+                    if (!frameId || !duration) {
+                        continue;
+                    }
+                    anim.frames.push_back(*frameId);
+                    anim.durationsMs.push_back(*duration);
+                    anim.totalMs += *duration;
+                }
+                if (!anim.frames.empty()) {
+                    tileset.animations[*baseId] = std::move(anim);
+                    for (int frameId : tileset.animations[*baseId].frames) {
+                        tileset.animationOwnerByFrame[frameId] = *baseId;
+                    }
+                }
+            }
+        }
+
+        pos = objEnd;
+        if (json[objEnd] == ']') {
+            break;
+        }
+    }
+}
+
+int TiledMapRenderer::resolveAnimatedLocalId(const TilesetRef& tileset, int localId, float animTimeSec) {
+    int ownerId = localId;
+    if (const auto it = tileset.animationOwnerByFrame.find(localId); it != tileset.animationOwnerByFrame.end()) {
+        ownerId = it->second;
+    } else if (tileset.animations.find(localId) == tileset.animations.end()) {
+        return localId;
+    }
+
+    const auto animIt = tileset.animations.find(ownerId);
+    if (animIt == tileset.animations.end() || animIt->second.totalMs <= 0) {
+        return localId;
+    }
+
+    const TileAnimation& anim = animIt->second;
+    int elapsedMs = static_cast<int>(animTimeSec * 1000.0f) % anim.totalMs;
+    for (std::size_t i = 0; i < anim.frames.size(); ++i) {
+        elapsedMs -= anim.durationsMs[i];
+        if (elapsedMs < 0) {
+            return anim.frames[i];
+        }
+    }
+    return anim.frames.back();
+}
+
+bool TiledMapRenderer::loadTilesetFromTsxFile(const std::string& tsxPath, int firstGid, TilesetRef& out) {
     const std::string xml = tmx::readFile(tsxPath);
     if (xml.empty()) {
         return false;
@@ -64,10 +241,11 @@ bool loadTilesetFromTsx(const std::string& tsxPath, int firstGid, TilesetLoadDat
         const unsigned texWidth = out.texture.getSize().x;
         out.columns = static_cast<int>(texWidth / static_cast<unsigned>(out.tileWidth));
     }
+    parseTileAnimationsFromTsx(xml, out);
     return true;
 }
 
-bool loadTilesetFromTsj(const std::string& tsjPath, int firstGid, TilesetLoadData& out) {
+bool TiledMapRenderer::loadTilesetFromTsjFile(const std::string& tsjPath, int firstGid, TilesetRef& out) {
     const std::string json = tmx::readFile(tsjPath);
     if (json.empty()) {
         return false;
@@ -99,29 +277,16 @@ bool loadTilesetFromTsj(const std::string& tsjPath, int firstGid, TilesetLoadDat
         const unsigned texWidth = out.texture.getSize().x;
         out.columns = static_cast<int>(texWidth / static_cast<unsigned>(out.tileWidth));
     }
+    parseTileAnimationsFromTsj(json, out);
     return true;
 }
 
-bool loadTilesetFromFile(const std::string& path, int firstGid, TilesetLoadData& out) {
+bool TiledMapRenderer::loadTilesetFromFile(const std::string& path, int firstGid, TilesetRef& out) {
     if (path.size() >= 4 && path.substr(path.size() - 4) == ".tsj") {
-        return loadTilesetFromTsj(path, firstGid, out);
+        return loadTilesetFromTsjFile(path, firstGid, out);
     }
-    return loadTilesetFromTsx(path, firstGid, out);
+    return loadTilesetFromTsxFile(path, firstGid, out);
 }
-
-bool tryLoadTextureFromPaths(sf::Texture& texture, const std::vector<std::filesystem::path>& candidates) {
-    for (const std::filesystem::path& candidate : candidates) {
-        if (candidate.empty()) {
-            continue;
-        }
-        if (texture.loadFromFile(candidate.generic_string())) {
-            return true;
-        }
-    }
-    return false;
-}
-
-}  // namespace
 
 bool TiledMapRenderer::isSpawnObjectName(const std::string& name) {
     std::string lower = name;
@@ -145,6 +310,7 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
     imageLayers_.clear();
     objectTiles_.clear();
     collectibleObjectTiles_.clear();
+    tilesetInfo_.clear();
     mapDirectory_.clear();
     mapScale_ = 1.0f;
 
@@ -181,6 +347,8 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
         mapScale_ = TILE_SIZE / static_cast<float>(tileWidth_);
     }
 
+    tilesetInfo_ = loadTmxTilesetInfo(tmxPath);
+
     for (const std::string& tilesetTag : tmx::findTags(xml, "tileset")) {
         const auto source = tmx::attributeValue(tilesetTag, "source");
         if (!source) {
@@ -191,17 +359,11 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
             continue;
         }
 
-        TilesetLoadData loaded;
+        TilesetRef tileset;
         const std::string tilesetPath = resolveAssetPath(tmx::joinPath(mapDir, *source));
-        if (!loadTilesetFromFile(tilesetPath, std::stoi(*firstGid), loaded)) {
+        if (!loadTilesetFromFile(tilesetPath, std::stoi(*firstGid), tileset)) {
             continue;
         }
-        TilesetRef tileset;
-        tileset.firstGid = loaded.firstGid;
-        tileset.tileWidth = loaded.tileWidth;
-        tileset.tileHeight = loaded.tileHeight;
-        tileset.columns = loaded.columns;
-        tileset.texture = std::move(loaded.texture);
         tilesets_.push_back(std::move(tileset));
     }
 
@@ -236,21 +398,24 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
         }
         if (obj.gid > 0) {
             const int decodedGid = decodeGid(obj.gid);
-            if (decodedGid == 303) {
+            if (isCollectibleGid(decodedGid, tilesetInfo_)) {
+                if (collectibleIndex >= MAX_PICKUPS) {
+                    continue;
+                }
+                CollectibleObjectTile tile;
+                tile.gid = obj.gid;
+                tile.x = obj.x;
+                tile.y = obj.y;
+                tile.width = obj.width;
+                tile.height = obj.height;
+                tile.index = collectibleIndex++;
+                collectibleObjectTiles_.push_back(std::move(tile));
                 continue;
             }
-            if (collectibleIndex >= MAX_PICKUPS) {
+            if (isSawGid(decodedGid, tilesetInfo_) || isRockHeadGid(decodedGid, tilesetInfo_) ||
+                isSpikedBallGid(decodedGid, tilesetInfo_) || isChainGid(decodedGid, tilesetInfo_)) {
                 continue;
             }
-            CollectibleObjectTile tile;
-            tile.gid = obj.gid;
-            tile.x = obj.x;
-            tile.y = obj.y;
-            tile.width = obj.width;
-            tile.height = obj.height;
-            tile.index = collectibleIndex++;
-            collectibleObjectTiles_.push_back(std::move(tile));
-            continue;
         }
 
         ObjectTile tile;
@@ -382,17 +547,18 @@ void TiledMapRenderer::drawGidSprite(sf::RenderTexture& target, int rawGid, floa
 }
 
 void TiledMapRenderer::drawGidSpriteToWindow(sf::RenderWindow& window, int rawGid, float x, float y, float width,
-                                             float height) const {
+                                             float height, float animTimeSec) const {
     const int gid = decodeGid(rawGid);
     const TilesetRef* tileset = findTileset(gid);
     if (tileset == nullptr) {
         return;
     }
 
-    const int localId = gid - tileset->firstGid;
+    int localId = gid - tileset->firstGid;
     if (localId < 0) {
         return;
     }
+    localId = resolveAnimatedLocalId(*tileset, localId, animTimeSec);
 
     const int columns = std::max(1, tileset->columns);
     const int rows =
@@ -420,6 +586,41 @@ void TiledMapRenderer::drawGidSpriteToWindow(sf::RenderWindow& window, int rawGi
     sf::Sprite sprite(tileset->texture);
     sprite.setTextureRect(sf::IntRect(sx, sy, tileset->tileWidth, tileset->tileHeight));
     sprite.setPosition(drawX, drawY);
+    sprite.setScale(drawWidth / static_cast<float>(tileset->tileWidth),
+                    drawHeight / static_cast<float>(tileset->tileHeight));
+    window.draw(sprite);
+}
+
+void TiledMapRenderer::drawObjectGidAt(sf::RenderWindow& window, int rawGid, float gameX, float gameY, float gameW,
+                                       float gameH, float animTimeSec) const {
+    const int gid = decodeGid(rawGid);
+    const TilesetRef* tileset = findTileset(gid);
+    if (tileset == nullptr) {
+        return;
+    }
+
+    int localId = gid - tileset->firstGid;
+    if (localId < 0) {
+        return;
+    }
+    localId = resolveAnimatedLocalId(*tileset, localId, animTimeSec);
+
+    const int columns = std::max(1, tileset->columns);
+    const int rows =
+        static_cast<int>(tileset->texture.getSize().y / static_cast<unsigned>(std::max(1, tileset->tileHeight)));
+    const int maxTiles = rows * columns;
+    if (localId >= maxTiles) {
+        return;
+    }
+    const int sx = (localId % columns) * tileset->tileWidth;
+    const int sy = (localId / columns) * tileset->tileHeight;
+
+    const float drawWidth = gameW > 0.0f ? gameW : static_cast<float>(tileset->tileWidth) * mapScale_;
+    const float drawHeight = gameH > 0.0f ? gameH : static_cast<float>(tileset->tileHeight) * mapScale_;
+
+    sf::Sprite sprite(tileset->texture);
+    sprite.setTextureRect(sf::IntRect(sx, sy, tileset->tileWidth, tileset->tileHeight));
+    sprite.setPosition(gameX, gameY);
     sprite.setScale(drawWidth / static_cast<float>(tileset->tileWidth),
                     drawHeight / static_cast<float>(tileset->tileHeight));
     window.draw(sprite);
@@ -590,8 +791,8 @@ void TiledMapRenderer::drawStatic(sf::RenderWindow& window, const std::function<
     drawObjectTilesToWindow(window);
 }
 
-void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, uint32_t collectedMask, uint32_t collectedMaskHi,
-                                        uint32_t collectedMaskExt) const {
+void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, float animTimeSec, uint32_t collectedMask,
+                                        uint32_t collectedMaskHi, uint32_t collectedMaskExt) const {
     for (const CollectibleObjectTile& obj : collectibleObjectTiles_) {
         const uint32_t bit = 1u << (obj.index % 32u);
         const uint8_t word = obj.index / 32u;
@@ -600,7 +801,7 @@ void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, uint32_t colle
         if (taken) {
             continue;
         }
-        drawGidSpriteToWindow(window, obj.gid, obj.x, obj.y, obj.width, obj.height);
+        drawGidSpriteToWindow(window, obj.gid, obj.x, obj.y, obj.width, obj.height, animTimeSec);
     }
 }
 

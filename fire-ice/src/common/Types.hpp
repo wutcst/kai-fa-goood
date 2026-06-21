@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstdint>
 
@@ -70,6 +70,8 @@ constexpr uint8_t MAX_PLAYER_NAME = 16;
 constexpr uint8_t MAX_PLAYERS = 3;
 constexpr uint8_t MAX_ROOM_CODE = 8;
 constexpr uint8_t MAX_MUD_PARTICLES = 12;
+constexpr uint8_t MAX_ROCK_HEAD_TRAPS = 8;
+constexpr uint8_t MAX_PENDULUM_TRAPS = 8;
 constexpr uint16_t MAX_VANISHING_SLOTS = 288;
 
 inline InputFlags operator|(InputFlags a, InputFlags b) {
@@ -165,8 +167,35 @@ struct WorldState {
     SyncMudParticle mudParticles[MAX_MUD_PARTICLES]{};
     uint8_t lobbyStep = 0;
     uint8_t waitingReadyMask = 0;
+    uint8_t rockHeadCount = 0;
+    struct SyncRockHead {
+        float x = 0.0f;
+        float y = 0.0f;
+        float w = 0.0f;
+        float h = 0.0f;
+        int gid = 0;
+        int8_t dirX = 0;
+        int8_t dirY = 0;
+        uint8_t active = 0;
+        uint8_t pad = 0;
+    };
+    SyncRockHead rockHeads[MAX_ROCK_HEAD_TRAPS]{};
+    uint8_t pendulumCount = 0;
+    struct SyncPendulum {
+        float pivotX = 0.0f;
+        float pivotY = 0.0f;
+        float ballX = 0.0f;
+        float ballY = 0.0f;
+        float ballW = 0.0f;
+        float ballH = 0.0f;
+        int ballGid = 0;
+        int chainGid = 0;
+        uint8_t chainCount = 0;
+        uint8_t active = 0;
+        uint8_t pad[2]{};
+    };
+    SyncPendulum pendulums[MAX_PENDULUM_TRAPS]{};
 };
-
 inline const char* phaseName(GamePhase phase) {
     switch (phase) {
         case GamePhase::Lobby:

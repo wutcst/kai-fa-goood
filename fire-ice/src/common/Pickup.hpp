@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "Types.hpp"
 
@@ -16,6 +16,25 @@ struct Pickup {
     float h = 0.0f;
     uint8_t index = 0;
 };
+
+struct TmxTilesetInfo {
+    int firstGid = 0;
+    int tileCount = 0;
+    std::string source;
+    bool isCollectible = false;
+};
+
+bool isCollectibleTilesetSource(const std::string& source);
+bool isSawTilesetSource(const std::string& source);
+bool isRockHeadTilesetSource(const std::string& source);
+bool isSpikedBallTilesetSource(const std::string& source);
+bool isChainTilesetSource(const std::string& source);
+std::vector<TmxTilesetInfo> loadTmxTilesetInfo(const std::string& tmxPath);
+bool isCollectibleGid(int gid, const std::vector<TmxTilesetInfo>& tilesets);
+bool isSawGid(int gid, const std::vector<TmxTilesetInfo>& tilesets);
+bool isRockHeadGid(int gid, const std::vector<TmxTilesetInfo>& tilesets);
+bool isSpikedBallGid(int gid, const std::vector<TmxTilesetInfo>& tilesets);
+bool isChainGid(int gid, const std::vector<TmxTilesetInfo>& tilesets);
 
 std::vector<Pickup> loadPickupsFromTmx(const std::string& tmxPath, int tmxTileWidth = 16);
 void collectPickups(PlayerState& player, const std::vector<Pickup>& pickups, uint32_t& collectedMask,

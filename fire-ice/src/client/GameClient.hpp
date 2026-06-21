@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "AssetManager.hpp"
 #include "GameServer.hpp"
+#include "LevelMechanics.hpp"
 #include "Map.hpp"
 #include "Protocol.hpp"
 #include "TiledMapRenderer.hpp"
@@ -89,6 +90,9 @@ private:
     void drawTitleBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawMap(sf::RenderWindow& window) const;
     void drawMudParticles(sf::RenderWindow& window) const;
+    void drawSawTraps(sf::RenderWindow& window) const;
+    void drawRockHeads(sf::RenderWindow& window) const;
+    void drawPendulums(sf::RenderWindow& window) const;
     void drawDynamicTiles(sf::RenderWindow& window) const;
     void drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;
     void drawPlayer(sf::RenderWindow& window, const PlayerState& player) const;
@@ -111,6 +115,7 @@ private:
     sf::RenderWindow window_;
     GameMap map_;
     TiledMapRenderer tiledMap_;
+    std::vector<SawTrap> sawTraps_;
     UiHelper ui_;
     AssetManager assets_;
     sf::Music lobbyMusic_;

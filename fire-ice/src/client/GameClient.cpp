@@ -1,4 +1,4 @@
-#include "GameClient.hpp"
+﻿#include "GameClient.hpp"
 #include "ClientVisuals.hpp"
 #include "LevelCatalog.hpp"
 #include "LevelMapLayout.hpp"
@@ -337,7 +337,7 @@ void GameClient::sendConnectRequest() {
         std::snprintf(request.roomCode, sizeof(request.roomCode), "%s", typedRoomCode_.c_str());
     }
 
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     packPacket(request, buffer, size);
     socket_.send(buffer.data(), size, serverAddress_, SERVER_PORT);
@@ -526,8 +526,12 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
 
     if (!visualPath.empty() && tiledMap_.load(visualPath)) {
         tiledMap_.bake();
+        sawTraps_ = loadSawTrapsFromTmx(visualPath, 16);
     } else if (!visualPath.empty()) {
         std::cerr << "[Client] Failed to load tiled visual map: " << visualPath << std::endl;
+        sawTraps_.clear();
+    } else {
+        sawTraps_.clear();
     }
 
     loadedLevelIndex_ = globalIndex;
@@ -607,7 +611,7 @@ void GameClient::disconnect() {
 
     DisconnectPacket packet{};
     packet.slot = slot_;
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     packPacket(packet, buffer, size);
     socket_.send(buffer.data(), size, serverAddress_, SERVER_PORT);
@@ -695,7 +699,7 @@ void GameClient::broadcastDiscovery() {
             std::snprintf(disc.roomCode, MAX_ROOM_CODE, "%s", targetCode.c_str());
         }
 
-        std::array<char, 768> buf{};
+        std::array<char, PACKET_BUFFER_SIZE> buf{};
         std::size_t sz = 0;
         packPacket(disc, buf, sz);
 
@@ -778,7 +782,7 @@ void GameClient::renderJoinRoomScanResults() {
 }
 
 void GameClient::pollNetwork() {
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t received = 0;
     sf::IpAddress sender;
     unsigned short port = 0;
@@ -823,7 +827,7 @@ void GameClient::pollNetwork() {
             }
             case PacketType::State: {
                 StatePacket packet{};
-                if (!unpackPacket(buffer.data(), received, packet)) {
+                if (!unpackStatePacketCompatible(buffer.data(), received, packet)) {
                     break;
                 }
 
@@ -871,7 +875,7 @@ bool GameClient::sendInput() {
     packet.tick = ++inputTick_;
     packet.flags = static_cast<uint8_t>(currentInput_);
 
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     if (!packPacket(packet, buffer, size)) {
         return false;
@@ -892,7 +896,7 @@ bool GameClient::sendAction(PlayerAction action, uint8_t value) {
     packet.action = action;
     packet.value = value;
 
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     if (!packPacket(packet, buffer, size)) {
         return false;
@@ -2362,6 +2366,55 @@ void GameClient::drawDynamicTiles(sf::RenderWindow& window) const {
     }
 }
 
+void GameClient::drawSawTraps(sf::RenderWindow& window) const {
+    if (sawTraps_.empty() || !tiledMap_.ready()) {
+        return;
+    }
+
+    const float timeSec = static_cast<float>(renderWorld_.tick) * TICK_DT;
+    for (const SawTrap& saw : sawTraps_) {
+        const float y = sawCurrentY(saw, timeSec);
+        tiledMap_.drawObjectGidAt(window, saw.gid, saw.anchorX, y, saw.width, saw.height, timeSec);
+    }
+}
+
+void GameClient::drawRockHeads(sf::RenderWindow& window) const {
+    if (!tiledMap_.ready()) {
+        return;
+    }
+    for (uint8_t i = 0; i < renderWorld_.rockHeadCount; ++i) {
+        const WorldState::SyncRockHead& rock = renderWorld_.rockHeads[i];
+        if (rock.active == 0) {
+            continue;
+        }
+        tiledMap_.drawObjectGidAt(window, rock.gid, rock.x, rock.y, rock.w, rock.h, animTime_);
+    }
+}
+
+void GameClient::drawPendulums(sf::RenderWindow& window) const {
+    if (!tiledMap_.ready()) {
+        return;
+    }
+    for (uint8_t i = 0; i < renderWorld_.pendulumCount; ++i) {
+        const WorldState::SyncPendulum& pendulum = renderWorld_.pendulums[i];
+        if (pendulum.active == 0) {
+            continue;
+        }
+        const float ballCenterX = pendulum.ballX + pendulum.ballW * 0.5f;
+        const float ballCenterY = pendulum.ballY + pendulum.ballH * 0.5f;
+        const uint8_t chainCount = std::max<uint8_t>(1, pendulum.chainCount);
+        for (uint8_t chain = 1; chain <= chainCount; ++chain) {
+            const float t = static_cast<float>(chain) / static_cast<float>(chainCount + 1);
+            const float cx = pendulum.pivotX + (ballCenterX - pendulum.pivotX) * t;
+            const float cy = pendulum.pivotY + (ballCenterY - pendulum.pivotY) * t;
+            constexpr float chainSize = TILE_SIZE * 0.5f;
+            tiledMap_.drawObjectGidAt(window, pendulum.chainGid, cx - chainSize * 0.5f, cy - chainSize * 0.5f,
+                                      chainSize, chainSize, animTime_);
+        }
+        tiledMap_.drawObjectGidAt(window, pendulum.ballGid, pendulum.ballX, pendulum.ballY, pendulum.ballW,
+                                  pendulum.ballH, animTime_);
+    }
+}
 void GameClient::drawMudParticles(sf::RenderWindow& window) const {
     for (uint8_t i = 0; i < renderWorld_.mudParticleCount; ++i) {
         const WorldState::SyncMudParticle& particle = renderWorld_.mudParticles[i];
@@ -2391,7 +2444,10 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
             return isVanishingTileHidden(renderWorld_, static_cast<uint16_t>(slot));
         };
         tiledMap_.drawStatic(window, skipHiddenVanishing);
-        tiledMap_.drawCollectibles(window, renderWorld_.collectedPickupsMask, renderWorld_.collectedPickupsMaskHi,
+        drawSawTraps(window);
+        drawRockHeads(window);
+        drawPendulums(window);
+        tiledMap_.drawCollectibles(window, animTime_, renderWorld_.collectedPickupsMask, renderWorld_.collectedPickupsMaskHi,
                                    renderWorld_.collectedPickupsMaskExt);
         drawMudParticles(window);
         return;
