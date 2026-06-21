@@ -2453,8 +2453,8 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
         drawSawTraps(window);
         drawRockHeads(window);
         drawPendulums(window);
-        tiledMap_.drawCollectibles(window, animTime_, renderWorld_.collectedPickupsMask, renderWorld_.collectedPickupsMaskHi,
-                                   renderWorld_.collectedPickupsMaskExt);
+        tiledMap_.drawCollectibles(window, animTime_, renderWorld_.collectedPickupsMask,
+                                   renderWorld_.collectedPickupsMaskHi, renderWorld_.collectedPickupsMaskExt);
         drawMudParticles(window);
         return;
     }

@@ -380,8 +380,8 @@ bool TiledMapRenderer::load(const std::string& tmxPath) {
         imageLayers_.push_back(std::move(loaded));
     }
     if (!imageLayers_.empty()) {
-        std::cout << "[TiledMapRenderer] Loaded " << imageLayers_.size() << " background layer(s) for "
-                  << resolvedTmx << std::endl;
+        std::cout << "[TiledMapRenderer] Loaded " << imageLayers_.size() << " background layer(s) for " << resolvedTmx
+                  << std::endl;
     }
 
     for (const tmx::TileLayerData& tileLayer : tmx::findAllTileLayers(xml)) {

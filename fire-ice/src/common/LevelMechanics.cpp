@@ -445,8 +445,7 @@ bool rockMovementBlocked(const GameMap& map, const RockHeadTrap& rock, float nex
 float scanRockHorizontalBound(const GameMap& map, const RockHeadTrap& rock, int dirX) {
     float x = rock.baseX;
     if (dirX < 0) {
-        while (x > ROCK_HEAD_SCAN_STEP &&
-               !rockMovementBlocked(map, rock, x - ROCK_HEAD_SCAN_STEP, rock.baseY, -1, 0)) {
+        while (x > ROCK_HEAD_SCAN_STEP && !rockMovementBlocked(map, rock, x - ROCK_HEAD_SCAN_STEP, rock.baseY, -1, 0)) {
             x -= ROCK_HEAD_SCAN_STEP;
         }
         return x;
@@ -463,8 +462,7 @@ float scanRockHorizontalBound(const GameMap& map, const RockHeadTrap& rock, int 
 float scanRockVerticalBound(const GameMap& map, const RockHeadTrap& rock, int dirY) {
     float y = rock.baseY;
     if (dirY < 0) {
-        while (y > ROCK_HEAD_SCAN_STEP &&
-               !rockMovementBlocked(map, rock, rock.baseX, y - ROCK_HEAD_SCAN_STEP, 0, -1)) {
+        while (y > ROCK_HEAD_SCAN_STEP && !rockMovementBlocked(map, rock, rock.baseX, y - ROCK_HEAD_SCAN_STEP, 0, -1)) {
             y -= ROCK_HEAD_SCAN_STEP;
         }
         return y;
@@ -534,7 +532,8 @@ void pushPlayerByRock(PlayerState& player, const RockHeadTrap& rock, const AABB&
 }
 
 void syncRockHeadsToWorld(const LevelRuntime& runtime, WorldState& world) {
-    world.rockHeadCount = static_cast<uint8_t>(std::min(runtime.rockHeads.size(), static_cast<std::size_t>(MAX_ROCK_HEAD_TRAPS)));
+    world.rockHeadCount =
+        static_cast<uint8_t>(std::min(runtime.rockHeads.size(), static_cast<std::size_t>(MAX_ROCK_HEAD_TRAPS)));
     for (uint8_t i = 0; i < world.rockHeadCount; ++i) {
         const RockHeadTrap& rock = runtime.rockHeads[i];
         world.rockHeads[i].x = rock.x;
@@ -649,7 +648,8 @@ bool samplePendulumHazard(const std::vector<PendulumTrap>& pendulums, const Play
 }
 
 void updatePendulums(const LevelRuntime& runtime, WorldState& world, float timeSec) {
-    world.pendulumCount = static_cast<uint8_t>(std::min(runtime.pendulums.size(), static_cast<std::size_t>(MAX_PENDULUM_TRAPS)));
+    world.pendulumCount =
+        static_cast<uint8_t>(std::min(runtime.pendulums.size(), static_cast<std::size_t>(MAX_PENDULUM_TRAPS)));
     for (uint8_t i = 0; i < world.pendulumCount; ++i) {
         const PendulumTrap& pendulum = runtime.pendulums[i];
         const Vec2 center = pendulumBallCenter(pendulum, timeSec);
@@ -716,7 +716,8 @@ std::vector<PendulumTrap> loadPendulumsFromTmx(const std::string& tmxPath, int t
         }
     }
 
-    std::sort(balls.begin(), balls.end(), [](const ObjectInfo& a, const ObjectInfo& b) { return a.center.x < b.center.x; });
+    std::sort(balls.begin(), balls.end(),
+              [](const ObjectInfo& a, const ObjectInfo& b) { return a.center.x < b.center.x; });
     std::vector<PendulumTrap> pendulums;
     for (const ObjectInfo& ball : balls) {
         if (pendulums.size() >= MAX_PENDULUM_TRAPS) {
@@ -732,9 +733,8 @@ std::vector<PendulumTrap> loadPendulumsFromTmx(const std::string& tmxPath, int t
         if (candidates.empty()) {
             continue;
         }
-        std::sort(candidates.begin(), candidates.end(), [](const ObjectInfo& a, const ObjectInfo& b) {
-            return a.center.y < b.center.y;
-        });
+        std::sort(candidates.begin(), candidates.end(),
+                  [](const ObjectInfo& a, const ObjectInfo& b) { return a.center.y < b.center.y; });
         const ObjectInfo& topChain = candidates.front();
         PendulumTrap pendulum;
         pendulum.pivotX = topChain.center.x;
@@ -792,9 +792,8 @@ std::vector<RockHeadTrap> loadRockHeadsFromTmx(const std::string& tmxPath, int t
     }
 
     if (!rocks.empty()) {
-        const auto rightmost = std::max_element(rocks.begin(), rocks.end(), [](const RockHeadTrap& a, const RockHeadTrap& b) {
-            return a.baseX < b.baseX;
-        });
+        const auto rightmost = std::max_element(
+            rocks.begin(), rocks.end(), [](const RockHeadTrap& a, const RockHeadTrap& b) { return a.baseX < b.baseX; });
         for (RockHeadTrap& rock : rocks) {
             if (&rock == &(*rightmost)) {
                 rock.dirX = 0;

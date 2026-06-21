@@ -43,8 +43,7 @@ void Room::selectLevel(uint8_t index, bool keepMapSelect) {
     levelRuntime.mudSpawners = visualMapPath.empty() ? std::vector<Vec2>{} : loadMudSpawnsFromTmx(visualMapPath);
     levelRuntime.fanZones = visualMapPath.empty() ? std::vector<FanZone>{}
                                                   : loadFanZonesFromTmx(visualMapPath, 16, &levelRuntime.fanTileCoords);
-    levelRuntime.sawTraps =
-        visualMapPath.empty() ? std::vector<SawTrap>{} : loadSawTrapsFromTmx(visualMapPath, 16);
+    levelRuntime.sawTraps = visualMapPath.empty() ? std::vector<SawTrap>{} : loadSawTrapsFromTmx(visualMapPath, 16);
     levelRuntime.rockHeads =
         visualMapPath.empty() ? std::vector<RockHeadTrap>{} : loadRockHeadsFromTmx(visualMapPath, 16);
     levelRuntime.pendulums =
