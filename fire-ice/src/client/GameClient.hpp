@@ -1,7 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "AssetManager.hpp"
 #include "GameServer.hpp"
+#include "LevelMechanics.hpp"
 #include "Map.hpp"
 #include "Protocol.hpp"
 #include "TiledMapRenderer.hpp"
@@ -37,6 +38,9 @@ public:
     void disconnect();
     bool startHosting();
     void stopHosting();
+    void usePublicServer();
+    void toggleWaitingReadyLocal();
+    bool isPlayerSlotConnected(uint8_t slot) const;
 
 private:
     void pollNetwork();
@@ -59,8 +63,10 @@ private:
     InputFlags readLocalInput() const;
     void render();
     void renderTitleScreen();
+    void renderTitleBackground();
+    void renderTitleEffects();
     void renderTitleCharacters();
-    void renderTitleSpotlight();
+    void drawLobbyBackdrop(sf::Color top, sf::Color bottom);
     void renderHelpOverlay();
     void renderCreditsOverlay();
     void renderLobbyScreen();
@@ -69,6 +75,7 @@ private:
     void drawLevelPath(uint8_t fromIndex, uint8_t toIndex, uint8_t levelCount, bool unlocked);
     void handleLobbyMouseClick(const sf::Event& event);
     void handleLobbyMouseWheel(const sf::Event& event);
+    void scrollLevelMapToNode(uint8_t index);
     int levelNodeAtPosition(float x, float y) const;
     void trySelectLevel(uint8_t index);
     void renderRoomScreen();
@@ -80,14 +87,23 @@ private:
     void broadcastDiscovery();
     void handleDiscoveryResponse(const DiscoveryPacket& packet, const sf::IpAddress& sender);
     void drawBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
+    void drawTitleBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawMap(sf::RenderWindow& window) const;
     void drawMudParticles(sf::RenderWindow& window) const;
+    void drawSawTraps(sf::RenderWindow& window) const;
+    void drawRockHeads(sf::RenderWindow& window) const;
+    void drawPendulums(sf::RenderWindow& window) const;
     void drawDynamicTiles(sf::RenderWindow& window) const;
     void drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;
     void drawPlayer(sf::RenderWindow& window, const PlayerState& player) const;
     void drawHud(sf::RenderWindow& window) const;
     void drawCountdownOverlay(sf::RenderWindow& window, float centerX) const;
     void drawResultOverlay(sf::RenderWindow& window, float centerX, bool victory) const;
+    void drawPauseButton(sf::RenderWindow& window) const;
+    void drawPauseOverlay(sf::RenderWindow& window, float centerX) const;
+    sf::FloatRect pauseButtonRect() const;
+    bool handlePauseMenuClick(const sf::Event& event);
+    bool handleResultOverlayClick(const sf::Event& event);
     void drawConnectingScreen(sf::RenderWindow& window) const;
     sf::Color tileColor(TileType type) const;
     const char* roleDisplayName() const;
@@ -99,6 +115,7 @@ private:
     sf::RenderWindow window_;
     GameMap map_;
     TiledMapRenderer tiledMap_;
+    std::vector<SawTrap> sawTraps_;
     UiHelper ui_;
     AssetManager assets_;
     sf::Music lobbyMusic_;
@@ -122,13 +139,17 @@ private:
 
     bool connected_ = false;
     bool localReady_ = false;
+    bool paused_ = false;
     uint8_t slot_ = 0;
     PlayerRole role_ = PlayerRole::None;
     std::string playerName_;
     std::string typedRoomCode_;
     float roomAnimTimer_ = 0.0f;
+    float animTime_ = 0.0f;
+    sf::Clock animClock_;
 
     InputFlags currentInput_ = InputFlags::None;
+    InputFlags lastSentInput_ = InputFlags::None;
     uint32_t inputTick_ = 0;
 
     std::chrono::steady_clock::time_point lastInputSend_;

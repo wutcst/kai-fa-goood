@@ -27,6 +27,8 @@ struct ClientSlot {
     InputFlags pendingInput = InputFlags::None;
     bool jumpHeld = false;
     bool airJumpUsedThisHold = false;
+    bool groundJumpConsumed = false;
+    float coyoteTimer = 0.0f;
     std::string name;
 };
 
@@ -46,7 +48,7 @@ struct Room {
     std::chrono::steady_clock::time_point lastTick;
     std::chrono::steady_clock::time_point lastBroadcast;
 
-    void selectLevel(uint8_t index);
+    void selectLevel(uint8_t index, bool keepMapSelect = false);
     void applyLevelMetadata();
     void syncProgressToWorld();
     bool isLevelUnlocked(uint8_t index) const;

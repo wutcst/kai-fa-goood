@@ -1,0 +1,37 @@
+<assembly xmlns="http://maven.apache.org/ASSEMBLY/2.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/ASSEMBLY/2.2.0 https://maven.apache.org/xsd/assembly-2.2.0.xsd">
+    <id>release</id>
+    <formats>
+        <format>jar</format>
+    </formats>
+    <includeBaseDirectory>false</includeBaseDirectory>
+
+    <fileSets>
+        <fileSet>
+            <directory>${project.build.outputDirectory}</directory>
+            <outputDirectory>/</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>${project.basedir}/fire-ice/build</directory>
+            <outputDirectory>native</outputDirectory>
+            <includes>
+                <include>fireice_server.exe</include>
+                <include>fireice_client.exe</include>
+                <include>*.dll</include>
+            </includes>
+        </fileSet>
+        <fileSet>
+            <directory>${project.basedir}/fire-ice/build/levels</directory>
+            <outputDirectory>native/levels</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>${project.basedir}/fire-ice/build/textures</directory>
+            <outputDirectory>native/textures</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>${project.basedir}/fire-ice/build/maps</directory>
+            <outputDirectory>native/maps</outputDirectory>
+        </fileSet>
+    </fileSets>
+</assembly>

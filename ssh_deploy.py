@@ -11,7 +11,7 @@ PORT = 22
 USER = "root"
 PASSWORD = "wll13569035397."
 PROJECT = "/root/fire-ice"
-LOCAL_SRC = r"D:\Desktop\fire-ice\kai-fa-goood\fire-ice"
+LOCAL_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fire-ice")
 
 
 class Deploy:
@@ -152,6 +152,10 @@ def upload_code(deploy):
         (f"{local}/src/common/LevelCatalog.hpp", f"{PROJECT}/src/common/LevelCatalog.hpp"),
         (f"{local}/src/common/LevelCatalog.cpp", f"{PROJECT}/src/common/LevelCatalog.cpp"),
         (f"{local}/src/common/LevelProgress.hpp", f"{PROJECT}/src/common/LevelProgress.hpp"),
+        (f"{local}/src/common/Pickup.hpp", f"{PROJECT}/src/common/Pickup.hpp"),
+        (f"{local}/src/common/Pickup.cpp", f"{PROJECT}/src/common/Pickup.cpp"),
+        (f"{local}/src/common/LevelMechanics.hpp", f"{PROJECT}/src/common/LevelMechanics.hpp"),
+        (f"{local}/src/common/LevelMechanics.cpp", f"{PROJECT}/src/common/LevelMechanics.cpp"),
         (f"{local}/src/server/GameServer.hpp", f"{PROJECT}/src/server/GameServer.hpp"),
         (f"{local}/src/server/GameServer.cpp", f"{PROJECT}/src/server/GameServer.cpp"),
         (f"{local}/src/server/main.cpp", f"{PROJECT}/src/server/main.cpp"),

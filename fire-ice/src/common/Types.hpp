@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstdint>
 
@@ -11,6 +11,7 @@ constexpr float JUMP_SPEED = 520.0f;
 constexpr float MAX_FALL_SPEED = 900.0f;
 
 constexpr uint16_t SERVER_PORT = 24567;
+constexpr const char* DEFAULT_SERVER_HOST = "8.141.101.126";
 constexpr uint8_t MIN_PLAYERS_TO_START = 1;
 constexpr float TICK_RATE = 60.0f;  // 服务端物理帧率
 constexpr float TICK_DT = 1.0f / TICK_RATE;
@@ -60,8 +61,8 @@ enum class PlayerAction : uint8_t {
     BackToWaitingRoom = 9
 };
 
-constexpr unsigned LOBBY_WINDOW_WIDTH = 1024;
-constexpr unsigned LOBBY_WINDOW_HEIGHT = 640;
+constexpr unsigned LOBBY_WINDOW_WIDTH = 1785;
+constexpr unsigned LOBBY_WINDOW_HEIGHT = 1280;
 
 constexpr uint8_t MAX_LEVEL_NAME = 32;
 constexpr uint8_t INITIAL_UNLOCKED_LEVEL_MASK = 0xFF;  // 位掩码，每位对应一关是否解锁
@@ -69,6 +70,8 @@ constexpr uint8_t MAX_PLAYER_NAME = 16;
 constexpr uint8_t MAX_PLAYERS = 3;
 constexpr uint8_t MAX_ROOM_CODE = 8;
 constexpr uint8_t MAX_MUD_PARTICLES = 12;
+constexpr uint8_t MAX_ROCK_HEAD_TRAPS = 8;
+constexpr uint8_t MAX_PENDULUM_TRAPS = 8;
 constexpr uint16_t MAX_VANISHING_SLOTS = 288;
 
 inline InputFlags operator|(InputFlags a, InputFlags b) {
@@ -164,8 +167,35 @@ struct WorldState {
     SyncMudParticle mudParticles[MAX_MUD_PARTICLES]{};
     uint8_t lobbyStep = 0;
     uint8_t waitingReadyMask = 0;
+    uint8_t rockHeadCount = 0;
+    struct SyncRockHead {
+        float x = 0.0f;
+        float y = 0.0f;
+        float w = 0.0f;
+        float h = 0.0f;
+        int gid = 0;
+        int8_t dirX = 0;
+        int8_t dirY = 0;
+        uint8_t active = 0;
+        uint8_t pad = 0;
+    };
+    SyncRockHead rockHeads[MAX_ROCK_HEAD_TRAPS]{};
+    uint8_t pendulumCount = 0;
+    struct SyncPendulum {
+        float pivotX = 0.0f;
+        float pivotY = 0.0f;
+        float ballX = 0.0f;
+        float ballY = 0.0f;
+        float ballW = 0.0f;
+        float ballH = 0.0f;
+        int ballGid = 0;
+        int chainGid = 0;
+        uint8_t chainCount = 0;
+        uint8_t active = 0;
+        uint8_t pad[2]{};
+    };
+    SyncPendulum pendulums[MAX_PENDULUM_TRAPS]{};
 };
-
 inline const char* phaseName(GamePhase phase) {
     switch (phase) {
         case GamePhase::Lobby:

@@ -2,6 +2,7 @@
 
 #include "Types.hpp"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstring>
@@ -82,8 +83,10 @@ struct DiscoveryPacket {
 
 #pragma pack(pop)
 
+constexpr std::size_t PACKET_BUFFER_SIZE = 1400;
+
 template <typename T>
-bool packPacket(const T& packet, std::array<char, 768>& buffer, std::size_t& size) {
+bool packPacket(const T& packet, std::array<char, PACKET_BUFFER_SIZE>& buffer, std::size_t& size) {
     static_assert(std::is_trivially_copyable_v<T>, "Packet must be trivially copyable");
     if (sizeof(T) > buffer.size()) {
         return false;
@@ -101,6 +104,16 @@ bool unpackPacket(const char* data, std::size_t size, T& packet) {
     }
     std::memcpy(&packet, data, sizeof(T));
     return packet.header.type == T{}.header.type;
+}
+
+inline bool unpackStatePacketCompatible(const char* data, std::size_t size, StatePacket& packet) {
+    if (size < sizeof(PacketHeader)) {
+        return false;
+    }
+    packet = StatePacket{};
+    const std::size_t copySize = std::min(size, sizeof(StatePacket));
+    std::memcpy(&packet, data, copySize);
+    return packet.header.type == PacketType::State;
 }
 
 inline const char* roleName(PlayerRole role) {

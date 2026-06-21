@@ -7,8 +7,8 @@
  <tileset firstgid="269" source="level03/Kiwi.tsx"/>
  <tileset firstgid="286" source="level03/On (38x38).tsx"/>
  <tileset firstgid="294" source="level03/Chain.tsx"/>
- <imagelayer id="2" name="Background" offsetx="0" offsety="-896" repeatx="1" repeaty="1">
-  <image source="level03/background.png" width="64" height="64"/>
+ <imagelayer id="2" name="Background" repeatx="1" repeaty="1">
+  <image source="level03/background.png" width="395" height="63"/>
  </imagelayer>
  <layer id="1" name="碰撞" width="44" height="24">
   <data encoding="csv">

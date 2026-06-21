@@ -1,4 +1,5 @@
-#include "GameClient.hpp"
+﻿#include "GameClient.hpp"
+#include "ClientVisuals.hpp"
 #include "LevelCatalog.hpp"
 #include "LevelMapLayout.hpp"
 #include "LevelMechanics.hpp"
@@ -14,46 +15,239 @@ namespace fireice {
 namespace {
 
 constexpr float kPreviewMargin = 12.0f;
-constexpr float kTitleCenterX = 512.0f;
-constexpr float kMenuStartY = 300.0f;
-constexpr float kMenuItemStep = 52.0f;
+constexpr float kTitleFooterHeight = 86.0f;
 
-constexpr float kRoomPanelW = 200.0f;
-constexpr float kRoomPanelH = 250.0f;
-constexpr float kRoomPanelY = 84.0f;
-constexpr float kRoomPanelGap = 12.0f;
-constexpr float kRoomBottomBarH = 64.0f;
-constexpr float kRoomActionBtnW = 180.0f;
-constexpr float kRoomActionBtnH = 44.0f;
-constexpr float kRoomActionBtnGap = 20.0f;
+// 标题界面各区域位置与尺寸，按窗口比例缩放
+struct TitleLayoutMetrics {
+    float headerY = 0.f;
+    float menuStartY = 0.f;
+    float menuStep = 0.f;
+    float menuItemWidth = 0.f;
+    float menuMidY = 0.f;
+    float footerTop = 0.f;
+    float footerHeight = 0.f;
+};
+
+inline unsigned titleMenuFontSize() {
+    return static_cast<unsigned>(std::clamp(36.0f * static_cast<float>(LOBBY_WINDOW_WIDTH) / 1280.0f, 36.0f, 52.0f));
+}
+
+TitleLayoutMetrics titleLayoutMetrics() {
+    TitleLayoutMetrics metrics{};
+    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
+    metrics.headerY = lobbyScaled(78.0f);
+    metrics.menuStep = lobbyScaled(54.0f);
+    metrics.menuItemWidth = lobbyScaled(500.0f);
+    metrics.footerHeight = lobbyScaled(kTitleFooterHeight);
+    metrics.footerTop = h - metrics.footerHeight;
+
+    constexpr float kTitleCharScale = 3.2f;
+    const float charH = 32.0f * kTitleCharScale;
+    const float charBaseY = metrics.footerTop - charH - lobbyScaled(12.0f);
+
+    constexpr int kMenuItemCount = 5;
+    const float menuBlockH = metrics.menuStep * static_cast<float>(kMenuItemCount - 1) +
+                             static_cast<float>(titleMenuFontSize()) + lobbyScaled(24.0f);
+    metrics.menuStartY = charBaseY + charH - menuBlockH - lobbyScaled(6.0f);
+    metrics.menuMidY = metrics.menuStartY + metrics.menuStep * 2.0f + static_cast<float>(titleMenuFontSize()) * 0.45f;
+    return metrics;
+}
+
+inline float titleMenuItemStep() {
+    return titleLayoutMetrics().menuStep;
+}
+
+inline float titleMenuStartY() {
+    return titleLayoutMetrics().menuStartY;
+}
+
+inline float titleCenterX() {
+    return static_cast<float>(LOBBY_WINDOW_WIDTH) * 0.5f;
+}
+
+// 横向平铺绘制单视差层，scrollPx 控制滚动偏移
+void drawTiledParallaxLayer(sf::RenderTarget& target, const sf::Texture& texture, float scrollPx, float viewW,
+                            float viewH, float yOffset = 0.f) {
+    const float texW = static_cast<float>(texture.getSize().x);
+    const float texH = static_cast<float>(texture.getSize().y);
+    if (texW <= 0.f || texH <= 0.f) {
+        return;
+    }
+
+    const float scale = viewH / texH;
+    const float scaledW = texW * scale;
+    const float wrap = scaledW > 0.f ? scaledW : 1.f;
+    const float offset = std::fmod(scrollPx, wrap);
+
+    sf::Sprite sprite(texture);
+    sprite.setScale(scale, scale);
+    for (float x = -offset - wrap; x < viewW + wrap; x += wrap) {
+        sprite.setPosition(x, yOffset);
+        target.draw(sprite);
+    }
+}
+
+constexpr float kLobbyBottomBarLeft = 32.0f;
+constexpr float kLobbyBottomBarHeight = 64.0f;
+constexpr float kLobbyPlayBtnWidth = 220.0f;
+constexpr float kLobbyPlayBtnHeight = 48.0f;
+constexpr float kLobbyPlayBtnMargin = 16.0f;
+
+inline float lobbyBottomBarHeight() {
+    return lobbyScaled(kLobbyBottomBarHeight);
+}
+
+inline float lobbyPlayBtnWidth() {
+    return lobbyScaled(kLobbyPlayBtnWidth);
+}
+
+inline float lobbyPlayBtnHeight() {
+    return lobbyScaled(kLobbyPlayBtnHeight);
+}
+
+inline float lobbyBottomBarTop() {
+    return static_cast<float>(LOBBY_WINDOW_HEIGHT) - lobbyBottomBarHeight() - lobbyScaled(16.0f);
+}
+
+inline float lobbyBottomBarWidth() {
+    return static_cast<float>(LOBBY_WINDOW_WIDTH) - kLobbyBottomBarLeft * 2.0f;
+}
+
+struct PauseMenuMetrics {
+    float panelTop = 0.0f;
+    float panelDrawW = 0.0f;
+    float panelDrawH = 0.0f;
+    sf::FloatRect menuBtn;
+    sf::FloatRect retryBtn;
+    sf::FloatRect continueBtn;
+};
+
+PauseMenuMetrics computePauseMenuMetrics(float mapH, float centerX) {
+    PauseMenuMetrics metrics;
+    constexpr float targetW = 640.0f;
+    constexpr float targetH = 440.0f;
+    metrics.panelDrawW = targetW;
+    metrics.panelDrawH = targetH;
+    metrics.panelTop = mapH / 2.0f - targetH / 2.0f;
+    const float panelLeft = centerX - targetW / 2.0f;
+    const float row1Y = metrics.panelTop + targetH * 0.535f;
+    const float row2Y = metrics.panelTop + targetH * 0.705f;
+    const float btnW = targetW * 0.36f;
+    const float btnH = targetH * 0.105f;
+    const float gap = targetW * 0.06f;
+    metrics.menuBtn = {panelLeft + gap, row1Y, btnW, btnH};
+    metrics.retryBtn = {panelLeft + targetW - gap - btnW, row1Y, btnW, btnH};
+    metrics.continueBtn = {centerX - btnW / 2.0f, row2Y, btnW, btnH};
+    return metrics;
+}
+
+struct GameOverLayout {
+    float panelTop = 0.0f;
+    float panelDrawW = 0.0f;
+    float panelDrawH = 0.0f;
+    float titleY = 0.0f;
+    float scoreY = 0.0f;
+    float uiScale = 1.0f;
+    sf::FloatRect menuBtn;
+    sf::FloatRect retryBtn;
+};
+
+inline float gameOverlayUiScale(float windowW) {
+    return std::clamp(windowW / 1280.0f, 1.0f, 1.85f);
+}
+
+GameOverLayout computeGameOverLayout(float mapH, float centerX, float windowW) {
+    GameOverLayout layout;
+    layout.uiScale = gameOverlayUiScale(windowW);
+
+    layout.panelDrawW = 640.0f * layout.uiScale;
+    layout.panelDrawH = 500.0f * layout.uiScale;
+    layout.panelTop = mapH / 2.0f - layout.panelDrawH / 2.0f;
+    layout.titleY = layout.panelTop + layout.panelDrawH * 0.20f;
+    layout.scoreY = layout.panelTop + layout.panelDrawH * 0.38f;
+
+    const float btnW = 210.0f * layout.uiScale;
+    const float btnH = 68.0f * layout.uiScale;
+    const float gap = 44.0f * layout.uiScale;
+    const float rowY = layout.panelTop + layout.panelDrawH * 0.60f;
+    layout.menuBtn = {centerX - btnW - gap / 2.0f, rowY, btnW, btnH};
+    layout.retryBtn = {centerX + gap / 2.0f, rowY, btnW, btnH};
+    return layout;
+}
+
+constexpr float kRoomPanelRefW = 300.0f;
+constexpr float kRoomPanelRefH = 360.0f;
+constexpr float kRoomPanelGapRef = 24.0f;
+constexpr float kRoomBottomBarHRef = 80.0f;
+constexpr float kRoomActionBtnWRef = 260.0f;
+constexpr float kRoomActionBtnHRef = 56.0f;
+constexpr float kRoomActionBtnGapRef = 28.0f;
+
+inline float roomPanelWidth() {
+    return lobbyScaled(kRoomPanelRefW);
+}
+
+inline float roomPanelHeight() {
+    return lobbyScaled(kRoomPanelRefH);
+}
+
+inline float roomPanelGap() {
+    return lobbyScaled(kRoomPanelGapRef);
+}
+
+inline float roomHeaderHeight() {
+    return lobbyScaled(110.0f);  // 等待室顶栏加高，给标题留出居中空间
+}
+
+inline float roomPanelTop() {
+    return roomHeaderHeight() + lobbyScaled(48.0f);
+}
+
+inline float roomBottomBarHeight() {
+    return lobbyScaled(kRoomBottomBarHRef);
+}
+
+sf::FloatRect lobbyBottomBarRect() {
+    return {kLobbyBottomBarLeft, lobbyBottomBarTop(), lobbyBottomBarWidth(), lobbyBottomBarHeight()};
+}
+
+sf::FloatRect lobbyPlayButtonRect() {
+    const sf::FloatRect bar = lobbyBottomBarRect();
+    return {bar.left + bar.width - lobbyScaled(kLobbyPlayBtnMargin) - lobbyPlayBtnWidth(),
+            bar.top + (bar.height - lobbyPlayBtnHeight()) / 2.0f, lobbyPlayBtnWidth(), lobbyPlayBtnHeight()};
+}
 
 float roomBottomBarY() {
-    return static_cast<float>(LOBBY_WINDOW_HEIGHT) - kRoomBottomBarH;
+    return static_cast<float>(LOBBY_WINDOW_HEIGHT) - roomBottomBarHeight();
 }
 
 std::array<sf::FloatRect, 3> roomActionButtonAreas() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
-    const float totalW = kRoomActionBtnW * 3.0f + kRoomActionBtnGap * 2.0f;
+    const float btnW = lobbyScaled(kRoomActionBtnWRef);
+    const float btnH = lobbyScaled(kRoomActionBtnHRef);
+    const float gap = lobbyScaled(kRoomActionBtnGapRef);
+    const float totalW = btnW * 3.0f + gap * 2.0f;
     const float startX = (w - totalW) / 2.0f;
-    const float btnY = roomBottomBarY() + (kRoomBottomBarH - kRoomActionBtnH) / 2.0f;
+    const float btnY = roomBottomBarY() + (roomBottomBarHeight() - btnH) / 2.0f;
     return {
-        sf::FloatRect{startX, btnY, kRoomActionBtnW, kRoomActionBtnH},
-        sf::FloatRect{startX + kRoomActionBtnW + kRoomActionBtnGap, btnY, kRoomActionBtnW, kRoomActionBtnH},
-        sf::FloatRect{startX + (kRoomActionBtnW + kRoomActionBtnGap) * 2.0f, btnY, kRoomActionBtnW, kRoomActionBtnH},
+        sf::FloatRect{startX, btnY, btnW, btnH},
+        sf::FloatRect{startX + btnW + gap, btnY, btnW, btnH},
+        sf::FloatRect{startX + (btnW + gap) * 2.0f, btnY, btnW, btnH},
     };
 }
 
 }  // namespace
 
 bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, bool autoConnect) {
-    host_ = host;
-    serverAddress_ = sf::IpAddress(host);
+    host_ = host.empty() ? DEFAULT_SERVER_HOST : host;
+    serverAddress_ = sf::IpAddress(host_);
     if (serverAddress_ == sf::IpAddress::None) {
-        serverAddress_ = sf::IpAddress::LocalHost;
+        host_ = DEFAULT_SERVER_HOST;
+        serverAddress_ = sf::IpAddress(DEFAULT_SERVER_HOST);
     }
     preferredRole_ = preferredRole;
     role_ = preferredRole;
-    playerName_ = preferredRole == PlayerRole::Fire ? "FireBoy" : "WaterGirl";
+    playerName_ = preferredRole == PlayerRole::Fire ? "NinjaFrog" : "PinkMan";
     roomAnimTimer_ = 0.0f;
     clientScreen_ = ClientScreen::Title;
     titleMenuIndex_ = 0;
@@ -97,10 +291,10 @@ bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, b
     lastConnectRetry_ = std::chrono::steady_clock::now();
     lastInputSend_ = lastConnectRetry_;
 
-    std::cout << "[Client] Title screen ready. Server: " << serverAddress_.toString() << ":" << SERVER_PORT
+    std::cout << "[Client] Title screen ready. Public server: " << DEFAULT_SERVER_HOST << ":" << SERVER_PORT
               << "  Role: " << roleName(preferredRole_) << std::endl;
 
-    if (autoConnect && host_ != "127.0.0.1") {
+    if (autoConnect && host_ != DEFAULT_SERVER_HOST) {
         std::cout << "[Client] Auto-connecting to " << host_ << "..." << std::endl;
         typedRoomCode_.clear();
         beginConnect();
@@ -118,7 +312,6 @@ void GameClient::useTitleLayout() {
         window_.setSize(size);
         window_.setTitle(text::windowTitle());
     }
-    window_.setFramerateLimit(60);
     window_.setVerticalSyncEnabled(true);
     window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(size.x), static_cast<float>(size.y))));
 }
@@ -144,7 +337,7 @@ void GameClient::sendConnectRequest() {
         std::snprintf(request.roomCode, sizeof(request.roomCode), "%s", typedRoomCode_.c_str());
     }
 
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     packPacket(request, buffer, size);
     socket_.send(buffer.data(), size, serverAddress_, SERVER_PORT);
@@ -152,12 +345,15 @@ void GameClient::sendConnectRequest() {
 }
 
 std::vector<sf::FloatRect> GameClient::titleMenuHitAreas() const {
+    const TitleLayoutMetrics layout = titleLayoutMetrics();
     const auto& items = text::titleMenuItems();
+    const float rowH = static_cast<float>(titleMenuFontSize()) + lobbyScaled(22.0f);
     std::vector<sf::FloatRect> areas;
     areas.reserve(items.size());
     for (std::size_t i = 0; i < items.size(); ++i) {
-        const float y = kMenuStartY + static_cast<float>(i) * kMenuItemStep;
-        areas.push_back({kTitleCenterX - 220.0f, y - 8.0f, 440.0f, 44.0f});
+        const float y = layout.menuStartY + static_cast<float>(i) * layout.menuStep;
+        areas.push_back(
+            {titleCenterX() - layout.menuItemWidth * 0.5f, y - lobbyScaled(8.0f), layout.menuItemWidth, rowH});
     }
     return areas;
 }
@@ -166,20 +362,14 @@ void GameClient::handleTitleMenuSelect(int index) {
     switch (index) {
         case 0:
             typedRoomCode_.clear();
-            host_ = "127.0.0.1";
-            serverAddress_ = sf::IpAddress::LocalHost;
-            if (startHosting()) {
-                beginConnect();
-            } else {
-                clientScreen_ = ClientScreen::Title;
-            }
+            usePublicServer();
+            beginConnect();
             break;
         case 1:
             typedRoomCode_.clear();
             discoveredRooms_.clear();
             selectedDiscoveredRoom_ = -1;
             clientScreen_ = ClientScreen::JoinRoom;
-            broadcastDiscovery();
             break;
         case 2:
             clientScreen_ = ClientScreen::Help;
@@ -193,14 +383,11 @@ void GameClient::handleTitleMenuSelect(int index) {
                 preferredRole_ = PlayerRole::Fire;
             }
             role_ = preferredRole_;
-            playerName_ = preferredRole_ == PlayerRole::Fire    ? "FireBoy"
-                          : preferredRole_ == PlayerRole::Water ? "WaterGirl"
-                                                                : "PoisonKid";
+            playerName_ = preferredRole_ == PlayerRole::Fire    ? "NinjaFrog"
+                          : preferredRole_ == PlayerRole::Water ? "PinkMan"
+                                                                : "MaskDude";
             break;
         case 4:
-            clientScreen_ = ClientScreen::Credits;
-            break;
-        case 5:
             window_.close();
             break;
         default:
@@ -221,31 +408,13 @@ void GameClient::handleTitleInput(const sf::Event& event) {
             typedRoomCode_.clear();
             discoveredRooms_.clear();
             clientScreen_ = ClientScreen::Title;
-        } else if (event.key.code == sf::Keyboard::F5) {
-            broadcastDiscovery();
-        } else if (event.key.code == sf::Keyboard::Up) {
-            if (!discoveredRooms_.empty() && selectedDiscoveredRoom_ > 0) {
-                selectedDiscoveredRoom_--;
-                typedRoomCode_.clear();
-            }
-        } else if (event.key.code == sf::Keyboard::Down) {
-            if (!discoveredRooms_.empty() && selectedDiscoveredRoom_ < static_cast<int>(discoveredRooms_.size()) - 1) {
-                selectedDiscoveredRoom_++;
-                typedRoomCode_.clear();
-            }
         } else if (event.key.code == sf::Keyboard::Enter) {
-            if (selectedDiscoveredRoom_ >= 0 && selectedDiscoveredRoom_ < static_cast<int>(discoveredRooms_.size())) {
-                const auto& room = discoveredRooms_[selectedDiscoveredRoom_];
-                host_ = room.address;
-                serverAddress_ = sf::IpAddress(host_);
-                typedRoomCode_ = room.roomCode;
-                beginConnect();
-            } else if (typedRoomCode_.size() == 6 || typedRoomCode_.empty()) {
+            if (typedRoomCode_.size() == 6) {
+                usePublicServer();
                 beginConnect();
             }
         } else if (event.key.code == sf::Keyboard::Backspace && !typedRoomCode_.empty()) {
             typedRoomCode_.pop_back();
-            selectedDiscoveredRoom_ = -1;
         }
         return;
     }
@@ -325,7 +494,6 @@ void GameClient::useLobbyLayout() {
         window_.setSize(size);
         window_.setTitle("Fire-Ice Online - Lobby");
     }
-    window_.setFramerateLimit(60);
     window_.setVerticalSyncEnabled(true);
     window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(size.x), static_cast<float>(size.y))));
 }
@@ -333,7 +501,7 @@ void GameClient::useLobbyLayout() {
 void GameClient::useGameLayout() {
     lobbyLayout_ = false;
     const unsigned width = static_cast<unsigned>(std::max(960, static_cast<int>(map_.width() * TILE_SIZE)));
-    const unsigned height = static_cast<unsigned>(std::max(540, static_cast<int>(map_.height() * TILE_SIZE + 80)));
+    const unsigned height = static_cast<unsigned>(std::max(540, static_cast<int>(map_.height() * TILE_SIZE)));
     window_.setSize({width, height});
     window_.setTitle("Fire-Ice Online");
     window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height))));
@@ -358,8 +526,12 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
 
     if (!visualPath.empty() && tiledMap_.load(visualPath)) {
         tiledMap_.bake();
+        sawTraps_ = loadSawTrapsFromTmx(visualPath, 16);
     } else if (!visualPath.empty()) {
         std::cerr << "[Client] Failed to load tiled visual map: " << visualPath << std::endl;
+        sawTraps_.clear();
+    } else {
+        sawTraps_.clear();
     }
 
     loadedLevelIndex_ = globalIndex;
@@ -371,6 +543,7 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
 void GameClient::onPhaseChanged(GamePhase previous, GamePhase current) {
     if (current == GamePhase::Lobby && previous != GamePhase::Lobby) {
         localReady_ = false;
+        paused_ = false;
         levelMapScrollY_ = 0.0f;
         if (clientScreen_ == ClientScreen::Room) {
             useLobbyLayout();
@@ -379,6 +552,8 @@ void GameClient::onPhaseChanged(GamePhase previous, GamePhase current) {
     } else if (previous == GamePhase::Lobby && current != GamePhase::Lobby) {
         handleLevelChange(renderWorld_.levelIndex, false);
         useGameLayout();
+    } else if (current == GamePhase::Victory || current == GamePhase::GameOver) {
+        paused_ = false;
     }
     updateMusic(current);
 }
@@ -400,6 +575,8 @@ void GameClient::updateMusic(GamePhase phase) {
 
 void GameClient::run() {
     while (window_.isOpen()) {
+        animTime_ += animClock_.restart().asSeconds();
+
         sf::Event event{};
         while (window_.pollEvent(event)) {
             handleWindowEvent(event);
@@ -412,7 +589,7 @@ void GameClient::run() {
             if (std::chrono::duration<float>(now - lastConnectRetry_).count() > 1.0f) {
                 sendConnectRequest();
             }
-        } else if (connected_ && renderWorld_.phase == GamePhase::Playing) {
+        } else if (connected_ && !paused_ && renderWorld_.phase == GamePhase::Playing) {
             currentInput_ = readLocalInput();
             sendInput();
         }
@@ -434,7 +611,7 @@ void GameClient::disconnect() {
 
     DisconnectPacket packet{};
     packet.slot = slot_;
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     packPacket(packet, buffer, size);
     socket_.send(buffer.data(), size, serverAddress_, SERVER_PORT);
@@ -486,6 +663,18 @@ void GameClient::stopHosting() {
     std::cout << "[Client] Internal server stopped" << std::endl;
 }
 
+void GameClient::usePublicServer() {
+    if (isHosting_) {
+        stopHosting();
+    }
+
+    host_ = DEFAULT_SERVER_HOST;
+    serverAddress_ = sf::IpAddress(host_);
+    if (serverAddress_ == sf::IpAddress::None) {
+        serverAddress_ = sf::IpAddress(DEFAULT_SERVER_HOST);
+    }
+}
+
 void GameClient::broadcastDiscovery() {
     if (discoveryActive_)
         return;
@@ -510,7 +699,7 @@ void GameClient::broadcastDiscovery() {
             std::snprintf(disc.roomCode, MAX_ROOM_CODE, "%s", targetCode.c_str());
         }
 
-        std::array<char, 768> buf{};
+        std::array<char, PACKET_BUFFER_SIZE> buf{};
         std::size_t sz = 0;
         packPacket(disc, buf, sz);
 
@@ -593,7 +782,7 @@ void GameClient::renderJoinRoomScanResults() {
 }
 
 void GameClient::pollNetwork() {
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t received = 0;
     sf::IpAddress sender;
     unsigned short port = 0;
@@ -638,12 +827,13 @@ void GameClient::pollNetwork() {
             }
             case PacketType::State: {
                 StatePacket packet{};
-                if (!unpackPacket(buffer.data(), received, packet)) {
+                if (!unpackStatePacketCompatible(buffer.data(), received, packet)) {
                     break;
                 }
 
                 const GamePhase previousPhase = world_.phase;
                 const uint8_t previousLobbyStep = world_.lobbyStep;
+                const uint8_t previousLevelIndex = world_.levelIndex;
 
                 world_ = packet.world;
                 renderWorld_ = packet.world;
@@ -661,6 +851,11 @@ void GameClient::pollNetwork() {
                 }
                 if (renderWorld_.lobbyStep == 1 && previousLobbyStep == 0) {
                     levelMapScrollY_ = 0.0f;
+                    scrollLevelMapToNode(renderWorld_.levelIndex);
+                }
+                if (renderWorld_.lobbyStep == 1 && renderWorld_.levelIndex != previousLevelIndex) {
+                    localReady_ = false;
+                    scrollLevelMapToNode(renderWorld_.levelIndex);
                 }
 
                 if (previousPhase != renderWorld_.phase) {
@@ -675,17 +870,12 @@ void GameClient::pollNetwork() {
 }
 
 bool GameClient::sendInput() {
-    const auto now = std::chrono::steady_clock::now();
-    if (std::chrono::duration<float>(now - lastInputSend_).count() < 1.0f / 30.0f) {
-        return false;
-    }
-
     InputPacket packet{};
     packet.slot = slot_;
     packet.tick = ++inputTick_;
     packet.flags = static_cast<uint8_t>(currentInput_);
 
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     if (!packPacket(packet, buffer, size)) {
         return false;
@@ -695,7 +885,8 @@ bool GameClient::sendInput() {
         return false;
     }
 
-    lastInputSend_ = now;
+    lastSentInput_ = currentInput_;
+    lastInputSend_ = std::chrono::steady_clock::now();
     return true;
 }
 
@@ -705,7 +896,7 @@ bool GameClient::sendAction(PlayerAction action, uint8_t value) {
     packet.action = action;
     packet.value = value;
 
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     if (!packPacket(packet, buffer, size)) {
         return false;
@@ -741,13 +932,14 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         if (event.mouseButton.button != sf::Mouse::Left) {
             return;
         }
-        const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
+        const sf::Vector2f mouse = window_.mapPixelToCoords({event.mouseButton.x, event.mouseButton.y});
         const auto buttons = roomActionButtonAreas();
         const sf::FloatRect& readyArea = buttons[0];
         const sf::FloatRect& nextArea = buttons[1];
         const sf::FloatRect& leaveArea = buttons[2];
 
         if (readyArea.contains(mouse)) {
+            toggleWaitingReadyLocal();
             sendAction(PlayerAction::WaitingReady);
             return;
         }
@@ -775,7 +967,7 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
                 levelNodeAtPosition(static_cast<float>(event.mouseMove.x), static_cast<float>(event.mouseMove.y));
         } else if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
             const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
-            const sf::FloatRect playArea{740.0f, 576.0f, 260.0f, 48.0f};
+            const sf::FloatRect playArea = lobbyPlayButtonRect();
             if (playArea.contains(mouse)) {
                 if (!localReady_) {
                     const LevelCatalog& catalog = LevelCatalog::instance();
@@ -795,6 +987,34 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
             handleLobbyMouseClick(event);
         } else if (event.type == sf::Event::MouseWheelScrolled) {
             handleLobbyMouseWheel(event);
+        }
+    }
+
+    const bool inGamePausePhase =
+        renderWorld_.phase == GamePhase::Playing || renderWorld_.phase == GamePhase::Countdown;
+    if (connected_ && inGamePausePhase) {
+        if (paused_) {
+            if (handlePauseMenuClick(event)) {
+                return;
+            }
+            if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) {
+                paused_ = false;
+                return;
+            }
+            return;
+        }
+        if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
+            const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
+            if (pauseButtonRect().contains(mouse)) {
+                paused_ = true;
+                return;
+            }
+        }
+    }
+
+    if (connected_ && (renderWorld_.phase == GamePhase::Victory || renderWorld_.phase == GamePhase::GameOver)) {
+        if (handleResultOverlayClick(event)) {
+            return;
         }
     }
 
@@ -818,6 +1038,10 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
     }
 
     if (event.key.code == sf::Keyboard::Escape && renderWorld_.phase != GamePhase::Lobby) {
+        if (renderWorld_.phase == GamePhase::Playing || renderWorld_.phase == GamePhase::Countdown) {
+            paused_ = true;
+            return;
+        }
         localReady_ = false;
         sendAction(PlayerAction::ReturnToLobby);
         return;
@@ -825,6 +1049,7 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
 
     if (connected_ && renderWorld_.phase == GamePhase::Lobby && renderWorld_.lobbyStep == 0) {
         if (event.key.code == sf::Keyboard::Enter && !localWaitingReady()) {
+            toggleWaitingReadyLocal();
             sendAction(PlayerAction::WaitingReady);
             return;
         }
@@ -832,8 +1057,13 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
             sendAction(PlayerAction::ProceedToMapSelect);
             return;
         }
-        if (event.key.code == sf::Keyboard::Enter && localWaitingReady() && !allPlayersWaitingReady()) {
+        if (event.key.code == sf::Keyboard::Space && !localWaitingReady()) {
+            toggleWaitingReadyLocal();
             sendAction(PlayerAction::WaitingReady);
+            return;
+        }
+        if (event.key.code == sf::Keyboard::Space && localWaitingReady() && allPlayersWaitingReady()) {
+            sendAction(PlayerAction::ProceedToMapSelect);
             return;
         }
         return;
@@ -904,7 +1134,7 @@ InputFlags GameClient::readLocalInput() const {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) {
             input = input | InputFlags::Right;
         }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W) || sf::Keyboard::isKeyPressed(sf::Keyboard::Space)) {
             input = input | InputFlags::Jump;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
@@ -917,7 +1147,7 @@ InputFlags GameClient::readLocalInput() const {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
             input = input | InputFlags::Right;
         }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up) || sf::Keyboard::isKeyPressed(sf::Keyboard::Space)) {
             input = input | InputFlags::Jump;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
@@ -930,7 +1160,7 @@ InputFlags GameClient::readLocalInput() const {
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::L)) {
             input = input | InputFlags::Right;
         }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::I)) {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::I) || sf::Keyboard::isKeyPressed(sf::Keyboard::Space)) {
             input = input | InputFlags::Jump;
         }
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::K)) {
@@ -943,7 +1173,7 @@ InputFlags GameClient::readLocalInput() const {
 
 void GameClient::render() {
     if (tiledMap_.ready() && connected_ && renderWorld_.phase != GamePhase::Lobby) {
-        window_.clear(sf::Color(216, 189, 155));
+        window_.clear(sf::Color(88, 140, 72));
     } else {
         window_.clear(sf::Color(12, 18, 14));
     }
@@ -972,18 +1202,82 @@ void GameClient::render() {
     window_.display();
 }
 
-void GameClient::renderTitleSpotlight() {
-    sf::CircleShape beam(260.0f);
-    beam.setOrigin(260.0f, 0.0f);
-    beam.setPosition(kTitleCenterX, 0.0f);
-    beam.setFillColor(sf::Color(255, 255, 220, 28));
-    window_.draw(beam);
+// 多层视差滚动背景；无资源时回退为渐变色
+void GameClient::renderTitleBackground() {
+    const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
-    sf::CircleShape glow(180.0f);
-    glow.setOrigin(180.0f, 0.0f);
-    glow.setPosition(kTitleCenterX, 20.0f);
-    glow.setFillColor(sf::Color(255, 255, 240, 42));
-    window_.draw(glow);
+    if (assets_.ready() && assets_.hasTitleParallax()) {
+        const auto& layers = assets_.titleParallaxLayers();
+        for (std::size_t i = 0; i < layers.size(); ++i) {
+            const TitleParallaxLayer& layer = layers[i];
+            const float depth = static_cast<float>(i);
+            const float driftY = std::sin(animTime_ * (0.14f + depth * 0.03f)) * (1.5f + depth * 0.8f);
+            const float scroll = animTime_ * layer.scrollSpeed * (h / 160.0f);
+            drawTiledParallaxLayer(window_, layer.texture, scroll, w, h, driftY);
+        }
+        return;
+    }
+
+    drawLobbyBackdrop(sf::Color(72, 52, 96), sf::Color(28, 20, 44));
+}
+
+void GameClient::renderTitleEffects() {
+    const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
+    const float pulse = 0.45f + 0.55f * std::sin(animTime_ * 0.75f);
+    const float moonX = w - lobbyScaled(150.0f) + std::sin(animTime_ * 0.08f) * 6.0f;
+    const float moonY = lobbyScaled(96.0f) + std::sin(animTime_ * 0.11f) * 3.0f;
+
+    sf::CircleShape moonGlow(96.0f);
+    moonGlow.setOrigin(96.0f, 96.0f);
+    moonGlow.setPosition(moonX, moonY);
+    moonGlow.setFillColor(sf::Color(255, 210, 120, static_cast<sf::Uint8>(18.0f + pulse * 16.0f)));
+    window_.draw(moonGlow);
+
+    sf::CircleShape moon(34.0f);
+    moon.setOrigin(34.0f, 34.0f);
+    moon.setPosition(moonX, moonY);
+    moon.setFillColor(sf::Color(255, 236, 170, static_cast<sf::Uint8>(210.0f + pulse * 30.0f)));
+    window_.draw(moon);
+
+    sf::VertexArray rays(sf::Triangles, 6);
+    const sf::Color rayColor(255, 210, 140, static_cast<sf::Uint8>(14.0f + pulse * 18.0f));
+    rays[0].position = {moonX - 120.0f, moonY - 80.0f};
+    rays[0].color = rayColor;
+    rays[1].position = {moonX + 180.0f, moonY - 40.0f};
+    rays[1].color = sf::Color(255, 210, 140, 0);
+    rays[2].position = {moonX - 40.0f, h * 0.55f};
+    rays[2].color = sf::Color(255, 210, 140, 0);
+
+    rays[3].position = {moonX - 80.0f, moonY - 60.0f};
+    rays[3].color = rayColor;
+    rays[4].position = {moonX + 140.0f, moonY + 20.0f};
+    rays[4].color = sf::Color(255, 210, 140, 0);
+    rays[5].position = {moonX - 120.0f, h * 0.62f};
+    rays[5].color = sf::Color(255, 210, 140, 0);
+    window_.draw(rays);
+
+    constexpr int kParticleCount = 24;
+    for (int i = 0; i < kParticleCount; ++i) {
+        const float phase = animTime_ * 0.28f + static_cast<float>(i) * 1.65f;
+        const float x = std::fmod(phase * 48.0f + static_cast<float>(i) * 83.0f, w);
+        const float y = 120.0f + std::sin(phase * 1.2f) * 110.0f + static_cast<float>((i * 67) % 480);
+        const float radius = 1.2f + static_cast<float>(i % 3) * 0.6f;
+        const sf::Uint8 alpha =
+            static_cast<sf::Uint8>(std::clamp(60.0f + 100.0f * std::sin(phase * 2.1f), 35.0f, 180.0f));
+        const sf::Color color = (i % 3 == 0) ? sf::Color(180, 210, 255, alpha) : sf::Color(255, 230, 170, alpha);
+
+        sf::CircleShape particle(radius);
+        particle.setOrigin(radius, radius);
+        particle.setPosition(x, y);
+        particle.setFillColor(color);
+        window_.draw(particle);
+    }
+
+    sf::RectangleShape vignette({w, h});
+    vignette.setFillColor(sf::Color(12, 8, 24, 36));
+    window_.draw(vignette);
 }
 
 void GameClient::renderTitleCharacters() {
@@ -991,120 +1285,165 @@ void GameClient::renderTitleCharacters() {
         return;
     }
 
-    const sf::Texture& waterTex = assets_.waterGirl();
-    sf::Sprite waterGirl(waterTex);
-    const float waterScale = 3.2f;
-    waterGirl.setScale(waterScale, waterScale);
-    waterGirl.setPosition(48.0f, static_cast<float>(LOBBY_WINDOW_HEIGHT) - waterTex.getSize().y * waterScale - 36.0f);
-    window_.draw(waterGirl);
+    const TitleLayoutMetrics layout = titleLayoutMetrics();
+    const float charScale = 3.2f;
+    const float charH = 32.0f * charScale;
+    const float baseY = layout.footerTop - charH - lobbyScaled(12.0f);
+    const float bobLeft = std::sin(animTime_ * 2.4f + 0.8f) * 5.0f;
+    const float bobRight = std::sin(animTime_ * 2.4f + 2.1f) * 5.0f;
+    const float leftX = lobbyScaled(48.0f);
+    const float rightX = static_cast<float>(LOBBY_WINDOW_WIDTH) - lobbyScaled(48.0f) - charH;
 
-    const sf::Texture& fireTex = assets_.fireBoy();
-    sf::Sprite fireBoy(fireTex);
-    const float fireScale = 3.2f;
-    fireBoy.setScale(-fireScale, fireScale);
-    fireBoy.setPosition(static_cast<float>(LOBBY_WINDOW_WIDTH) - 48.0f,
-                        static_cast<float>(LOBBY_WINDOW_HEIGHT) - fireTex.getSize().y * fireScale - 36.0f);
-    window_.draw(fireBoy);
+    assets_.character(PlayerRole::Water).drawPortraitAnimated(window_, leftX, baseY + bobLeft, charH, false, animTime_);
+    assets_.character(PlayerRole::Fire).drawPortraitAnimated(window_, rightX, baseY + bobRight, charH, true, animTime_);
 }
 
 void GameClient::renderTitleScreen() {
-    if (assets_.ready()) {
-        drawBackgroundSprite(window_, assets_.lobbyBackground());
-    } else {
-        sf::RectangleShape fallback({static_cast<float>(LOBBY_WINDOW_WIDTH), static_cast<float>(LOBBY_WINDOW_HEIGHT)});
-        fallback.setFillColor(sf::Color(28, 42, 34));
-        window_.draw(fallback);
-    }
+    const TitleLayoutMetrics layout = titleLayoutMetrics();
+    const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
 
-    renderTitleSpotlight();
+    renderTitleBackground();
+    renderTitleEffects();
+
+    const unsigned titleSize = static_cast<unsigned>(std::clamp(177.0f * w / 1785.0f, 156.0f, 207.0f));
+    const float titleY = layout.headerY + lobbyScaled(24.0f);
+
+    ui_.drawArtTitleCentered(window_, text::gameTitle(), titleCenterX(), titleY, titleSize, animTime_);
+
     renderTitleCharacters();
-
-    ui_.drawOutlinedCenteredText(window_, text::fireBoy(), kTitleCenterX - 118.0f, 72.0f, 46, sf::Color(255, 90, 40),
-                                 sf::Color(120, 30, 10), 3.0f);
-    ui_.drawOutlinedCenteredText(window_, "&", kTitleCenterX, 72.0f, 40, sf::Color(255, 230, 80),
-                                 sf::Color(100, 70, 10), 3.0f);
-    ui_.drawOutlinedCenteredText(window_, text::waterGirl(), kTitleCenterX + 118.0f, 72.0f, 46, sf::Color(80, 180, 255),
-                                 sf::Color(20, 60, 120), 3.0f);
-    ui_.drawOutlinedCenteredText(window_, text::venture(), kTitleCenterX, 132.0f, 54, sf::Color(255, 230, 70),
-                                 sf::Color(100, 70, 10), 3.5f);
-    ui_.drawOutlinedCenteredText(window_, text::forestTemple(), kTitleCenterX, 188.0f, 58, sf::Color(90, 210, 90),
-                                 sf::Color(30, 90, 30), 4.0f);
-
-    ui_.drawOutlinedCenteredText(window_, "Forest Temple Online", kTitleCenterX, 248.0f, 18, sf::Color(210, 220, 200),
-                                 sf::Color(40, 50, 40), 1.5f);
 
     const auto& menuItems = text::titleMenuItems();
     const int activeIndex = titleHoverIndex_ >= 0 ? titleHoverIndex_ : titleMenuIndex_;
+    const float rowH = static_cast<float>(titleMenuFontSize()) + lobbyScaled(20.0f);
     for (std::size_t i = 0; i < menuItems.size(); ++i) {
-        const float y = kMenuStartY + static_cast<float>(i) * kMenuItemStep;
-        ui_.drawTitleMenuItem(window_, menuItems[i], kTitleCenterX, y, 34, static_cast<int>(i) == activeIndex);
+        const float y = layout.menuStartY + static_cast<float>(i) * layout.menuStep;
+        const bool selected = static_cast<int>(i) == activeIndex;
+
+        sf::RectangleShape row({layout.menuItemWidth, rowH});
+        row.setOrigin(layout.menuItemWidth * 0.5f, 0.0f);
+        row.setPosition(titleCenterX(), y - lobbyScaled(8.0f));
+        row.setFillColor(selected ? sf::Color(24, 18, 36, 170) : sf::Color(12, 10, 22, 72));
+        row.setOutlineThickness(selected ? 2.0f : 1.0f);
+        row.setOutlineColor(selected ? sf::Color(255, 220, 120, 180) : sf::Color(255, 220, 140, 45));
+        window_.draw(row);
+
+        ui_.drawTitleMenuItem(window_, menuItems[i], titleCenterX(), y, titleMenuFontSize(), selected);
     }
 
+    sf::RectangleShape footerBar({w, layout.footerHeight});
+    footerBar.setPosition(0.0f, layout.footerTop);
+    footerBar.setFillColor(sf::Color(8, 6, 16, 185));
+    footerBar.setOutlineThickness(0.0f);
+    window_.draw(footerBar);
+
+    sf::RectangleShape footerLine({w, 2.0f});
+    footerLine.setPosition(0.0f, layout.footerTop);
+    footerLine.setFillColor(sf::Color(255, 220, 140, 90));
+    window_.draw(footerLine);
+
+    const float footerTextY = layout.footerTop + lobbyScaled(18.0f);
     const std::string roleLine = text::currentRolePrefix() + roleChineseName() + "     " + text::serverPrefix() + host_;
-    ui_.drawCenteredText(window_, roleLine, kTitleCenterX, 548.0f, 18, sf::Color(220, 230, 210));
-    ui_.drawCenteredText(window_, text::titleControlsHint(), kTitleCenterX, 578.0f, 15, sf::Color(180, 190, 170));
-    ui_.drawCenteredText(window_, "WHUT SEPT 2026  Forest Temple Co-op", kTitleCenterX, 610.0f, 14,
-                         sf::Color(140, 150, 130));
+    ui_.drawCenteredText(window_, roleLine, titleCenterX(), footerTextY, static_cast<unsigned>(lobbyScaled(20.0f)),
+                         sf::Color(230, 235, 210));
+    ui_.drawCenteredText(window_, text::titleControlsHint(), titleCenterX(), footerTextY + lobbyScaled(30.0f),
+                         static_cast<unsigned>(lobbyScaled(17.0f)), sf::Color(190, 195, 175));
+}
+
+void GameClient::drawLobbyBackdrop(sf::Color top, sf::Color bottom) {
+    const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
+
+    sf::VertexArray gradient(sf::Quads, 4);
+    gradient[0].position = {0.0f, 0.0f};
+    gradient[1].position = {w, 0.0f};
+    gradient[2].position = {w, h};
+    gradient[3].position = {0.0f, h};
+    gradient[0].color = top;
+    gradient[1].color = top;
+    gradient[2].color = bottom;
+    gradient[3].color = bottom;
+    window_.draw(gradient);
+
+    for (int i = 0; i < 7; ++i) {
+        const float radius = 42.0f + static_cast<float>((i % 3) * 18);
+        sf::CircleShape glow(radius);
+        glow.setOrigin(radius, radius);
+        glow.setPosition(80.0f + static_cast<float>(i) * 150.0f, 96.0f + static_cast<float>((i * 67) % 420));
+        glow.setFillColor(i % 2 == 0 ? sf::Color(255, 140, 80, 18) : sf::Color(80, 180, 255, 16));
+        window_.draw(glow);
+    }
 }
 
 void GameClient::renderHelpOverlay() {
-    sf::RectangleShape dim({static_cast<float>(LOBBY_WINDOW_WIDTH), static_cast<float>(LOBBY_WINDOW_HEIGHT)});
+    const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
+    sf::RectangleShape dim({w, h});
     dim.setFillColor(sf::Color(0, 0, 0, 160));
     window_.draw(dim);
 
-    const sf::FloatRect panel{172.0f, 96.0f, 680.0f, 448.0f};
+    const float panelW = lobbyScaled(680.0f);
+    const float panelH = lobbyScaled(520.0f);
+    const sf::FloatRect panel{titleCenterX() - panelW / 2.0f, (h - panelH) / 2.0f, panelW, panelH};
     ui_.drawPanel(window_, panel, sf::Color(24, 34, 28), 235.0f);
-    ui_.drawOutlinedCenteredText(window_, text::helpTitle(), kTitleCenterX, panel.top + 24.0f, 36,
-                                 sf::Color(255, 230, 100), sf::Color(80, 50, 10), 3.0f);
+    ui_.drawOutlinedCenteredText(window_, text::helpTitle(), titleCenterX(), panel.top + lobbyScaled(24.0f),
+                                 static_cast<unsigned>(lobbyScaled(36.0f)), sf::Color(255, 230, 100),
+                                 sf::Color(80, 50, 10), 3.0f);
 
-    const float textX = panel.left + 36.0f;
-    float y = panel.top + 88.0f;
+    const float textX = panel.left + lobbyScaled(36.0f);
+    float y = panel.top + lobbyScaled(88.0f);
     for (const std::string& line : text::helpLines()) {
         if (line.empty()) {
-            y += 18.0f;
+            y += lobbyScaled(18.0f);
             continue;
         }
-        ui_.drawText(window_, line, textX, y, 20, sf::Color(230, 235, 220));
-        y += 34.0f;
+        ui_.drawText(window_, line, textX, y, static_cast<unsigned>(lobbyScaled(20.0f)), sf::Color(230, 235, 220));
+        y += lobbyScaled(34.0f);
     }
 
-    ui_.drawCenteredText(window_, text::backToTitleHint(), kTitleCenterX, panel.top + panel.height - 36.0f, 18,
+    ui_.drawCenteredText(window_, text::backToTitleHint(), titleCenterX(),
+                         panel.top + panel.height - lobbyScaled(36.0f), static_cast<unsigned>(lobbyScaled(18.0f)),
                          sf::Color(255, 220, 120));
 }
 
 void GameClient::renderCreditsOverlay() {
-    sf::RectangleShape dim({static_cast<float>(LOBBY_WINDOW_WIDTH), static_cast<float>(LOBBY_WINDOW_HEIGHT)});
+    const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
+    sf::RectangleShape dim({w, h});
     dim.setFillColor(sf::Color(0, 0, 0, 160));
     window_.draw(dim);
 
-    const sf::FloatRect panel{192.0f, 110.0f, 640.0f, 420.0f};
+    const float panelW = lobbyScaled(640.0f);
+    const float panelH = lobbyScaled(480.0f);
+    const sf::FloatRect panel{titleCenterX() - panelW / 2.0f, (h - panelH) / 2.0f, panelW, panelH};
     ui_.drawPanel(window_, panel, sf::Color(24, 34, 28), 235.0f);
-    ui_.drawOutlinedCenteredText(window_, text::creditsTitle(), kTitleCenterX, panel.top + 24.0f, 36,
-                                 sf::Color(255, 230, 100), sf::Color(80, 50, 10), 3.0f);
+    ui_.drawOutlinedCenteredText(window_, text::creditsTitle(), titleCenterX(), panel.top + lobbyScaled(24.0f),
+                                 static_cast<unsigned>(lobbyScaled(36.0f)), sf::Color(255, 230, 100),
+                                 sf::Color(80, 50, 10), 3.0f);
 
-    const float textX = panel.left + 40.0f;
-    float y = panel.top + 96.0f;
+    const float textX = panel.left + lobbyScaled(40.0f);
+    float y = panel.top + lobbyScaled(96.0f);
     for (const std::string& line : text::creditLines()) {
         if (line.empty()) {
-            y += 16.0f;
+            y += lobbyScaled(16.0f);
             continue;
         }
-        ui_.drawText(window_, line, textX, y, 20, sf::Color(230, 235, 220));
-        y += 36.0f;
+        ui_.drawText(window_, line, textX, y, static_cast<unsigned>(lobbyScaled(20.0f)), sf::Color(230, 235, 220));
+        y += lobbyScaled(36.0f);
     }
 
-    ui_.drawCenteredText(window_, text::backToTitleHint(), kTitleCenterX, panel.top + panel.height - 36.0f, 18,
+    ui_.drawCenteredText(window_, text::backToTitleHint(), titleCenterX(),
+                         panel.top + panel.height - lobbyScaled(36.0f), static_cast<unsigned>(lobbyScaled(18.0f)),
                          sf::Color(255, 220, 120));
 }
 
 const char* GameClient::roleChineseName() const {
     switch (preferredRole_) {
         case PlayerRole::Fire:
-            return "火娃";
+            return "忍者蛙";
         case PlayerRole::Water:
-            return "冰娃";
+            return "粉红侠";
         case PlayerRole::Poison:
-            return "毒娃";
+            return "面具侠";
         default:
             return "未知";
     }
@@ -1126,6 +1465,29 @@ void GameClient::drawBackgroundSprite(sf::RenderWindow& window, const sf::Textur
     window.draw(sprite);
 }
 
+void GameClient::drawTitleBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const {
+    const sf::Vector2u winSize = window.getSize();
+    if (winSize.x == 0 || winSize.y == 0 || texture.getSize().x == 0) {
+        return;
+    }
+
+    sf::Sprite sprite(texture);
+    const float scale = static_cast<float>(winSize.x) / static_cast<float>(texture.getSize().x);
+    sprite.setScale(scale, scale);
+    sprite.setPosition(0.0f, 0.0f);
+    window.draw(sprite);
+}
+
+bool GameClient::isPlayerSlotConnected(uint8_t slot) const {
+    return slot < MAX_PLAYERS && renderWorld_.playerNames[slot][0] != '\0';
+}
+
+void GameClient::toggleWaitingReadyLocal() {
+    const uint8_t bit = static_cast<uint8_t>(1u << slot_);
+    renderWorld_.waitingReadyMask ^= bit;
+    world_.waitingReadyMask = renderWorld_.waitingReadyMask;
+}
+
 bool GameClient::localWaitingReady() const {
     // waitingReadyMask：等待室准备状态（与选关 readyMask 分开）
     return (renderWorld_.waitingReadyMask & (1u << slot_)) != 0;
@@ -1135,13 +1497,19 @@ bool GameClient::allPlayersWaitingReady() const {
     if (renderWorld_.connectedCount == 0) {
         return false;
     }
-    uint8_t readyCount = 0;
-    for (uint8_t i = 0; i < renderWorld_.connectedCount; ++i) {
+
+    uint8_t connected = 0;
+    uint8_t ready = 0;
+    for (uint8_t i = 0; i < MAX_PLAYERS; ++i) {
+        if (!isPlayerSlotConnected(i)) {
+            continue;
+        }
+        ++connected;
         if ((renderWorld_.waitingReadyMask & (1u << i)) != 0) {
-            ++readyCount;
+            ++ready;
         }
     }
-    return readyCount >= renderWorld_.connectedCount;
+    return connected > 0 && ready >= connected;
 }
 
 void GameClient::trySelectLevel(uint8_t index) {
@@ -1180,6 +1548,24 @@ void GameClient::handleLobbyMouseWheel(const sf::Event& event) {
     levelMapScrollY_ = clampLevelMapScroll(levelMapScrollY_ - event.mouseWheelScroll.delta * kMapScrollStep);
 }
 
+void GameClient::scrollLevelMapToNode(uint8_t index) {
+    if (index >= renderWorld_.levelCount) {
+        return;
+    }
+    const sf::FloatRect viewport = levelMapViewportRect();
+    const float nodeY = levelNodeLocalCenter(index).y;
+    const float nodeRadius = levelNodeRadius(index, renderWorld_.levelCount);
+    const float nodeTop = nodeY - nodeRadius - 8.0f;
+    const float nodeBottom = nodeY + nodeRadius + 8.0f;
+
+    if (nodeTop < levelMapScrollY_) {
+        levelMapScrollY_ = nodeTop;
+    } else if (nodeBottom > levelMapScrollY_ + viewport.height) {
+        levelMapScrollY_ = nodeBottom - viewport.height;
+    }
+    levelMapScrollY_ = clampLevelMapScroll(levelMapScrollY_);
+}
+
 void GameClient::handleLobbyMouseClick(const sf::Event& event) {
     if (localReady_ || event.mouseButton.button != sf::Mouse::Left) {
         return;
@@ -1211,12 +1597,39 @@ void GameClient::drawLevelPath(uint8_t fromIndex, uint8_t toIndex, uint8_t level
         return;
     }
 
-    sf::RectangleShape line({segmentLength, unlocked ? 7.0f : 5.0f});
-    line.setOrigin(0.0f, line.getSize().y / 2.0f);
-    line.setPosition(from);
-    line.setRotation(std::atan2(segment.y, segment.x) * 180.0f / 3.14159265f);
-    line.setFillColor(unlocked ? sf::Color(170, 130, 72, 220) : sf::Color(70, 62, 48, 160));
-    window_.draw(line);
+    // 二次贝塞尔曲线：控制点在中点法线方向，相邻段交替左右弯曲
+    const sf::Vector2f mid = (from + to) * 0.5f;
+    const sf::Vector2f perp(-dir.y, dir.x);
+    const float curveSign = (fromIndex % 2 == 0) ? 1.0f : -1.0f;
+    const float curveAmount = std::clamp(segmentLength * 0.32f, 32.0f, 96.0f) * curveSign;
+    const sf::Vector2f control = mid + perp * curveAmount;
+
+    const sf::Color pathColor = unlocked ? sf::Color(170, 130, 72, 220) : sf::Color(70, 62, 48, 160);
+    const float halfWidth = unlocked ? 3.5f : 2.5f;
+    // 沿曲线采样，用 TriangleStrip 拼成有宽度的路径
+    constexpr int segments = 28;
+    sf::VertexArray strip(sf::TriangleStrip, static_cast<std::size_t>((segments + 1) * 2));
+
+    auto sampleQuadratic = [&](float t) {
+        const float u = 1.0f - t;
+        return from * (u * u) + control * (2.0f * u * t) + to * (t * t);
+    };
+
+    for (int i = 0; i <= segments; ++i) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(segments);
+        const float t1 = std::min(1.0f, t0 + 1.0f / static_cast<float>(segments));
+        const sf::Vector2f point = sampleQuadratic(t0);
+        const sf::Vector2f tangent = sampleQuadratic(t1) - point;
+        const float tangentLen = std::sqrt(tangent.x * tangent.x + tangent.y * tangent.y);
+        sf::Vector2f normal(-1.0f, 0.0f);
+        if (tangentLen > 0.001f) {
+            normal = sf::Vector2f(-tangent.y / tangentLen, tangent.x / tangentLen);
+        }
+        const std::size_t base = static_cast<std::size_t>(i * 2);
+        strip[base] = sf::Vertex(point + normal * halfWidth, pathColor);
+        strip[base + 1] = sf::Vertex(point - normal * halfWidth, pathColor);
+    }
+    window_.draw(strip);
 }
 
 void GameClient::drawLevelNode(uint8_t index, uint8_t levelCount, bool selected, bool unlocked, bool completed) {
@@ -1225,7 +1638,8 @@ void GameClient::drawLevelNode(uint8_t index, uint8_t levelCount, bool selected,
     const float radius = levelNodeRadius(index, levelCount);
 
     if (selected) {
-        const float glowPad = isBoss ? 22.0f : 14.0f;
+        const float layoutScale = levelMapLayoutScale();
+        const float glowPad = (isBoss ? 22.0f : 14.0f) * layoutScale;
         sf::CircleShape glow(radius + glowPad);
         glow.setOrigin(radius + glowPad, radius + glowPad);
         glow.setPosition(center);
@@ -1258,10 +1672,12 @@ void GameClient::drawLevelNode(uint8_t index, uint8_t levelCount, bool selected,
     window_.draw(body);
 
     if (!unlocked) {
-        ui_.drawCenteredText(window_, "?", center.x, center.y - 14.0f, 24, sf::Color(110, 105, 100));
+        const unsigned labelSize = static_cast<unsigned>(std::max(18.0f, 24.0f * levelMapLayoutScale()));
+        ui_.drawCenteredText(window_, "?", center.x, center.y - labelSize * 0.55f, labelSize, sf::Color(110, 105, 100));
     } else {
-        ui_.drawCenteredText(window_, isBoss ? "终" : std::to_string(index + 1), center.x, center.y - 14.0f, 22,
-                             sf::Color(35, 40, 48));
+        const unsigned labelSize = static_cast<unsigned>(std::max(16.0f, 22.0f * levelMapLayoutScale()));
+        ui_.drawCenteredText(window_, isBoss ? "终" : std::to_string(index + 1), center.x, center.y - labelSize * 0.55f,
+                             labelSize, sf::Color(35, 40, 48));
     }
 }
 
@@ -1281,20 +1697,12 @@ void GameClient::drawLevelProgressMap() {
     inner.setFillColor(sf::Color(108, 82, 58, 220));
     window_.draw(inner);
 
-    ui_.drawText(window_, text::lobbyMapTitle(), mapArea.left + 16.0f, mapArea.top + 10.0f, 22,
-                 sf::Color(255, 235, 190));
-
     sf::RectangleShape viewportBg({viewport.width, viewport.height});
     viewportBg.setPosition(viewport.left, viewport.top);
     viewportBg.setFillColor(sf::Color(88, 64, 44));
     viewportBg.setOutlineThickness(2.0f);
     viewportBg.setOutlineColor(sf::Color(60, 44, 30));
     window_.draw(viewportBg);
-
-    if (levelMapMaxScroll() > 0.0f) {
-        ui_.drawText(window_, text::lobbyScrollHint(), mapArea.left + mapArea.width - 168.0f, mapArea.top + 12.0f, 13,
-                     sf::Color(220, 200, 160));
-    }
 
     const sf::Vector2u winSize = window_.getSize();
     const sf::View previousView = window_.getView();
@@ -1323,6 +1731,10 @@ void GameClient::drawLevelProgressMap() {
     }
 
     window_.setView(previousView);
+
+    ui_.drawText(window_, text::lobbyMapTitle(), mapArea.left + levelMapContentPadding(),
+                 mapArea.top + (levelMapHeaderHeight() - lobbyScaled(22.0f)) * 0.38f,
+                 static_cast<unsigned>(lobbyScaled(22.0f)), sf::Color(255, 235, 190));
 
     if (levelMapMaxScroll() > 0.0f) {
         const float trackX = mapArea.left + mapArea.width - 10.0f;
@@ -1359,77 +1771,27 @@ void GameClient::renderJoinRoomScreen() {
     dim.setFillColor(sf::Color(0, 0, 0, 120));
     window_.draw(dim);
 
-    const float panelW = 620.0f;
-    const float panelH = 480.0f;
+    const float panelW = std::min(w * 0.72f, lobbyScaled(680.0f));
+    const float panelH = std::min(h * 0.62f, lobbyScaled(420.0f));
     const float panelX = (w - panelW) / 2.0f;
-    const float panelY = 80.0f;
+    const float panelY = (h - panelH) / 2.0f;
     const sf::FloatRect dialog{panelX, panelY, panelW, panelH};
     ui_.drawPanel(window_, dialog, sf::Color(20, 28, 44, 240), 240.0f);
-    ui_.drawOutlinedCenteredText(window_, "加入房间 (局域网自动发现)", w / 2.0f, dialog.top + 16.0f, 26,
-                                 sf::Color(255, 230, 100), sf::Color(80, 50, 10), 2.5f);
+    ui_.drawOutlinedCenteredText(window_, "加入房间", w / 2.0f, dialog.top + lobbyScaled(20.0f),
+                                 static_cast<unsigned>(lobbyScaled(28.0f)), sf::Color(255, 230, 100),
+                                 sf::Color(80, 50, 10), 2.5f);
 
-    const float listX = panelX + 20.0f;
-    const float listY = dialog.top + 56.0f;
-    const float listW = panelW - 40.0f;
-    const float listH = 240.0f;
+    ui_.drawCenteredText(window_, "请输入房主提供的 6 位房间号", w / 2.0f, dialog.top + lobbyScaled(72.0f), 18,
+                         sf::Color(180, 200, 230));
+    ui_.drawCenteredText(window_, std::string("联机服务器: ") + DEFAULT_SERVER_HOST, w / 2.0f,
+                         dialog.top + lobbyScaled(102.0f), 15, sf::Color(140, 170, 210));
+    ui_.drawCenteredText(window_, "支持不同网络下的玩家加入同一房间", w / 2.0f, dialog.top + lobbyScaled(128.0f), 14,
+                         sf::Color(120, 150, 180));
 
-    sf::RectangleShape listBg({listW, listH});
-    listBg.setPosition(listX, listY);
-    listBg.setFillColor(sf::Color(12, 16, 28, 230));
-    listBg.setOutlineThickness(1.0f);
-    listBg.setOutlineColor(sf::Color(60, 80, 120));
-    window_.draw(listBg);
-
-    const float roomRowH = 48.0f;
-    if (discoveryActive_) {
-        const int dots = (static_cast<int>(roomAnimTimer_ * 3.0f) % 3) + 1;
-        std::string scanMsg = "正在扫描局域网";
-        for (int i = 0; i < dots; ++i) {
-            scanMsg += ".";
-        }
-        ui_.drawCenteredText(window_, scanMsg, w / 2.0f, listY + listH / 2.0f - 14.0f, 22, sf::Color(180, 200, 255));
-        ui_.drawCenteredText(window_, "自动发现同一网络下的游戏房间", w / 2.0f, listY + listH / 2.0f + 18.0f, 14,
-                             sf::Color(120, 140, 180));
-    } else if (discoveredRooms_.empty()) {
-        ui_.drawCenteredText(window_, "未发现局域网房间", w / 2.0f, listY + listH / 2.0f - 14.0f, 20,
-                             sf::Color(180, 160, 120));
-        ui_.drawCenteredText(window_, "请确认主机在同一网络下已创建房间，或手动输入房间号", w / 2.0f,
-                             listY + listH / 2.0f + 18.0f, 14, sf::Color(140, 150, 170));
-    } else {
-        ui_.drawText(window_, "发现 " + std::to_string(discoveredRooms_.size()) + " 个房间  [↑↓] 选择  [Enter] 加入",
-                     listX + 8.0f, listY + 6.0f, 14, sf::Color(160, 190, 230));
-
-        const int visibleStart = std::max(0, selectedDiscoveredRoom_ - 3);
-        const int maxVisible = static_cast<int>(listH / roomRowH) - 1;
-        const int visibleEnd = std::min(static_cast<int>(discoveredRooms_.size()), visibleStart + maxVisible);
-
-        for (int i = visibleStart; i < visibleEnd; ++i) {
-            const float rowY2 = listY + 26.0f + (i - visibleStart) * roomRowH;
-            const bool sel = i == selectedDiscoveredRoom_;
-
-            sf::RectangleShape row({listW - 16.0f, roomRowH - 6.0f});
-            row.setPosition(listX + 8.0f, rowY2);
-            row.setFillColor(sel ? sf::Color(55, 95, 150) : sf::Color(30, 38, 55));
-            row.setOutlineThickness(sel ? 2.0f : 1.0f);
-            row.setOutlineColor(sel ? sf::Color(140, 200, 255) : sf::Color(60, 70, 100));
-            window_.draw(row);
-
-            const auto& room = discoveredRooms_[i];
-            const std::string label = "房间 " + room.roomCode + "  |  " + room.levelName + "  |  玩家 " +
-                                      std::to_string(room.playerCount) + "/" + std::to_string(room.maxPlayers) +
-                                      "  |  " + room.address;
-            ui_.drawText(window_, label, listX + 18.0f, rowY2 + 6.0f, 16,
-                         sel ? sf::Color::White : sf::Color(200, 210, 220));
-        }
-    }
-
-    const float dividerY = listY + listH + 12.0f;
-    ui_.drawCenteredText(window_, "—— 或手动输入房间号 ——", w / 2.0f, dividerY, 14, sf::Color(140, 155, 180));
-
-    const float boxW = 260.0f;
-    const float boxH = 46.0f;
+    const float boxW = lobbyScaled(280.0f);
+    const float boxH = lobbyScaled(52.0f);
     const float boxX = w / 2.0f - boxW / 2.0f;
-    const float boxY = dividerY + 26.0f;
+    const float boxY = dialog.top + panelH * 0.46f;
     sf::RectangleShape inputBox({boxW, boxH});
     inputBox.setPosition(boxX, boxY);
     inputBox.setFillColor(sf::Color(12, 16, 28));
@@ -1448,11 +1810,20 @@ void GameClient::renderJoinRoomScreen() {
             displayCode.push_back(' ');
         }
     }
-    ui_.drawOutlinedCenteredText(window_, displayCode, w / 2.0f, boxY + 8.0f, 26, sf::Color(255, 255, 255),
+    ui_.drawOutlinedCenteredText(window_, displayCode, w / 2.0f, boxY + lobbyScaled(10.0f),
+                                 static_cast<unsigned>(lobbyScaled(28.0f)), sf::Color(255, 255, 255),
                                  sf::Color(40, 40, 80), 2.0f);
 
-    ui_.drawCenteredText(window_, "[数字键] 输入  [F5] 重新扫描  [Enter] 确认  [Esc] 返回", w / 2.0f,
-                         dialog.top + panelH - 36.0f, 15, sf::Color(160, 170, 190));
+    const bool readyToJoin = typedRoomCode_.size() == 6;
+    ui_.drawCenteredText(
+        window_,
+        readyToJoin ? "按 Enter 加入房间" : "还需输入 " + std::to_string(6 - typedRoomCode_.size()) + " 位数字",
+        w / 2.0f, boxY + boxH + lobbyScaled(24.0f), 16,
+        readyToJoin ? sf::Color(120, 255, 160) : sf::Color(160, 170, 190));
+
+    ui_.drawCenteredText(window_, "[数字键] 输入  [Backspace] 删除  [Enter] 加入  [Esc] 返回", w / 2.0f,
+                         dialog.top + panelH - lobbyScaled(34.0f), static_cast<unsigned>(lobbyScaled(15.0f)),
+                         sf::Color(160, 170, 190));
 }
 
 void GameClient::renderRoomScreen() {
@@ -1460,106 +1831,137 @@ void GameClient::renderRoomScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
     const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
+    drawLobbyBackdrop(sf::Color(18, 30, 48), sf::Color(34, 20, 30));
     if (assets_.ready()) {
         drawBackgroundSprite(window_, assets_.lobbyBackground());
-    } else {
-        sf::RectangleShape fallback({w, h});
-        fallback.setFillColor(sf::Color(12, 20, 30));
-        window_.draw(fallback);
+        sf::RectangleShape tint({w, h});
+        tint.setFillColor(sf::Color(8, 12, 22, 105));
+        window_.draw(tint);
     }
+    sf::RectangleShape dim({w, h});
+    dim.setFillColor(sf::Color(0, 0, 0, 150));
+    window_.draw(dim);
 
-    // Top header bar
-    ui_.drawPanel(window_, {0.0f, 0.0f, w, 68.0f}, sf::Color(16, 22, 40, 230), 230.0f);
-    ui_.drawOutlinedCenteredText(window_, "Fire & Ice 森林神殿", w / 2.0f, 8.0f, 28, sf::Color(255, 230, 100),
+    const float headerH = roomHeaderHeight();
+    ui_.drawPanel(window_, {0.0f, 0.0f, w, headerH}, sf::Color(16, 22, 40, 230), 230.0f);
+
+    // 标题字号随窗口高度缩放，并在顶栏内垂直居中
+    const unsigned titleFontSize =
+        static_cast<unsigned>(std::clamp(h * 0.052f, lobbyScaled(48.0f), lobbyScaled(72.0f)));
+    const unsigned subtitleFontSize =
+        static_cast<unsigned>(std::clamp(h * 0.022f, lobbyScaled(18.0f), lobbyScaled(26.0f)));
+    const float titleGap = lobbyScaled(10.0f);
+    const float titleBlockH = static_cast<float>(titleFontSize) + titleGap + static_cast<float>(subtitleFontSize);
+    const float titleY = (headerH - titleBlockH) * 0.5f;
+    const float subtitleY = titleY + static_cast<float>(titleFontSize) + titleGap;
+    ui_.drawOutlinedCenteredText(window_, text::gameTitle(), w / 2.0f, titleY, titleFontSize, sf::Color(255, 230, 100),
                                  sf::Color(80, 50, 10), 2.5f);
-    ui_.drawCenteredText(window_, text::roomWaitingTitle(), w / 2.0f, 42.0f, 16, sf::Color(180, 195, 220));
+    ui_.drawCenteredText(window_, text::roomWaitingTitle(), w / 2.0f, subtitleY, subtitleFontSize,
+                         sf::Color(180, 195, 220));
 
-    // Room code display (prominent)
     const std::string roomCodeStr =
         renderWorld_.roomCode[0] ? std::string("房间号: ") + std::string(renderWorld_.roomCode) : "房间号: ------";
-    ui_.drawOutlinedCenteredText(window_, roomCodeStr, w - 180.0f, 8.0f, 16, sf::Color(100, 255, 140),
-                                 sf::Color(20, 60, 20), 2.0f);
+    const float infoRight = w - lobbyScaled(24.0f);
+    // 右侧房间信息左对齐排列，同样在顶栏内垂直居中
+    const unsigned infoTitleSize =
+        static_cast<unsigned>(std::clamp(h * 0.020f, lobbyScaled(16.0f), lobbyScaled(22.0f)));
+    const unsigned infoLineSize = static_cast<unsigned>(std::clamp(h * 0.016f, lobbyScaled(13.0f), lobbyScaled(18.0f)));
+    const float infoBlockH =
+        static_cast<float>(infoTitleSize) + lobbyScaled(8.0f) + static_cast<float>(infoLineSize) * 2.0f;
+    const float infoY = (headerH - infoBlockH) / 2.0f;
+    ui_.drawText(window_, roomCodeStr, infoRight - lobbyScaled(180.0f), infoY, infoTitleSize, sf::Color(100, 255, 140));
 
-    std::string ipStr;
-    if (isHosting_ && !localIp_.empty()) {
-        ipStr = "主机IP: " + localIp_ + ":" + std::to_string(SERVER_PORT);
-    } else {
-        ipStr = "服务器: " + host_ + ":" + std::to_string(SERVER_PORT);
-    }
-    ui_.drawCenteredText(window_, ipStr, w - 180.0f, 30.0f, 12, sf::Color(180, 200, 255));
+    std::string ipStr = std::string("联机服务器: ") + DEFAULT_SERVER_HOST + ":" + std::to_string(SERVER_PORT);
+    ui_.drawText(window_, ipStr, infoRight - lobbyScaled(180.0f),
+                 infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f), infoLineSize, sf::Color(180, 200, 255));
 
-    ui_.drawCenteredText(
+    ui_.drawText(
         window_,
         std::string("在线: ") + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS),
-        w - 180.0f, 48.0f, 13, sf::Color(160, 200, 140));
+        infoRight - lobbyScaled(180.0f),
+        infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f) + static_cast<float>(infoLineSize) +
+            lobbyScaled(2.0f),
+        infoLineSize, sf::Color(160, 200, 140));
 
-    // --- Player panels (always reserve 3 slots) ---
-    const float totalPanelW = kRoomPanelW * 3.0f + kRoomPanelGap * 2.0f;
+    const float panelW = roomPanelWidth();
+    const float panelH = roomPanelHeight();
+    const float panelGap = roomPanelGap();
+    const float panelY = roomPanelTop();
+    const float totalPanelW = panelW * 3.0f + panelGap * 2.0f;
     const float panelStartX = (w - totalPanelW) / 2.0f;
-    renderRoomPlayerPanel(panelStartX, kRoomPanelY, kRoomPanelW, kRoomPanelH, 0, PlayerRole::Fire);
-    renderRoomPlayerPanel(panelStartX + kRoomPanelW + kRoomPanelGap, kRoomPanelY, kRoomPanelW, kRoomPanelH, 1,
-                          PlayerRole::Water);
-    renderRoomPlayerPanel(panelStartX + (kRoomPanelW + kRoomPanelGap) * 2.0f, kRoomPanelY, kRoomPanelW, kRoomPanelH, 2,
-                          PlayerRole::Poison);
+    renderRoomPlayerPanel(panelStartX, panelY, panelW, panelH, 0, PlayerRole::Fire);
+    renderRoomPlayerPanel(panelStartX + panelW + panelGap, panelY, panelW, panelH, 1, PlayerRole::Water);
+    renderRoomPlayerPanel(panelStartX + (panelW + panelGap) * 2.0f, panelY, panelW, panelH, 2, PlayerRole::Poison);
 
-    // --- Middle status bar ---
-    const float statusY = kRoomPanelY + kRoomPanelH + 14.0f;
-    const float statusH = roomBottomBarY() - statusY - 8.0f;
-    ui_.drawPanel(window_, {32.0f, statusY, w - 64.0f, statusH}, sf::Color(20, 26, 44, 220), 220.0f);
+    const float statusY = panelY + panelH + lobbyScaled(20.0f);
+    const float statusH = roomBottomBarY() - statusY - lobbyScaled(12.0f);
+    const float statusMargin = lobbyScaled(36.0f);
+    ui_.drawPanel(window_, {statusMargin, statusY, w - statusMargin * 2.0f, statusH}, sf::Color(20, 26, 44, 220),
+                  220.0f);
 
     // Players connected status
-    const bool fireConnected = renderWorld_.connectedCount >= 1;
-    const bool waterConnected = renderWorld_.connectedCount >= 2;
-    const bool poisonConnected = renderWorld_.connectedCount >= 3;
+    const bool fireConnected = isPlayerSlotConnected(0);
+    const bool waterConnected = isPlayerSlotConnected(1);
+    const bool poisonConnected = isPlayerSlotConnected(2);
     const bool fireReady = (renderWorld_.waitingReadyMask & 0x01) != 0;
     const bool waterReady = (renderWorld_.waitingReadyMask & 0x02) != 0;
     const bool poisonReady = (renderWorld_.waitingReadyMask & 0x04) != 0;
 
-    ui_.drawText(window_, "玩家状态", 52.0f, statusY + 12.0f, 18, sf::Color(200, 210, 230));
+    const unsigned statusTitleSize = static_cast<unsigned>(lobbyScaled(22.0f));
+    const unsigned statusRowSize = static_cast<unsigned>(lobbyScaled(18.0f));
+    const unsigned statusHintSize = static_cast<unsigned>(lobbyScaled(16.0f));
+    const unsigned waitMsgSize = static_cast<unsigned>(lobbyScaled(20.0f));
+    const float statusTextX = statusMargin + lobbyScaled(20.0f);
+    const float statusRowStep = lobbyScaled(30.0f);  // 三名玩家纵向逐行排列，避免重叠
+
+    ui_.drawText(window_, "玩家状态", statusTextX, statusY + lobbyScaled(14.0f), statusTitleSize,
+                 sf::Color(200, 210, 230));
 
     const std::string fireName = renderWorld_.playerNames[0][0] ? renderWorld_.playerNames[0] : "---";
     const std::string waterName = renderWorld_.playerNames[1][0] ? renderWorld_.playerNames[1] : "---";
     const std::string poisonName = renderWorld_.playerNames[2][0] ? renderWorld_.playerNames[2] : "---";
 
-    auto drawStatus = [&](float x, const std::string& label, const std::string& name, bool connected, bool ready,
+    auto drawStatus = [&](float rowY, const std::string& label, const std::string& name, bool connected, bool ready,
                           sf::Color roleColor) {
         sf::Color color = connected ? (ready ? roleColor : sf::Color(200, 180, 160)) : sf::Color(100, 100, 100);
-        ui_.drawText(window_, label + ": " + name, x, statusY + 40.0f, 15, color);
+        ui_.drawText(window_, label + ": " + name, statusTextX, rowY, statusRowSize, color);
         const std::string state = connected ? (ready ? " [已准备]" : " [等待中]") : " [未连接]";
         sf::Color stateCol =
             connected ? (ready ? sf::Color(120, 255, 140) : sf::Color(180, 180, 180)) : sf::Color(140, 80, 80);
-        ui_.drawText(window_, state, x + 120.0f, statusY + 40.0f, 14, stateCol);
+        ui_.drawText(window_, state, statusTextX + lobbyScaled(180.0f), rowY, statusRowSize, stateCol);
     };
 
-    drawStatus(52.0f, "火娃", fireName, fireConnected, fireReady, sf::Color(255, 150, 80));
-    drawStatus(300.0f, "冰娃", waterName, waterConnected, waterReady, sf::Color(100, 180, 255));
-    drawStatus(548.0f, "毒娃", poisonName, poisonConnected, poisonReady, sf::Color(80, 200, 80));
+    float rowY = statusY + lobbyScaled(44.0f);
+    drawStatus(rowY, "忍者蛙", fireName, fireConnected, fireReady, sf::Color(120, 200, 80));
+    rowY += statusRowStep;
+    drawStatus(rowY, "粉红侠", waterName, waterConnected, waterReady, sf::Color(255, 120, 180));
+    rowY += statusRowStep;
+    drawStatus(rowY, "面具侠", poisonName, poisonConnected, poisonReady, sf::Color(255, 180, 60));
 
-    ui_.drawText(window_, text::roomWaitingHint(), 52.0f, statusY + 72.0f, 14, sf::Color(140, 150, 170));
+    ui_.drawText(window_, text::roomWaitingHint(), statusTextX, rowY + statusRowStep + lobbyScaled(4.0f),
+                 statusHintSize, sf::Color(140, 150, 170));
 
     const bool waitingReady = localWaitingReady();
     const bool canProceed = allPlayersWaitingReady();
-    const float waitMsgY = roomBottomBarY() - 30.0f;
+    // 等待提示放在状态面板底部内侧，避免与下方按钮重叠
+    const float waitMsgY = statusY + statusH - lobbyScaled(34.0f);
 
-    if (renderWorld_.connectedCount < MAX_PLAYERS) {
-        const std::string waitMsg = "等待其他玩家加入房间... (当前 " + std::to_string(renderWorld_.connectedCount) +
-                                    "/" + std::to_string(MAX_PLAYERS) + ")";
-        ui_.drawOutlinedCenteredText(window_, waitMsg, w / 2.0f, waitMsgY, 17, sf::Color(255, 220, 100),
-                                     sf::Color(80, 50, 10), 2.0f);
-        const int dotCount = (static_cast<int>(roomAnimTimer_ * 2.0f) % 3) + 1;
-        std::string dots;
-        for (int i = 0; i < dotCount; ++i) {
-            dots += ".";
+    if (!canProceed) {
+        ui_.drawOutlinedCenteredText(window_, "请先点击「我已准备」，等待全员准备后可进入选关", w / 2.0f, waitMsgY,
+                                     waitMsgSize, sf::Color(255, 220, 100), sf::Color(80, 50, 10), 2.0f);
+        if (renderWorld_.connectedCount < MAX_PLAYERS) {
+            ui_.drawCenteredText(window_,
+                                 "当前 " + std::to_string(renderWorld_.connectedCount) + "/" +
+                                     std::to_string(MAX_PLAYERS) + " 人，可继续等待或直接开始",
+                                 w / 2.0f, waitMsgY + lobbyScaled(28.0f), 14, sf::Color(160, 180, 210));
         }
-        ui_.drawText(window_, dots, w / 2.0f + 180.0f, waitMsgY + 4.0f, 17, sf::Color(255, 220, 100));
-    } else if (canProceed) {
-        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击下一步选择关卡", w / 2.0f, waitMsgY, 17,
-                                     sf::Color(255, 220, 100), sf::Color(80, 50, 10), 2.0f);
+    } else {
+        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击「下一步」选择关卡", w / 2.0f, waitMsgY, waitMsgSize,
+                                     sf::Color(120, 255, 160), sf::Color(40, 80, 50), 2.0f);
     }
 
-    // --- Bottom action bar ---
     const float bottomBarY = roomBottomBarY();
-    ui_.drawPanel(window_, {0.0f, bottomBarY, w, kRoomBottomBarH}, sf::Color(16, 22, 40, 240), 240.0f);
+    ui_.drawPanel(window_, {0.0f, bottomBarY, w, roomBottomBarHeight()}, sf::Color(16, 22, 40, 240), 240.0f);
 
     const auto buttons = roomActionButtonAreas();
     const sf::FloatRect& readyArea = buttons[0];
@@ -1579,7 +1981,7 @@ void GameClient::renderRoomScreen() {
 
 void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW, float panelH, int playerSlot,
                                        PlayerRole expectedRole) {
-    const bool isConnected = renderWorld_.connectedCount > static_cast<uint8_t>(playerSlot);
+    const bool isConnected = isPlayerSlotConnected(static_cast<uint8_t>(playerSlot));
     const bool isReady = (renderWorld_.waitingReadyMask & (1u << playerSlot)) != 0;
     const bool isSelf = (playerSlot == static_cast<int>(slot_)) && connected_;
 
@@ -1599,75 +2001,70 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
     ui_.drawPanel(window_, {panelX, panelY, panelW, panelH}, isConnected ? panelHighlight : panelBase,
                   isConnected ? 230.0f : 180.0f);
 
+    sf::RectangleShape innerGlow({panelW - 14.0f, panelH - 14.0f});
+    innerGlow.setPosition(panelX + 7.0f, panelY + 7.0f);
+    innerGlow.setFillColor(sf::Color::Transparent);
+    innerGlow.setOutlineThickness(1.0f);
+    innerGlow.setOutlineColor(isConnected ? sf::Color(255, 255, 255, 52) : sf::Color(255, 255, 255, 24));
+    window_.draw(innerGlow);
     // Role title
     std::string roleTitle;
     sf::Color roleColor;
     std::string roleSub;
     if (expectedRole == PlayerRole::Fire) {
-        roleTitle = "火娃";
-        roleColor = sf::Color(255, 120, 60);
+        roleTitle = "忍者蛙";
+        roleColor = sf::Color(120, 200, 80);
         roleSub = "WASD 操控";
     } else if (expectedRole == PlayerRole::Water) {
-        roleTitle = "冰娃";
-        roleColor = sf::Color(80, 170, 255);
+        roleTitle = "粉红侠";
+        roleColor = sf::Color(255, 120, 180);
         roleSub = "方向键 操控";
     } else {
-        roleTitle = "毒娃";
-        roleColor = sf::Color(80, 200, 80);
+        roleTitle = "面具侠";
+        roleColor = sf::Color(255, 180, 60);
         roleSub = "IJKL 操控";
     }
-    ui_.drawOutlinedCenteredText(window_, roleTitle, panelX + panelW / 2.0f, panelY + 12.0f, 24,
+    ui_.drawOutlinedCenteredText(window_, roleTitle, panelX + panelW / 2.0f, panelY + panelH * 0.05f,
+                                 static_cast<unsigned>(lobbyScaled(24.0f)),
                                  isConnected ? roleColor : sf::Color(120, 120, 130), sf::Color(30, 20, 20), 2.0f);
 
     // Character portrait
-    if (assets_.ready()) {
-        const sf::Texture* charTex = nullptr;
-        if (expectedRole == PlayerRole::Fire) {
-            charTex = &assets_.fireBoy();
-        } else if (expectedRole == PlayerRole::Water) {
-            charTex = &assets_.waterGirl();
+    if (assets_.ready() && expectedRole != PlayerRole::None) {
+        const float targetH = panelH * 0.38f;
+        const float drawW = targetH;
+        const float portraitX = panelX + (panelW - drawW) / 2.0f;
+        const float portraitY = panelY + panelH * 0.16f;
+        sf::Color tint = sf::Color::White;
+        if (!isConnected) {
+            tint = sf::Color(80, 80, 80, 140);
         }
-        if (charTex && charTex->getSize().y > 0) {
-            sf::Sprite portrait(*charTex);
-            const float targetH = 100.0f;
-            const float scale = targetH / static_cast<float>(charTex->getSize().y);
-            const float drawW = static_cast<float>(charTex->getSize().x) * scale;
-            portrait.setScale(scale, scale);
-            portrait.setPosition(panelX + (panelW - drawW) / 2.0f, panelY + 44.0f);
-
-            if (!isConnected) {
-                portrait.setColor(sf::Color(80, 80, 80, 140));
-            } else if (isSelf) {
-                portrait.setColor(sf::Color(255, 255, 255, 255));
-            }
-            window_.draw(portrait);
-        } else {
-            sf::RectangleShape placeholder({56.0f, 100.0f});
-            placeholder.setPosition(panelX + (panelW - 56.0f) / 2.0f, panelY + 44.0f);
-            placeholder.setFillColor(isConnected ? roleColor : sf::Color(80, 80, 80));
-            window_.draw(placeholder);
-        }
-
-        if (isSelf) {
-            sf::CircleShape indicator(6.0f);
-            indicator.setPosition(panelX + panelW / 2.0f + 40.0f, panelY + 50.0f);
-            indicator.setFillColor(sf::Color(80, 255, 120));
-            window_.draw(indicator);
-        }
+        assets_.character(expectedRole).drawPortrait(window_, portraitX, portraitY, targetH, false, tint);
     } else {
-        sf::RectangleShape placeholder({56.0f, 100.0f});
-        placeholder.setPosition(panelX + (panelW - 56.0f) / 2.0f, panelY + 44.0f);
+        const float phW = lobbyScaled(56.0f);
+        const float phH = panelH * 0.38f;
+        sf::RectangleShape placeholder({phW, phH});
+        placeholder.setPosition(panelX + (panelW - phW) / 2.0f, panelY + panelH * 0.16f);
         placeholder.setFillColor(isConnected ? roleColor : sf::Color(80, 80, 80));
         window_.draw(placeholder);
+    }
+
+    if (isSelf) {
+        const float indicatorR = lobbyScaled(6.0f);
+        sf::CircleShape indicator(indicatorR);
+        indicator.setPosition(panelX + panelW / 2.0f + lobbyScaled(40.0f), panelY + panelH * 0.18f);
+        indicator.setFillColor(sf::Color(80, 255, 120));
+        window_.draw(indicator);
     }
 
     // Player name
     const std::string playerName =
         renderWorld_.playerNames[playerSlot][0] ? renderWorld_.playerNames[playerSlot] : "---";
-    ui_.drawCenteredText(window_, playerName, panelX + panelW / 2.0f, panelY + 152.0f, 16,
+    ui_.drawCenteredText(window_, playerName, panelX + panelW / 2.0f, panelY + panelH * 0.68f,
+                         static_cast<unsigned>(lobbyScaled(16.0f)),
                          isConnected ? sf::Color(240, 240, 240) : sf::Color(120, 120, 120));
 
-    ui_.drawCenteredText(window_, roleSub, panelX + panelW / 2.0f, panelY + 174.0f, 13,
+    ui_.drawCenteredText(window_, roleSub, panelX + panelW / 2.0f, panelY + panelH * 0.76f,
+                         static_cast<unsigned>(lobbyScaled(13.0f)),
                          isConnected ? sf::Color(180, 180, 190) : sf::Color(100, 100, 110));
 
     // Connection / Ready status
@@ -1684,10 +2081,11 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
         statusColor = sf::Color(255, 200, 100);
     }
 
-    const float badgeW = 100.0f;
+    const float badgeW = lobbyScaled(100.0f);
+    const float badgeH = lobbyScaled(28.0f);
     const float badgeX = panelX + (panelW - badgeW) / 2.0f;
-    const float badgeY = panelY + panelH - 44.0f;
-    sf::RectangleShape badge({badgeW, 28.0f});
+    const float badgeY = panelY + panelH * 0.84f;
+    sf::RectangleShape badge({badgeW, badgeH});
     badge.setPosition(badgeX, badgeY);
     sf::Color badgeFill = statusColor;
     badgeFill.a = isConnected ? 200 : 100;
@@ -1695,7 +2093,8 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
     badge.setOutlineThickness(1.5f);
     badge.setOutlineColor(sf::Color(255, 255, 255, 80));
     window_.draw(badge);
-    ui_.drawCenteredText(window_, statusText, panelX + panelW / 2.0f, badgeY + 4.0f, 15, sf::Color::White);
+    ui_.drawCenteredText(window_, statusText, panelX + panelW / 2.0f, badgeY + lobbyScaled(4.0f),
+                         static_cast<unsigned>(lobbyScaled(15.0f)), sf::Color::White);
 
     if (isReady) {
         ui_.drawOutlinedCenteredText(window_, "\xe2\x9c\x93", panelX + panelW / 2.0f, panelY + 16.0f, 16,
@@ -1705,38 +2104,47 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
 
 void GameClient::renderLobbyScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
+    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
-    const sf::FloatRect viewport = levelMapViewportRect();
-    const float nodeY = levelNodeLocalCenter(renderWorld_.levelIndex).y;
-    const float nodeRadius = levelNodeRadius(renderWorld_.levelIndex, renderWorld_.levelCount);
-    const float nodeTop = nodeY - nodeRadius - 8.0f;
-    const float nodeBottom = nodeY + nodeRadius + 8.0f;
-    if (nodeTop < levelMapScrollY_) {
-        levelMapScrollY_ = nodeTop;
-    }
-    if (nodeBottom > levelMapScrollY_ + viewport.height) {
-        levelMapScrollY_ = nodeBottom - viewport.height;
-    }
-    levelMapScrollY_ = clampLevelMapScroll(levelMapScrollY_);
+    drawLobbyBackdrop(sf::Color(38, 31, 44), sf::Color(62, 46, 30));
 
-    sf::RectangleShape backdrop({w, static_cast<float>(LOBBY_WINDOW_HEIGHT)});
-    backdrop.setFillColor(sf::Color(36, 28, 22));
-    window_.draw(backdrop);
-
-    ui_.drawPanel(window_, {0.0f, 0.0f, w, 72.0f}, sf::Color(48, 36, 28, 220), 220.0f);
-    ui_.drawCenteredText(window_, text::forestTemple(), w / 2.0f, 12.0f, 34, sf::Color(255, 230, 170));
-    ui_.drawCenteredText(window_, text::levelSelectTitle(), w / 2.0f, 48.0f, 16, sf::Color(200, 190, 170));
+    const float headerH = roomHeaderHeight();
+    ui_.drawPanel(window_, {0.0f, 0.0f, w, headerH}, sf::Color(48, 36, 28, 220), 220.0f);
+    ui_.drawCenteredText(window_, text::forestTemple(), w / 2.0f, lobbyScaled(12.0f),
+                         static_cast<unsigned>(lobbyScaled(34.0f)), sf::Color(255, 230, 170));
+    ui_.drawCenteredText(window_, text::levelSelectTitle(), w / 2.0f, lobbyScaled(48.0f),
+                         static_cast<unsigned>(lobbyScaled(16.0f)), sf::Color(200, 190, 170));
 
     drawLevelProgressMap();
 
-    const sf::FloatRect previewArea{676.0f, 136.0f, 308.0f, 408.0f};
-    ui_.drawPanel(window_, previewArea, sf::Color(28, 24, 20, 220), 220.0f);
-    ui_.drawText(window_, "地图预览", previewArea.left + 12.0f, previewArea.top + 8.0f, 16, sf::Color(255, 230, 170));
+    const float previewTop = levelMapPanelTop();
+    const float previewHeight = lobbyBottomBarTop() - previewTop - lobbyScaled(8.0f);
+    const float previewW = previewPanelWidth();
+    const float previewMargin = lobbyScaled(kPreviewPanelMargin);
+    const sf::FloatRect previewPanel{w - previewMargin - previewW, previewTop, previewW, previewHeight};
+    ui_.drawPanel(window_, previewPanel, sf::Color(28, 24, 20, 220), 220.0f);
+
+    const float previewPad = lobbyScaled(14.0f);
+    const unsigned previewTitleSize = static_cast<unsigned>(lobbyScaled(20.0f));
+    const float previewTitleH = lobbyScaled(44.0f);
+    ui_.drawText(window_, text::lobbyPreviewTitle(), previewPanel.left + previewPad,
+                 previewPanel.top + (previewTitleH - static_cast<float>(previewTitleSize)) * 0.35f, previewTitleSize,
+                 sf::Color(255, 230, 170));
+
+    const float previewZoneTop = previewPanel.top + previewTitleH;
+    const float previewZoneH = previewPanel.height * 0.44f;
+    const sf::FloatRect mapPreviewArea{previewPanel.left + previewPad, previewZoneTop,
+                                       previewPanel.width - previewPad * 2.0f, previewZoneH};
+
+    const float infoPanelTop = mapPreviewArea.top + mapPreviewArea.height + lobbyScaled(10.0f);
+    const float infoPanelH = previewPanel.top + previewPanel.height - infoPanelTop - previewPad;
+    ui_.drawPanel(window_,
+                  {previewPanel.left + previewPad, infoPanelTop, previewPanel.width - previewPad * 2.0f, infoPanelH},
+                  sf::Color(18, 16, 14, 210), 210.0f);
     if (tiledMap_.ready()) {
-        tiledMap_.drawPreview(window_, previewArea);
+        tiledMap_.drawPreview(window_, mapPreviewArea);
     } else {
-        // 无 TMX 时回退为 collision 色块预览
-        drawMapPreview(window_, previewArea);
+        drawMapPreview(window_, mapPreviewArea);
     }
 
     const LevelCatalog& catalog = LevelCatalog::instance();
@@ -1746,8 +2154,37 @@ void GameClient::renderLobbyScreen() {
     const bool selectedUnlocked = isLevelUnlocked(renderWorld_.unlockedMask, globalSelected);
     const bool selectedCompleted = isLevelCompleted(renderWorld_.completedMask, globalSelected);
 
-    const sf::FloatRect statusPanel{24.0f, 576.0f, 700.0f, 48.0f};
-    ui_.drawPanel(window_, statusPanel, sf::Color(36, 30, 24, 220), 220.0f);
+    const float infoX = previewPanel.left + previewPad + lobbyScaled(8.0f);
+    const float textWidth = previewPanel.width - previewPad * 2.0f - lobbyScaled(16.0f);
+    float infoY = infoPanelTop + lobbyScaled(12.0f);
+    ui_.drawText(window_, selectedInfo.title, infoX, infoY, static_cast<unsigned>(lobbyScaled(17.0f)),
+                 sf::Color(255, 230, 170));
+    infoY += lobbyScaled(24.0f);
+    infoY = ui_.drawWrappedText(window_, text::levelPreviewSummary(globalSelected), infoX, infoY,
+                                static_cast<unsigned>(lobbyScaled(13.0f)), sf::Color(180, 175, 165), textWidth,
+                                lobbyScaled(4.0f)) +
+            lobbyScaled(6.0f);
+    infoY =
+        ui_.drawWrappedText(window_, text::lobbyPreviewElementsLabel() + text::levelPreviewElementList(globalSelected),
+                            infoX, infoY, static_cast<unsigned>(lobbyScaled(13.0f)), sf::Color(150, 200, 170),
+                            textWidth, lobbyScaled(4.0f)) +
+        lobbyScaled(6.0f);
+
+    const std::string requirement =
+        text::lobbyPreviewRequirementLabel() +
+        (mapHasExitTiles(map_) ? text::lobbyPreviewReachExits() : text::lobbyPreviewCollectAllGems());
+    infoY = ui_.drawWrappedText(window_, requirement, infoX, infoY, static_cast<unsigned>(lobbyScaled(13.0f)),
+                                sf::Color(255, 210, 120), textWidth, lobbyScaled(4.0f)) +
+            lobbyScaled(6.0f);
+    ui_.drawWrappedText(window_,
+                        text::lobbyPreviewGemLabel() + std::to_string(renderWorld_.totalGems) + "  |  " +
+                            text::lobbyPreviewPlayerLabel() + std::to_string(selectedInfo.minPlayers) + "-" +
+                            std::to_string(selectedInfo.maxPlayers),
+                        infoX, infoY, static_cast<unsigned>(lobbyScaled(13.0f)), sf::Color(170, 190, 210), textWidth,
+                        lobbyScaled(4.0f));
+
+    const sf::FloatRect bottomBar = lobbyBottomBarRect();
+    ui_.drawPanel(window_, bottomBar, sf::Color(36, 30, 24, 220), 220.0f);
 
     std::string levelLine = "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + selectedInfo.title;
     if (!selectedUnlocked) {
@@ -1755,26 +2192,19 @@ void GameClient::renderLobbyScreen() {
     } else if (selectedCompleted) {
         levelLine += "  [" + text::lobbyClearedHint() + "]";
     }
-    levelLine += "  |  Gems: " + std::to_string(renderWorld_.totalGems);
-    ui_.drawText(window_, levelLine, statusPanel.left + 20.0f, statusPanel.top + 14.0f, 18, sf::Color(255, 230, 170));
-
-    ui_.drawText(window_, text::lobbyControlsHint(), statusPanel.left + 360.0f, statusPanel.top + 16.0f, 14,
+    ui_.drawText(window_, levelLine, bottomBar.left + lobbyScaled(20.0f), bottomBar.top + lobbyScaled(12.0f),
+                 static_cast<unsigned>(lobbyScaled(18.0f)), sf::Color(255, 230, 170));
+    ui_.drawText(window_, text::lobbyControlsHint(), bottomBar.left + lobbyScaled(20.0f),
+                 bottomBar.top + lobbyScaled(36.0f), static_cast<unsigned>(lobbyScaled(14.0f)),
                  sf::Color(180, 170, 150));
 
-    const sf::FloatRect playArea{740.0f, 576.0f, 260.0f, 48.0f};
+    const sf::FloatRect playArea = lobbyPlayButtonRect();
     const bool canStart = selectedUnlocked && !localReady_;
-    if (assets_.hasButtons()) {
-        if (!localReady_) {
-            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(),
-                                        canStart ? "[Enter] 准备" : text::lobbyLockedHint(), canStart, canStart);
-        } else {
-            ui_.drawImageButtonWithHint(window_, playArea, assets_.playButton(), "已准备", true, true);
-        }
-    } else if (!localReady_) {
-        ui_.drawButton(window_, playArea, canStart ? "准备游戏" : text::lobbyLockedHint(), canStart,
-                       canStart ? sf::Color(60, 130, 210) : sf::Color(80, 80, 90));
+    if (!localReady_) {
+        ui_.drawButton(window_, playArea, canStart ? text::lobbyReadyButton() : text::lobbyLockedHint(), canStart,
+                       canStart ? sf::Color(210, 150, 50) : sf::Color(80, 80, 90));
     } else {
-        ui_.drawButton(window_, playArea, "已准备", true, sf::Color(50, 140, 90));
+        ui_.drawButton(window_, playArea, text::lobbyCancelReadyButton(), true, sf::Color(50, 140, 90));
     }
 }
 
@@ -1800,10 +2230,17 @@ void GameClient::renderGameScreen() {
 
     drawMap(window_);
 
+    const bool inGamePausePhase =
+        renderWorld_.phase == GamePhase::Playing || renderWorld_.phase == GamePhase::Countdown;
+
     if (renderWorld_.phase == GamePhase::Playing || renderWorld_.phase == GamePhase::Victory ||
         renderWorld_.phase == GamePhase::GameOver) {
         drawPlayer(window_, renderWorld_.players[0]);
         drawPlayer(window_, renderWorld_.players[1]);
+    }
+
+    if (inGamePausePhase && !paused_) {
+        drawPauseButton(window_);
     }
 
     drawHud(window_);
@@ -1822,18 +2259,28 @@ void GameClient::renderGameScreen() {
         default:
             break;
     }
+
+    if (paused_ && inGamePausePhase) {
+        drawPauseOverlay(window_, centerX);
+    }
 }
 
 void GameClient::drawConnectingScreen(sf::RenderWindow& window) const {
     const float w = static_cast<float>(window.getSize().x);
     const float h = static_cast<float>(window.getSize().y);
+    const float panelW = lobbyScaled(480.0f);
+    const float panelH = lobbyScaled(140.0f);
 
-    ui_.drawPanel(window, {w / 2.0f - 240.0f, h / 2.0f - 70.0f, 480.0f, 140.0f}, sf::Color(20, 30, 24, 220), 220.0f);
-    ui_.drawOutlinedCenteredText(window, text::connectingTitle(), w / 2.0f, h / 2.0f - 36.0f, 30,
-                                 sf::Color(255, 240, 180), sf::Color(60, 40, 10), 2.5f);
+    ui_.drawPanel(window, {w / 2.0f - panelW / 2.0f, h / 2.0f - panelH / 2.0f, panelW, panelH},
+                  sf::Color(20, 30, 24, 220), 220.0f);
+    ui_.drawOutlinedCenteredText(window, text::connectingTitle(), w / 2.0f, h / 2.0f - lobbyScaled(36.0f),
+                                 static_cast<unsigned>(lobbyScaled(30.0f)), sf::Color(255, 240, 180),
+                                 sf::Color(60, 40, 10), 2.5f);
     ui_.drawCenteredText(window, host_ + "  |  " + text::rolePrefixConnecting() + roleChineseName(), w / 2.0f,
-                         h / 2.0f + 8.0f, 18, sf::Color(200, 210, 190));
-    ui_.drawCenteredText(window, text::backToTitleHint(), w / 2.0f, h / 2.0f + 40.0f, 16, sf::Color(180, 190, 170));
+                         h / 2.0f + lobbyScaled(8.0f), static_cast<unsigned>(lobbyScaled(18.0f)),
+                         sf::Color(200, 210, 190));
+    ui_.drawCenteredText(window, text::backToTitleHint(), w / 2.0f, h / 2.0f + lobbyScaled(40.0f),
+                         static_cast<unsigned>(lobbyScaled(16.0f)), sf::Color(180, 190, 170));
 }
 
 void GameClient::drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const {
@@ -1861,7 +2308,8 @@ void GameClient::drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& a
             if (type == TileType::Gem && assets_.ready()) {
                 const sf::Texture& gemTex = ((x + y) % 2 == 0) ? assets_.gemRed() : assets_.gemBlue();
                 sf::Sprite gem(gemTex);
-                const float gemScale = tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
+                const float gemScale =
+                    tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y)) * GEM_VISUAL_SCALE;
                 gem.setScale(gemScale, gemScale);
                 gem.setPosition(px + (tileSize - gemTex.getSize().x * gemScale) / 2.0f,
                                 py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
@@ -1898,7 +2346,8 @@ void GameClient::drawDynamicTiles(sf::RenderWindow& window) const {
             if (type == TileType::Gem && assets_.ready()) {
                 const sf::Texture& gemTex = ((x + y) % 2 == 0) ? assets_.gemRed() : assets_.gemBlue();
                 sf::Sprite gem(gemTex);
-                const float gemScale = tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
+                const float gemScale =
+                    tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y)) * GEM_VISUAL_SCALE;
                 gem.setScale(gemScale, gemScale);
                 gem.setPosition(px + (tileSize - gemTex.getSize().x * gemScale) / 2.0f,
                                 py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
@@ -1917,17 +2366,66 @@ void GameClient::drawDynamicTiles(sf::RenderWindow& window) const {
     }
 }
 
+void GameClient::drawSawTraps(sf::RenderWindow& window) const {
+    if (sawTraps_.empty() || !tiledMap_.ready()) {
+        return;
+    }
+
+    const float timeSec = static_cast<float>(renderWorld_.tick) * TICK_DT;
+    for (const SawTrap& saw : sawTraps_) {
+        const float y = sawCurrentY(saw, timeSec);
+        tiledMap_.drawObjectGidAt(window, saw.gid, saw.anchorX, y, saw.width, saw.height, timeSec);
+    }
+}
+
+void GameClient::drawRockHeads(sf::RenderWindow& window) const {
+    if (!tiledMap_.ready()) {
+        return;
+    }
+    for (uint8_t i = 0; i < renderWorld_.rockHeadCount; ++i) {
+        const WorldState::SyncRockHead& rock = renderWorld_.rockHeads[i];
+        if (rock.active == 0) {
+            continue;
+        }
+        tiledMap_.drawObjectGidAt(window, rock.gid, rock.x, rock.y, rock.w, rock.h, animTime_);
+    }
+}
+
+void GameClient::drawPendulums(sf::RenderWindow& window) const {
+    if (!tiledMap_.ready()) {
+        return;
+    }
+    for (uint8_t i = 0; i < renderWorld_.pendulumCount; ++i) {
+        const WorldState::SyncPendulum& pendulum = renderWorld_.pendulums[i];
+        if (pendulum.active == 0) {
+            continue;
+        }
+        const float ballCenterX = pendulum.ballX + pendulum.ballW * 0.5f;
+        const float ballCenterY = pendulum.ballY + pendulum.ballH * 0.5f;
+        const uint8_t chainCount = std::max<uint8_t>(1, pendulum.chainCount);
+        for (uint8_t chain = 1; chain <= chainCount; ++chain) {
+            const float t = static_cast<float>(chain) / static_cast<float>(chainCount + 1);
+            const float cx = pendulum.pivotX + (ballCenterX - pendulum.pivotX) * t;
+            const float cy = pendulum.pivotY + (ballCenterY - pendulum.pivotY) * t;
+            constexpr float chainSize = TILE_SIZE * 0.5f;
+            tiledMap_.drawObjectGidAt(window, pendulum.chainGid, cx - chainSize * 0.5f, cy - chainSize * 0.5f,
+                                      chainSize, chainSize, animTime_);
+        }
+        tiledMap_.drawObjectGidAt(window, pendulum.ballGid, pendulum.ballX, pendulum.ballY, pendulum.ballW,
+                                  pendulum.ballH, animTime_);
+    }
+}
 void GameClient::drawMudParticles(sf::RenderWindow& window) const {
     for (uint8_t i = 0; i < renderWorld_.mudParticleCount; ++i) {
         const WorldState::SyncMudParticle& particle = renderWorld_.mudParticles[i];
         if (particle.active == 0) {
             continue;
         }
-        sf::CircleShape mud(MUD_HITBOX * 0.5f);
+        sf::CircleShape mud(MUD_HITBOX * 0.5f * MUD_VISUAL_SCALE);
         mud.setFillColor(sf::Color(50, 150, 60));
         mud.setOutlineColor(sf::Color(30, 100, 40));
         mud.setOutlineThickness(1.0f);
-        mud.setOrigin(MUD_HITBOX * 0.5f, MUD_HITBOX * 0.5f);
+        mud.setOrigin(MUD_HITBOX * 0.5f * MUD_VISUAL_SCALE, MUD_HITBOX * 0.5f * MUD_VISUAL_SCALE);
         mud.setPosition(particle.x, particle.y);
         window.draw(mud);
     }
@@ -1946,7 +2444,10 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
             return isVanishingTileHidden(renderWorld_, static_cast<uint16_t>(slot));
         };
         tiledMap_.drawStatic(window, skipHiddenVanishing);
-        tiledMap_.drawCollectibles(window, renderWorld_.collectedPickupsMask, renderWorld_.collectedPickupsMaskHi,
+        drawSawTraps(window);
+        drawRockHeads(window);
+        drawPendulums(window);
+        tiledMap_.drawCollectibles(window, animTime_, renderWorld_.collectedPickupsMask, renderWorld_.collectedPickupsMaskHi,
                                    renderWorld_.collectedPickupsMaskExt);
         drawMudParticles(window);
         return;
@@ -1973,7 +2474,8 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
             if (type == TileType::Gem && assets_.ready()) {
                 const sf::Texture& gemTex = ((x + y) % 2 == 0) ? assets_.gemRed() : assets_.gemBlue();
                 sf::Sprite gem(gemTex);
-                const float gemScale = tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
+                const float gemScale =
+                    tileSize / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y)) * GEM_VISUAL_SCALE;
                 gem.setScale(gemScale, gemScale);
                 gem.setPosition(px + (tileSize - gemTex.getSize().x * gemScale) / 2.0f,
                                 py + (tileSize - gemTex.getSize().y * gemScale) / 2.0f);
@@ -1994,28 +2496,24 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
         return;
     }
 
-    if (assets_.ready()) {
-        const sf::Texture& texture = player.role == PlayerRole::Fire ? assets_.fireBoy() : assets_.waterGirl();
-        sf::Sprite sprite(texture);
-        const sf::Vector2u texSize = texture.getSize();
-        const float scaleX = PLAYER_WIDTH / static_cast<float>(texSize.x);
-        const float scaleY = PLAYER_HEIGHT / static_cast<float>(texSize.y);
-        sprite.setScale(scaleX, scaleY);
-        if (player.vx < -1.0f) {
-            sprite.setScale(-scaleX, scaleY);
-            sprite.setPosition(player.x + PLAYER_WIDTH, player.y);
-        } else {
-            sprite.setPosition(player.x, player.y);
-        }
-        if (!player.alive) {
-            sprite.setColor(sf::Color(120, 120, 120, 140));
-        }
-        window.draw(sprite);
+    if (assets_.ready() && assets_.character(player.role).ready()) {
+        const InputFlags facingHint = player.role == role_ ? currentInput_ : InputFlags::None;
+        assets_.character(player.role).draw(window, player, animTime_, facingHint);
         return;
     }
 
-    sf::RectangleShape body({PLAYER_WIDTH, PLAYER_HEIGHT});
-    body.setPosition(player.x, player.y);
+    const float visualH = PLAYER_VISUAL_HEIGHT;
+    const float visualW = PLAYER_WIDTH * (visualH / PLAYER_HEIGHT);
+    const float visualX = player.x + (PLAYER_WIDTH - visualW) * 0.5f;
+    const float visualY = player.y + PLAYER_HEIGHT - visualH;
+
+    sf::RectangleShape shadow({visualW, visualH});
+    shadow.setPosition(visualX + 3.0f, visualY + 4.0f);
+    shadow.setFillColor(sf::Color(0, 0, 0, 70));
+    window.draw(shadow);
+
+    sf::RectangleShape body({visualW, visualH});
+    body.setPosition(visualX, visualY);
 
     if (!player.alive) {
         body.setFillColor(sf::Color(80, 80, 80, 120));
@@ -2024,21 +2522,36 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
     } else if (player.role == PlayerRole::Water) {
         body.setFillColor(sf::Color(60, 140, 255));
     } else if (player.role == PlayerRole::Poison) {
-        body.setFillColor(sf::Color(34, 139, 34));
+        body.setFillColor(sf::Color(64, 190, 78));
     }
-
+    body.setOutlineThickness(2.0f);
+    body.setOutlineColor(player.role == PlayerRole::Poison ? sf::Color(20, 80, 30) : sf::Color(30, 30, 35));
     window.draw(body);
+
+    if (player.role == PlayerRole::Poison && player.alive) {
+        sf::CircleShape glow(12.0f);
+        glow.setOrigin(12.0f, 12.0f);
+        glow.setPosition(player.x + PLAYER_WIDTH / 2.0f, visualY + 12.0f);
+        glow.setFillColor(sf::Color(160, 255, 120, 75));
+        window.draw(glow);
+    }
 }
 
 void GameClient::drawHud(sf::RenderWindow& window) const {
     const float hudY = static_cast<float>(map_.height()) * TILE_SIZE + 8.0f;
-    const float windowW = static_cast<float>(window_.getSize().x);
+    const float windowW = static_cast<float>(window.getSize().x);
 
     sf::RectangleShape hudBar({windowW, 72.0f});
     hudBar.setPosition(0.0f, hudY);
-    hudBar.setFillColor(sf::Color(30, 30, 40));
+    hudBar.setFillColor(sf::Color(18, 22, 34, 232));
+    hudBar.setOutlineThickness(2.0f);
+    hudBar.setOutlineColor(sf::Color(255, 255, 255, 35));
     window.draw(hudBar);
 
+    sf::RectangleShape hudShine({windowW, 3.0f});
+    hudShine.setPosition(0.0f, hudY + 3.0f);
+    hudShine.setFillColor(sf::Color(255, 255, 255, 35));
+    window.draw(hudShine);
     const int totalGems = renderWorld_.players[0].gems + renderWorld_.players[1].gems;
     ui_.drawText(window, "Gems: " + std::to_string(totalGems) + "/" + std::to_string(renderWorld_.totalGems), 16.0f,
                  hudY + 16.0f, 20, sf::Color(255, 220, 80));
@@ -2048,7 +2561,12 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
     ui_.drawText(window, levelLine, 180.0f, hudY + 16.0f, 18, sf::Color(220, 220, 220));
 
     if (renderWorld_.phase == GamePhase::Playing) {
-        const char* controlText = role_ == PlayerRole::Fire ? "WASD" : "Arrows";
+        const char* controlText = "IJKL/Space";
+        if (role_ == PlayerRole::Fire) {
+            controlText = "WASD/Space";
+        } else if (role_ == PlayerRole::Water) {
+            controlText = "Arrows/Space";
+        }
         ui_.drawText(window, std::string(roleDisplayName()) + " [" + controlText + "]", 500.0f, hudY + 16.0f, 18,
                      sf::Color(180, 180, 180));
         if (assets_.hasButtons()) {
@@ -2059,16 +2577,231 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
             ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
         }
     }
+}
 
-    if (renderWorld_.phase == GamePhase::Countdown) {
-        if (assets_.hasButtons()) {
-            ui_.drawImageButton(window, {windowW - 168.0f, hudY + 6.0f, 152.0f, 48.0f}, assets_.menuButton(), true,
-                                true);
-            ui_.drawCenteredText(window, "[Esc] Lobby", windowW - 92.0f, hudY + 54.0f, 13, sf::Color(255, 200, 120));
+sf::FloatRect GameClient::pauseButtonRect() const {
+    const float mapW = static_cast<float>(map_.width()) * TILE_SIZE;
+    const float windowW = static_cast<float>(window_.getSize().x);
+    const float x = std::min(mapW, windowW) - 52.0f;
+    return {x, 12.0f, 40.0f, 40.0f};
+}
+
+void GameClient::drawPauseButton(sf::RenderWindow& window) const {
+    const sf::FloatRect area = pauseButtonRect();
+    if (assets_.hasPauseIcon()) {
+        ui_.drawImageButton(window, area, assets_.pauseIcon(), true, true);
+        return;
+    }
+
+    const float barW = 8.0f;
+    const float barH = 24.0f;
+    const float gap = 6.0f;
+    const float cx = area.left + area.width / 2.0f;
+    const float cy = area.top + area.height / 2.0f;
+    sf::RectangleShape leftBar({barW, barH});
+    leftBar.setFillColor(sf::Color(255, 220, 60));
+    leftBar.setPosition(cx - gap / 2.0f - barW, cy - barH / 2.0f);
+    window.draw(leftBar);
+    sf::RectangleShape rightBar({barW, barH});
+    rightBar.setFillColor(sf::Color(255, 220, 60));
+    rightBar.setPosition(cx + gap / 2.0f, cy - barH / 2.0f);
+    window.draw(rightBar);
+}
+
+void GameClient::drawPauseOverlay(sf::RenderWindow& window, float centerX) const {
+    const float mapH = static_cast<float>(map_.height()) * TILE_SIZE;
+    const float windowW = static_cast<float>(window.getSize().x);
+
+    sf::RectangleShape dim({windowW, mapH});
+    dim.setFillColor(sf::Color(0, 0, 0, 120));
+    window.draw(dim);
+
+    const PauseMenuMetrics metrics = computePauseMenuMetrics(mapH, centerX);
+
+    if (assets_.hasPauseMenu()) {
+        const sf::Texture& screenTex = assets_.pauseMenu();
+        sf::Sprite screen(screenTex);
+        const float scale = std::min(metrics.panelDrawW / static_cast<float>(screenTex.getSize().x),
+                                     metrics.panelDrawH / static_cast<float>(screenTex.getSize().y));
+        const float drawW = static_cast<float>(screenTex.getSize().x) * scale;
+        const float drawH = static_cast<float>(screenTex.getSize().y) * scale;
+        const float drawTop = mapH / 2.0f - drawH / 2.0f;
+        screen.setScale(scale, scale);
+        screen.setPosition(centerX - drawW / 2.0f, drawTop);
+        window.draw(screen);
+        return;
+    }
+
+    ui_.drawPanel(window,
+                  {centerX - metrics.panelDrawW / 2.0f, metrics.panelTop, metrics.panelDrawW, metrics.panelDrawH},
+                  sf::Color(180, 180, 180), 235.0f);
+    ui_.drawOutlinedCenteredText(window, text::pauseTitle(), centerX, metrics.panelTop + metrics.panelDrawH * 0.18f, 42,
+                                 sf::Color(255, 220, 80), sf::Color(40, 30, 20), 3.0f);
+
+    const auto drawPauseActionButton = [&](const sf::FloatRect& area, const std::string& label) {
+        ui_.drawPanel(window, area, sf::Color(180, 180, 180), 255.0f);
+        ui_.drawOutlinedCenteredText(window, label, area.left + area.width / 2.0f, area.top + 12.0f, 22,
+                                     sf::Color(255, 220, 80), sf::Color(40, 30, 20), 2.0f);
+    };
+    drawPauseActionButton(metrics.menuBtn, text::pauseMenuButton());
+    drawPauseActionButton(metrics.retryBtn, text::resultRetryButton());
+    drawPauseActionButton(metrics.continueBtn, text::pauseContinueButton());
+}
+
+bool GameClient::handlePauseMenuClick(const sf::Event& event) {
+    if (event.type != sf::Event::MouseButtonPressed || event.mouseButton.button != sf::Mouse::Left) {
+        return false;
+    }
+
+    const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
+    const float centerX = static_cast<float>(window_.getSize().x) / 2.0f;
+    const float mapH = static_cast<float>(map_.height()) * TILE_SIZE;
+    const PauseMenuMetrics metrics = computePauseMenuMetrics(mapH, centerX);
+
+    if (assets_.hasPauseMenu()) {
+        const sf::Texture& screenTex = assets_.pauseMenu();
+        const float scale = std::min(metrics.panelDrawW / static_cast<float>(screenTex.getSize().x),
+                                     metrics.panelDrawH / static_cast<float>(screenTex.getSize().y));
+        const float drawW = static_cast<float>(screenTex.getSize().x) * scale;
+        const float drawH = static_cast<float>(screenTex.getSize().y) * scale;
+        const float panelLeft = centerX - drawW / 2.0f;
+        const float panelTop = mapH / 2.0f - drawH / 2.0f;
+        const float baseLeft = centerX - metrics.panelDrawW / 2.0f;
+        const auto scaleRect = [&](const sf::FloatRect& rect) {
+            return sf::FloatRect{panelLeft + (rect.left - baseLeft) / metrics.panelDrawW * drawW,
+                                 panelTop + (rect.top - metrics.panelTop) / metrics.panelDrawH * drawH,
+                                 rect.width / metrics.panelDrawW * drawW, rect.height / metrics.panelDrawH * drawH};
+        };
+        const sf::FloatRect menuBtn = scaleRect(metrics.menuBtn);
+        const sf::FloatRect retryBtn = scaleRect(metrics.retryBtn);
+        const sf::FloatRect continueBtn = scaleRect(metrics.continueBtn);
+
+        if (continueBtn.contains(mouse)) {
+            paused_ = false;
+            return true;
+        }
+        if (menuBtn.contains(mouse)) {
+            paused_ = false;
+            localReady_ = false;
+            sendAction(PlayerAction::ReturnToLobby);
+            return true;
+        }
+        if (retryBtn.contains(mouse)) {
+            paused_ = false;
+            sendAction(PlayerAction::Restart);
+            return true;
+        }
+        return true;
+    }
+
+    if (metrics.continueBtn.contains(mouse)) {
+        paused_ = false;
+        return true;
+    }
+    if (metrics.menuBtn.contains(mouse)) {
+        paused_ = false;
+        localReady_ = false;
+        sendAction(PlayerAction::ReturnToLobby);
+        return true;
+    }
+    if (metrics.retryBtn.contains(mouse)) {
+        paused_ = false;
+        sendAction(PlayerAction::Restart);
+        return true;
+    }
+    return true;
+}
+
+bool GameClient::handleResultOverlayClick(const sf::Event& event) {
+    if (event.type != sf::Event::MouseButtonPressed || event.mouseButton.button != sf::Mouse::Left) {
+        return false;
+    }
+
+    const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
+    const float centerX = static_cast<float>(window_.getSize().x) / 2.0f;
+    const float mapH = static_cast<float>(map_.height()) * TILE_SIZE;
+
+    if (renderWorld_.phase == GamePhase::GameOver) {
+        const GameOverLayout layout = computeGameOverLayout(mapH, centerX, static_cast<float>(window_.getSize().x));
+
+        if (layout.menuBtn.contains(mouse)) {
+            localReady_ = false;
+            sendAction(PlayerAction::ReturnToLobby);
+            return true;
+        }
+        if (layout.retryBtn.contains(mouse)) {
+            localReady_ = false;
+            sendAction(PlayerAction::Restart);
+            return true;
+        }
+        return false;
+    }
+
+    const float btnW = 150.0f;
+    const float btnH = 52.0f;
+    const float gap = 28.0f;
+    const float rowY = mapH / 2.0f + 130.0f;
+    const bool hasNextLevel =
+        renderWorld_.levelIndex + 1 < renderWorld_.levelCount &&
+        isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(renderWorld_.levelIndex + 1));
+
+    if (assets_.hasButtons()) {
+        if (hasNextLevel) {
+            const float totalW = btnW * 3.0f + gap * 2.0f;
+            const float startX = centerX - totalW / 2.0f;
+            const sf::FloatRect retryBtn{startX, rowY, btnW, btnH};
+            const sf::FloatRect nextBtn{startX + btnW + gap, rowY, btnW, btnH};
+            const sf::FloatRect menuBtn{startX + (btnW + gap) * 2.0f, rowY, btnW, btnH};
+            if (retryBtn.contains(mouse)) {
+                localReady_ = false;
+                sendAction(PlayerAction::Restart);
+                return true;
+            }
+            if (nextBtn.contains(mouse)) {
+                localReady_ = false;
+                sendAction(PlayerAction::NextLevel);
+                return true;
+            }
+            if (menuBtn.contains(mouse)) {
+                localReady_ = false;
+                sendAction(PlayerAction::ReturnToLobby);
+                return true;
+            }
         } else {
-            ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
+            const sf::FloatRect retryBtn{centerX - btnW - gap / 2.0f, rowY, btnW, btnH};
+            const sf::FloatRect menuBtn{centerX + gap / 2.0f, rowY, btnW, btnH};
+            if (retryBtn.contains(mouse)) {
+                localReady_ = false;
+                sendAction(PlayerAction::Restart);
+                return true;
+            }
+            if (menuBtn.contains(mouse)) {
+                localReady_ = false;
+                sendAction(PlayerAction::ReturnToLobby);
+                return true;
+            }
+        }
+    } else {
+        const sf::FloatRect retryBtn{centerX - 125.0f, mapH / 2.0f + 62.0f, 250.0f, 40.0f};
+        const sf::FloatRect menuBtn{centerX - 125.0f, mapH / 2.0f + 110.0f, 250.0f, 40.0f};
+        const sf::FloatRect nextBtn{centerX - 125.0f, mapH / 2.0f + 158.0f, 250.0f, 40.0f};
+        if (retryBtn.contains(mouse)) {
+            localReady_ = false;
+            sendAction(PlayerAction::Restart);
+            return true;
+        }
+        if (menuBtn.contains(mouse)) {
+            localReady_ = false;
+            sendAction(PlayerAction::ReturnToLobby);
+            return true;
+        }
+        if (hasNextLevel && nextBtn.contains(mouse)) {
+            localReady_ = false;
+            sendAction(PlayerAction::NextLevel);
+            return true;
         }
     }
+    return false;
 }
 
 void GameClient::drawCountdownOverlay(sf::RenderWindow& window, float centerX) const {
@@ -2089,14 +2822,49 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     dim.setFillColor(sf::Color(0, 0, 0, 120));
     window.draw(dim);
 
+    const int totalGems = renderWorld_.players[0].gems + renderWorld_.players[1].gems;
+
+    if (!victory) {
+        const GameOverLayout layout = computeGameOverLayout(mapH, centerX, windowW);
+        const sf::FloatRect panelRect{centerX - layout.panelDrawW / 2.0f, layout.panelTop, layout.panelDrawW,
+                                      layout.panelDrawH};
+
+        ui_.drawPanel(window, panelRect, sf::Color(175, 175, 175), 240.0f);
+        sf::RectangleShape innerFrame(
+            {panelRect.width - layout.uiScale * 28.0f, panelRect.height - layout.uiScale * 28.0f});
+        innerFrame.setPosition(panelRect.left + layout.uiScale * 14.0f, panelRect.top + layout.uiScale * 14.0f);
+        innerFrame.setFillColor(sf::Color(165, 165, 165, 220));
+        innerFrame.setOutlineThickness(3.0f);
+        innerFrame.setOutlineColor(sf::Color(90, 90, 90));
+        window.draw(innerFrame);
+
+        const unsigned titleSize = static_cast<unsigned>(36.0f * layout.uiScale);
+        const unsigned scoreSize = static_cast<unsigned>(24.0f * layout.uiScale);
+        ui_.drawOutlinedCenteredText(window, text::resultGameOverTitle(), centerX, layout.titleY, titleSize,
+                                     sf::Color(255, 220, 80), sf::Color(40, 30, 20), 3.0f);
+
+        const std::string scoreLine = text::resultGemScore(totalGems, renderWorld_.totalGems);
+        ui_.drawOutlinedCenteredText(window, scoreLine, centerX, layout.scoreY, scoreSize, sf::Color(255, 220, 80),
+                                     sf::Color(40, 30, 20), 2.5f);
+
+        const unsigned btnFontSize = static_cast<unsigned>(22.0f * layout.uiScale);
+        const auto drawResultButton = [&](const sf::FloatRect& area, const std::string& label) {
+            ui_.drawPanel(window, area, sf::Color(190, 190, 190), 255.0f);
+            const float textY = area.top + (area.height - static_cast<float>(btnFontSize)) * 0.38f;
+            ui_.drawOutlinedCenteredText(window, label, area.left + area.width / 2.0f, textY, btnFontSize,
+                                         sf::Color(255, 220, 80), sf::Color(40, 30, 20), 2.0f);
+        };
+        drawResultButton(layout.menuBtn, text::resultMenuButton());
+        drawResultButton(layout.retryBtn, text::resultRetryButton());
+        return;
+    }
+
     if (assets_.ready()) {
-        // 图片已带标题文字，下方只补充关卡名/宝石等，避免重复叠字
         const sf::Texture& screenTex =
-            victory ? ((renderWorld_.players[0].gems + renderWorld_.players[1].gems >= renderWorld_.totalGems &&
-                        renderWorld_.totalGems > 0)
-                           ? assets_.winScreen()
-                           : assets_.winScreenPartial())
-                    : assets_.loseScreen();
+            (renderWorld_.players[0].gems + renderWorld_.players[1].gems >= renderWorld_.totalGems &&
+             renderWorld_.totalGems > 0)
+                ? assets_.winScreen()
+                : assets_.winScreenPartial();
 
         sf::Sprite screen(screenTex);
         const float targetW = 520.0f;
@@ -2108,38 +2876,16 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
                            mapH / 2.0f - screenTex.getSize().y * scale / 2.0f);
         window.draw(screen);
     } else {
-        const sf::Color panelColor = victory ? sf::Color(20, 60, 35) : sf::Color(70, 20, 20);
-        ui_.drawPanel(window, {centerX - 260.0f, mapH / 2.0f - 140.0f, 520.0f, 280.0f}, panelColor, 235.0f);
+        ui_.drawPanel(window, {centerX - 260.0f, mapH / 2.0f - 140.0f, 520.0f, 280.0f}, sf::Color(20, 60, 35), 235.0f);
+        ui_.drawCenteredText(window, "Level Complete!", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(140, 255, 170));
     }
 
     const std::string levelLine =
         "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + renderWorld_.levelName;
+    ui_.drawCenteredText(window, levelLine, centerX, mapH / 2.0f - 48.0f, 22, sf::Color(220, 240, 220));
+    ui_.drawCenteredText(window, "Both players reached the exit.", centerX, mapH / 2.0f - 16.0f, 20,
+                         sf::Color(210, 230, 210));
 
-    if (victory) {
-        if (!assets_.ready()) {
-            ui_.drawCenteredText(window, "Level Complete!", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(140, 255, 170));
-        }
-        ui_.drawCenteredText(window, levelLine, centerX, mapH / 2.0f - 48.0f, 22, sf::Color(220, 240, 220));
-        ui_.drawCenteredText(window, "Both players reached the exit.", centerX, mapH / 2.0f - 16.0f, 20,
-                             sf::Color(210, 230, 210));
-    } else {
-        if (!assets_.ready()) {
-            ui_.drawCenteredText(window, "Game Over", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(255, 120, 120));
-        }
-        ui_.drawCenteredText(window, levelLine, centerX, mapH / 2.0f - 48.0f, 22, sf::Color(240, 210, 210));
-        if (!renderWorld_.players[0].alive && !renderWorld_.players[1].alive) {
-            ui_.drawCenteredText(window, "Both players were eliminated.", centerX, mapH / 2.0f - 16.0f, 20,
-                                 sf::Color(240, 210, 210));
-        } else if (!renderWorld_.players[0].alive) {
-            ui_.drawCenteredText(window, "Fire boy fell into danger.", centerX, mapH / 2.0f - 16.0f, 20,
-                                 sf::Color(240, 210, 210));
-        } else {
-            ui_.drawCenteredText(window, "Water girl fell into danger.", centerX, mapH / 2.0f - 16.0f, 20,
-                                 sf::Color(240, 210, 210));
-        }
-    }
-
-    const int totalGems = renderWorld_.players[0].gems + renderWorld_.players[1].gems;
     ui_.drawCenteredText(window, "Gems: " + std::to_string(totalGems) + " / " + std::to_string(renderWorld_.totalGems),
                          centerX, mapH / 2.0f + 28.0f, 22, sf::Color(255, 220, 100));
 
@@ -2148,7 +2894,7 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     const float gap = 28.0f;
     const float rowY = mapH / 2.0f + 130.0f;
     const bool hasNextLevel =
-        victory && renderWorld_.levelIndex + 1 < renderWorld_.levelCount &&
+        renderWorld_.levelIndex + 1 < renderWorld_.levelCount &&
         isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(renderWorld_.levelIndex + 1));
 
     if (assets_.hasButtons()) {
@@ -2168,7 +2914,7 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
         }
     } else {
         ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 62.0f, 250.0f, 40.0f}, "R - Replay", true,
-                       victory ? sf::Color(50, 130, 90) : sf::Color(170, 70, 70));
+                       sf::Color(50, 130, 90));
         ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 110.0f, 250.0f, 40.0f}, "ESC - Lobby", true,
                        sf::Color(90, 90, 120));
         if (hasNextLevel) {
@@ -2181,11 +2927,11 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
 const char* GameClient::roleDisplayName() const {
     switch (role_) {
         case PlayerRole::Fire:
-            return "Fire Boy";
+            return "Ninja Frog";
         case PlayerRole::Water:
-            return "Water Girl";
+            return "Pink Man";
         case PlayerRole::Poison:
-            return "Poison Kid";
+            return "Mask Dude";
         default:
             return "Unknown";
     }

@@ -17,6 +17,7 @@ namespace fireice {
 namespace {
 
 constexpr float COUNTDOWN_SECONDS = 3.0f;
+constexpr float COYOTE_TIME = 0.12f;
 
 }  // namespace
 
@@ -24,7 +25,7 @@ constexpr float COUNTDOWN_SECONDS = 3.0f;
 // Room implementation
 // ============================================================================
 
-void Room::selectLevel(uint8_t index) {
+void Room::selectLevel(uint8_t index, bool keepMapSelect) {
     const LevelCatalog& catalog = LevelCatalog::instance();
     if (index >= catalog.count()) {
         index = 0;
@@ -39,22 +40,29 @@ void Room::selectLevel(uint8_t index) {
     }
 
     pickups = visualMapPath.empty() ? std::vector<Pickup>{} : loadPickupsFromTmx(visualMapPath);
-    levelRuntime.mudSpawners =
-        visualMapPath.empty() ? std::vector<Vec2>{} : loadMudSpawnsFromTmx(visualMapPath);
-    levelRuntime.fanZones =
-        visualMapPath.empty() ? std::vector<FanZone>{} : loadFanZonesFromTmx(visualMapPath, 16, &levelRuntime.fanTileCoords);
+    levelRuntime.mudSpawners = visualMapPath.empty() ? std::vector<Vec2>{} : loadMudSpawnsFromTmx(visualMapPath);
+    levelRuntime.fanZones = visualMapPath.empty() ? std::vector<FanZone>{}
+                                                  : loadFanZonesFromTmx(visualMapPath, 16, &levelRuntime.fanTileCoords);
+    levelRuntime.sawTraps =
+        visualMapPath.empty() ? std::vector<SawTrap>{} : loadSawTrapsFromTmx(visualMapPath, 16);
+    levelRuntime.rockHeads =
+        visualMapPath.empty() ? std::vector<RockHeadTrap>{} : loadRockHeadsFromTmx(visualMapPath, 16);
+    levelRuntime.pendulums =
+        visualMapPath.empty() ? std::vector<PendulumTrap>{} : loadPendulumsFromTmx(visualMapPath, 16);
     initLevelRuntime(map, levelRuntime);
 
     applyLevelMetadata();
     resetWorld();
     world.phase = GamePhase::Lobby;
-    world.lobbyStep = 0;
+    world.lobbyStep = keepMapSelect ? 1 : 0;
     world.countdown = 0;
     countdownTimer = 0.0f;
 
     for (ClientSlot& client : clients) {
         client.ready = false;
-        client.waitingReady = false;
+        if (!keepMapSelect) {
+            client.waitingReady = false;
+        }
         client.pendingInput = InputFlags::None;
     }
 
@@ -68,8 +76,7 @@ void Room::applyLevelMetadata() {
     const uint8_t playerCount = std::max(uint8_t{1}, world.connectedCount);
     world.levelIndex = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);
     world.levelCount = catalog.countForPlayerCount(playerCount);
-    world.totalGems = static_cast<uint8_t>(
-        std::min(255, map.countGems() + static_cast<int>(pickups.size())));
+    world.totalGems = static_cast<uint8_t>(std::min(255, map.countGems() + static_cast<int>(pickups.size())));
     std::snprintf(world.levelName, MAX_LEVEL_NAME, "%s", info.title);
     std::snprintf(world.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
     syncProgressToWorld();
@@ -103,6 +110,8 @@ void Room::resetWorld() {
     world.collectedPickupsMaskExt = 0;
     resetLevelRuntime(levelRuntime);
     syncVanishingMask(levelRuntime, world);
+    updateRockHeads(levelRuntime, map, world, 0.0f);
+    updatePendulums(levelRuntime, world, 0.0f);
 
     for (PlayerState& player : world.players) {
         player = PlayerState{};
@@ -111,6 +120,8 @@ void Room::resetWorld() {
     for (ClientSlot& client : clients) {
         client.jumpHeld = false;
         client.airJumpUsedThisHold = false;
+        client.groundJumpConsumed = false;
+        client.coyoteTimer = 0.0f;
     }
 
     for (const SpawnPoint& spawn : map.spawns()) {
@@ -296,13 +307,23 @@ void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
                 newFiltered = currentFiltered - 1;
             else if (action == PlayerAction::NextLevel && currentFiltered + 1 < filteredCount)
                 newFiltered = currentFiltered + 1;
-            if (newFiltered != currentFiltered)
+            if (newFiltered != currentFiltered) {
                 selectLevel(catalog.filteredIndexToGlobalIndex(newFiltered, playerCount));
+                world.lobbyStep = 1;
+            }
             return;
         }
         if (action == PlayerAction::SelectLevel) {
-            if (value < filteredCount)
+            if (value < filteredCount) {
                 selectLevel(catalog.filteredIndexToGlobalIndex(value, playerCount));
+                world.lobbyStep = 1;
+                clients[slot].ready = true;
+                syncConnectedCount();
+                std::cout << "[Room " << code << "] Slot " << static_cast<int>(slot) << " selected level and ready"
+                          << std::endl;
+                if (allConnectedReady())
+                    beginCountdown();
+            }
             return;
         }
         if (action == PlayerAction::Ready) {
@@ -319,9 +340,21 @@ void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
         returnToLobby();
         return;
     }
-    if (action == PlayerAction::Restart && (world.phase == GamePhase::Victory || world.phase == GamePhase::GameOver)) {
-        returnToLobby();
-        return;
+    if (action == PlayerAction::Restart) {
+        if (world.phase == GamePhase::Victory || world.phase == GamePhase::GameOver) {
+            returnToLobby();
+            return;
+        }
+        if (world.phase == GamePhase::Playing || world.phase == GamePhase::Countdown) {
+            resetWorld();
+            world.phase = GamePhase::Countdown;
+            countdownTimer = COUNTDOWN_SECONDS;
+            world.countdown = static_cast<uint8_t>(std::ceil(countdownTimer));
+            for (ClientSlot& client : clients) {
+                client.pendingInput = InputFlags::None;
+            }
+            return;
+        }
     }
     if (action == PlayerAction::NextLevel && world.phase == GamePhase::Victory) {
         const uint8_t currentFiltered = catalog.globalIndexToFilteredIndex(selectedLevelIndex, playerCount);
@@ -354,21 +387,44 @@ void Room::simulateTick() {
             continue;
 
         PlayerState& player = world.players[i];
-        const bool jumpNow = hasFlag(clients[i].pendingInput, InputFlags::Jump);
-        const bool jumpPressed = jumpNow && !clients[i].jumpHeld;
-        if (!jumpNow)
-            clients[i].airJumpUsedThisHold = false;
-        clients[i].jumpHeld = jumpNow;
-        applyInput(player, clients[i].pendingInput, TICK_DT, jumpPressed, jumpNow, clients[i].airJumpUsedThisHold);
+        ClientSlot& client = clients[i];
+        const bool jumpNow = hasFlag(client.pendingInput, InputFlags::Jump);
+        const bool jumpPressed = jumpNow && !client.jumpHeld;
+        client.jumpHeld = jumpNow;
+
+        if (!jumpNow) {
+            client.airJumpUsedThisHold = false;
+            client.groundJumpConsumed = false;
+        }
+
+        // Coyote Time：离地后短暂窗口内仍视为在地面，可触发一次跳跃
+        const bool grounded = player.onGround || client.coyoteTimer > 0.0f;
+        bool groundJump = false;
+        if (jumpNow && grounded && !client.groundJumpConsumed) {
+            groundJump = true;
+            client.groundJumpConsumed = true;
+        }
+
+        const bool airJump = jumpPressed && !grounded;
+        applyInput(player, client.pendingInput, TICK_DT, groundJump, airJump, client.airJumpUsedThisHold);
         applyFanZones(player, levelRuntime.fanZones, TICK_DT);
         integratePlayer(player, map, world, TICK_DT);
+        if (player.onGround) {
+            client.coyoteTimer = COYOTE_TIME;
+        } else {
+            client.coyoteTimer = std::max(0.0f, client.coyoteTimer - TICK_DT);
+        }
         triggerVanishingForPlayer(player, map, levelRuntime);
 
         if (sampleHazard(map, player, world))
             player.alive = false;
         if (sampleSpikeHazard(map, player))
             player.alive = false;
+        if (sampleSawHazard(levelRuntime.sawTraps, player, static_cast<float>(world.tick) * TICK_DT))
+            player.alive = false;
         if (sampleMudHazard(levelRuntime, player))
+            player.alive = false;
+        if (samplePendulumHazard(levelRuntime.pendulums, player, static_cast<float>(world.tick) * TICK_DT))
             player.alive = false;
         collectGems(player, map);
         collectPickups(player, pickups, world.collectedPickupsMask, world.collectedPickupsMaskHi,
@@ -377,37 +433,39 @@ void Room::simulateTick() {
     }
 
     updateLevelMechanics(levelRuntime, map, world, TICK_DT);
+    updateRockHeads(levelRuntime, map, world, TICK_DT);
+    updatePendulums(levelRuntime, world, static_cast<float>(world.tick) * TICK_DT);
     updatePhase();
     ++world.tick;
 }
 
 void Room::updatePhase() {
-    bool anyDead = false;
+    bool anyAlive = false;
+    bool anyConnected = false;
     for (std::size_t i = 0; i < clients.size(); ++i) {
         if (!clients[i].connected)
             continue;
-        if (!world.players[i].alive) {
-            anyDead = true;
+        anyConnected = true;
+        if (world.players[i].alive) {
+            anyAlive = true;
             break;
         }
     }
 
-    if (anyDead) {
+    if (anyConnected && !anyAlive) {
         world.phase = GamePhase::GameOver;
         world.levelComplete = false;
         std::cout << "[Room " << code << "] Game over" << std::endl;
         return;
     }
-
     if (levelRuntime.collectVictory && world.totalGems > 0) {
         uint8_t collected = 0;
         for (const Pickup& pickup : pickups) {
             const uint32_t bit = 1u << (pickup.index % 32u);
             const uint8_t word = pickup.index / 32u;
-            const bool taken =
-                word == 0 ? ((world.collectedPickupsMask & bit) != 0)
-                          : (word == 1 ? ((world.collectedPickupsMaskHi & bit) != 0)
-                                       : ((world.collectedPickupsMaskExt & bit) != 0));
+            const bool taken = word == 0 ? ((world.collectedPickupsMask & bit) != 0)
+                                         : (word == 1 ? ((world.collectedPickupsMaskHi & bit) != 0)
+                                                      : ((world.collectedPickupsMaskExt & bit) != 0));
             if (taken) {
                 ++collected;
             }
@@ -416,8 +474,8 @@ void Room::updatePhase() {
             if (!clients[i].connected) {
                 continue;
             }
-            collected = static_cast<uint8_t>(
-                std::max(static_cast<int>(collected), static_cast<int>(world.players[i].gems)));
+            collected =
+                static_cast<uint8_t>(std::max(static_cast<int>(collected), static_cast<int>(world.players[i].gems)));
         }
         if (collected >= world.totalGems) {
             world.phase = GamePhase::Victory;
@@ -459,7 +517,7 @@ void Room::broadcastState(sf::UdpSocket& socket) {
     StatePacket packet{};
     packet.world = world;
 
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t size = 0;
     if (!packPacket(packet, buffer, size))
         return;
@@ -511,7 +569,7 @@ void Room::acceptClient(sf::UdpSocket& socket, const sf::IpAddress& address, uns
         accept.role = clients[existing.value()].role;
         std::snprintf(accept.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
 
-        std::array<char, 768> buf{};
+        std::array<char, PACKET_BUFFER_SIZE> buf{};
         std::size_t sz = 0;
         packPacket(accept, buf, sz);
         socket.send(buf.data(), sz, address, port);
@@ -542,7 +600,7 @@ void Room::acceptClient(sf::UdpSocket& socket, const sf::IpAddress& address, uns
     accept.role = role;
     std::snprintf(accept.roomCode, MAX_ROOM_CODE, "%s", code.c_str());
 
-    std::array<char, 768> buf{};
+    std::array<char, PACKET_BUFFER_SIZE> buf{};
     std::size_t sz = 0;
     packPacket(accept, buf, sz);
     socket.send(buf.data(), sz, address, port);
@@ -559,7 +617,7 @@ void Room::rejectClient(sf::UdpSocket& socket, const sf::IpAddress& address, uns
     ConnectRejectPacket reject{};
     std::snprintf(reject.reason, sizeof(reject.reason), "%s", reason);
 
-    std::array<char, 768> buf{};
+    std::array<char, PACKET_BUFFER_SIZE> buf{};
     std::size_t sz = 0;
     packPacket(reject, buf, sz);
     socket.send(buf.data(), sz, address, port);
@@ -636,7 +694,7 @@ void GameServer::stop() {
 }
 
 void GameServer::processPackets() {
-    std::array<char, 768> buffer{};
+    std::array<char, PACKET_BUFFER_SIZE> buffer{};
     std::size_t received = 0;
     sf::IpAddress sender;
     unsigned short port = 0;
@@ -663,7 +721,7 @@ void GameServer::processPackets() {
                         // Room not found
                         ConnectRejectPacket reject{};
                         std::snprintf(reject.reason, sizeof(reject.reason), "Room not found");
-                        std::array<char, 768> buf{};
+                        std::array<char, PACKET_BUFFER_SIZE> buf{};
                         std::size_t sz = 0;
                         packPacket(reject, buf, sz);
                         socket_.send(buf.data(), sz, sender, port);
@@ -715,8 +773,10 @@ void GameServer::processPackets() {
                     }
                 } else if (header->type == PacketType::Action) {
                     ActionPacket pkt{};
-                    if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot)
+                    if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot) {
                         foundRoom->handleAction(foundSlot, pkt.action, pkt.value);
+                        foundRoom->broadcastState(socket_);
+                    }
                 } else if (header->type == PacketType::Disconnect) {
                     DisconnectPacket pkt{};
                     if (unpackPacket(buffer.data(), received, pkt) && pkt.slot == foundSlot) {
@@ -753,7 +813,7 @@ void GameServer::processPackets() {
                         const LevelCatalog& cat = LevelCatalog::instance();
                         if (room->selectedLevelIndex < cat.count())
                             std::snprintf(resp.levelName, MAX_LEVEL_NAME, "%s", cat.at(room->selectedLevelIndex).title);
-                        std::array<char, 768> buf{};
+                        std::array<char, PACKET_BUFFER_SIZE> buf{};
                         std::size_t sz = 0;
                         packPacket(resp, buf, sz);
                         socket_.send(buf.data(), sz, sender, port);
