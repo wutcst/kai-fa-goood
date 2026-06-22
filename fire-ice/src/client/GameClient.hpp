@@ -3,6 +3,7 @@
 #include "AssetManager.hpp"
 #include "GameServer.hpp"
 #include "LevelMechanics.hpp"
+#include "LocalGameSession.hpp"
 #include "Map.hpp"
 #include "Protocol.hpp"
 #include "Pickup.hpp"
@@ -34,7 +35,8 @@ enum class ClientScreen : uint8_t {
 
 class GameClient {
 public:
-    bool initialize(const std::string& host, PlayerRole preferredRole, bool autoConnect = false);
+    bool initialize(const std::string& host, PlayerRole preferredRole, bool autoConnect = false,
+                    bool autoSolo = false);
     void run();
     void disconnect();
     bool startHosting();
@@ -48,6 +50,11 @@ private:
     void onPhaseChanged(GamePhase previous, GamePhase current);
     void updateMusic(GamePhase phase);
     void beginConnect();
+    void quickJoin();
+    void startSoloPlay();
+    void stopSoloPlay();
+    void updateSoloSession(float dt);
+    void syncWorldFromSession();
     void sendConnectRequest();
     void handleTitleMenuSelect(int index);
     void handleTitleInput(const sf::Event& event);
@@ -171,6 +178,8 @@ private:
     std::chrono::steady_clock::time_point lastConnectRetry_;
 
     bool localServerMode_ = false;
+    bool soloMode_ = false;
+    std::unique_ptr<LocalGameSession> soloSession_;
     bool isHosting_ = false;
     std::unique_ptr<GameServer> server_;
     std::thread serverThread_;

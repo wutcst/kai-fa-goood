@@ -138,6 +138,13 @@ def classify_by_tileset(source: str, local_id: int) -> str | None:
             return "vanishing"
         if local_id in {105, 106, 107, 149, 150, 151}:
             return "solid"
+        # Temple Gates 等关卡：地形图块中的门扇（gid 102/125/147 → local 101/124/146）
+        if local_id == 101:
+            return "fire_door"
+        if local_id == 124:
+            return "water_door"
+        if local_id == 146:
+            return "poison_door"
     return None
 
 
@@ -224,11 +231,47 @@ def seal_map_borders(rows: list[list[str]]) -> None:
             rows[y][width - 1] = "#"
 
 
+def is_button_object(obj: ET.Element, tilesets: list[tuple[int, dict[int, str], str]]) -> bool:
+    obj_type = (obj.get("type") or obj.get("name") or "").lower()
+    if "button" in obj_type or obj_type in ("pressure", "plate"):
+        return True
+    gid = int(obj.get("gid", "0") or "0")
+    if gid == 0:
+        return False
+    source, _local_id = gid_to_local(gid, tilesets)
+    if source and "on (" in source.lower():
+        return True
+    return False
+
+
+def object_anchor_tile(obj: ET.Element, tile_width: int, tile_height: int) -> tuple[int, int]:
+    x = float(obj.get("x", "0"))
+    y = float(obj.get("y", "0"))
+    w = float(obj.get("width", tile_width))
+    # Tiled 对象 y 为底边；取底边所在格作为按钮落点
+    tx = int((x + w * 0.5) // tile_width)
+    ty = int((y - 1) // tile_height)
+    return tx, ty
+
+
+def stamp_tile(rows: list[list[str]], tx: int, ty: int, char: str) -> None:
+    if ty < 0 or ty >= len(rows) or tx < 0 or tx >= len(rows[ty]):
+        return
+    if rows[ty][tx] in (".", "^"):
+        rows[ty][tx] = char
+        return
+    empty = nearest_empty_tile(rows, tx, ty)
+    if empty is not None:
+        ex, ey = empty
+        rows[ey][ex] = char
+
+
 def apply_objects(
     rows: list[list[str]],
     map_root: ET.Element,
     tile_width: int,
     tile_height: int,
+    tilesets: list[tuple[int, dict[int, str], str]],
 ) -> None:
     spawn_requests: list[tuple[str, int, int]] = []
 
@@ -242,6 +285,10 @@ def apply_objects(
                 char = "w"
             elif obj_type in ("poison_spawn", "poison"):
                 char = "p"
+            elif is_button_object(obj, tilesets):
+                tx, ty = object_anchor_tile(obj, tile_width, tile_height)
+                stamp_tile(rows, tx, ty, "B")
+                continue
             if char is None:
                 continue
             x = float(obj.get("x", "0"))
@@ -304,7 +351,7 @@ def export_tmx(tmx_path: Path, output_path: Path) -> None:
                 row.append("." if gid == 0 else "#")
         rows.append(row)
 
-    apply_objects(rows, map_root, tile_width, tile_height)
+    apply_objects(rows, map_root, tile_width, tile_height, tilesets)
     seal_map_borders(rows)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

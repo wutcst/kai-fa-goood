@@ -332,7 +332,7 @@ void updateButtons(const GameMap& map, WorldState& world) {
                 if (!player.alive) {
                     continue;
                 }
-                if (!playerBounds(player).intersects(buttonBox)) {
+                if (!playerCollectBounds(player).intersects(buttonBox)) {
                     continue;
                 }
                 if (player.role == PlayerRole::Fire) {

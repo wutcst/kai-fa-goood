@@ -49,12 +49,17 @@ target_include_directories(fireice_server PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/server
 )
 target_link_libraries(fireice_server PRIVATE fireice_common sfml-network sfml-system)
+if(NOT MSVC)
+    find_package(Threads REQUIRED)
+    target_link_libraries(fireice_server PRIVATE Threads::Threads)
+endif()
 if(MSVC)
     target_compile_options(fireice_server PRIVATE /utf-8)
 endif()
 
 add_executable(fireice_client
     src/client/GameClient.cpp
+    src/client/LocalGameSession.cpp
     src/client/UiHelper.cpp
     src/client/AssetManager.cpp
     src/client/CharacterAnimator.cpp
@@ -103,6 +108,10 @@ foreach(target_name fireice_server fireice_client)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${CMAKE_SOURCE_DIR}/assets/levels"
             "$<TARGET_FILE_DIR:${target_name}>/levels"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${target_name}>/maps"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${CMAKE_SOURCE_DIR}/assets/maps"
+            "$<TARGET_FILE_DIR:${target_name}>/maps"
     )
 endforeach()
 add_custom_command(TARGET fireice_client POST_BUILD
@@ -110,10 +119,6 @@ add_custom_command(TARGET fireice_client POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/assets/textures"
         "$<TARGET_FILE_DIR:fireice_client>/textures"
-    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:fireice_client>/maps"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/assets/maps"
-        "$<TARGET_FILE_DIR:fireice_client>/maps"
 )
 
 if(FIREICE_BUILD_TESTS)

@@ -1,12 +1,24 @@
 @echo off
+
 cd /d "%~dp0"
+
 set "BIN=%~dp0build\Release"
 
+
+
 if not exist "%BIN%\fireice_client.exe" (
+
     echo Please run build.bat first.
+
     pause
+
     exit /b 1
+
 )
+
+echo Stopping previous game processes...
+taskkill /F /IM fireice_client.exe >nul 2>&1
+taskkill /F /IM fireice_server.exe >nul 2>&1
 
 call "%~dp0sync_assets.bat"
 if errorlevel 1 (
@@ -14,9 +26,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Starting local server...
-start "Fire-Ice Server" /D "%BIN%" "%BIN%\fireice_server.exe"
-ping 127.0.0.1 -n 2 >nul
+call "%~dp0run_server.bat"
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
 
-echo Starting client (local server 127.0.0.1)...
+timeout /t 1 /nobreak >nul
+echo Starting client...
 start "Fire-Ice" /D "%BIN%" "%BIN%\fireice_client.exe" 127.0.0.1
