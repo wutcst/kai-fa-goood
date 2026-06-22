@@ -287,8 +287,8 @@ void Room::handleAction(uint8_t slot, PlayerAction action, uint8_t value) {
                 clients[slot].waitingReady = !clients[slot].waitingReady;
                 syncWaitingReadyMask();
                 std::cout << "[Room " << code << "] Slot " << static_cast<int>(slot)
-                          << " waitingReady=" << (clients[slot].waitingReady ? "true" : "false")
-                          << " mask=0x" << std::hex << world.waitingReadyMask << std::dec << std::endl;
+                          << " waitingReady=" << (clients[slot].waitingReady ? "true" : "false") << " mask=0x"
+                          << std::hex << world.waitingReadyMask << std::dec << std::endl;
                 return;
             }
             if (action == PlayerAction::ProceedToMapSelect && allConnectedWaitingReady()) {

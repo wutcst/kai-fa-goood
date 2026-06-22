@@ -412,8 +412,8 @@ void GameClient::syncWorldFromSession() {
     renderWorld_ = world_;
 
     const LevelCatalog& catalog = LevelCatalog::instance();
-    const uint8_t globalLevelIndex = catalog.filteredIndexToGlobalIndex(
-        renderWorld_.levelIndex, std::max(uint8_t{1}, renderWorld_.connectedCount));
+    const uint8_t globalLevelIndex =
+        catalog.filteredIndexToGlobalIndex(renderWorld_.levelIndex, std::max(uint8_t{1}, renderWorld_.connectedCount));
     if (globalLevelIndex != loadedLevelIndex_) {
         handleLevelChange(renderWorld_.levelIndex, !lobbyLayout_);
     }
@@ -2100,11 +2100,9 @@ void GameClient::renderRoomScreen() {
     const float waitMsgGapAboveBar = lobbyScaled(16.0f);
     const float waitMsgLineGap = lobbyScaled(10.0f);
     const bool showSubWaitMsg = !canProceed && renderWorld_.connectedCount < MAX_PLAYERS;
-    const float subWaitMsgY =
-        bottomBarY - waitMsgGapAboveBar - static_cast<float>(subWaitMsgSize);
-    const float mainWaitMsgY =
-        showSubWaitMsg ? subWaitMsgY - waitMsgLineGap - static_cast<float>(waitMsgSize)
-                       : bottomBarY - waitMsgGapAboveBar - static_cast<float>(waitMsgSize);
+    const float subWaitMsgY = bottomBarY - waitMsgGapAboveBar - static_cast<float>(subWaitMsgSize);
+    const float mainWaitMsgY = showSubWaitMsg ? subWaitMsgY - waitMsgLineGap - static_cast<float>(waitMsgSize)
+                                              : bottomBarY - waitMsgGapAboveBar - static_cast<float>(waitMsgSize);
 
     if (!canProceed) {
         ui_.drawOutlinedCenteredText(window_, "请先点击「我已准备」，等待全员准备后可进入选关", w / 2.0f, mainWaitMsgY,
@@ -2116,8 +2114,8 @@ void GameClient::renderRoomScreen() {
                                  w / 2.0f, subWaitMsgY, subWaitMsgSize, sf::Color(160, 180, 210));
         }
     } else {
-        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击「下一步」选择关卡", w / 2.0f, mainWaitMsgY, waitMsgSize,
-                                     sf::Color(120, 255, 160), sf::Color(40, 80, 50), 2.0f);
+        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击「下一步」选择关卡", w / 2.0f, mainWaitMsgY,
+                                     waitMsgSize, sf::Color(120, 255, 160), sf::Color(40, 80, 50), 2.0f);
     }
     ui_.drawPanel(window_, {0.0f, bottomBarY, w, roomBottomBarHeight()}, sf::Color(16, 22, 40, 240), 240.0f);
 
