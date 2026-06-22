@@ -23,6 +23,7 @@ void printUsage(const char* program) {
               << "  " << program << " [host] [role]\n\n"
               << "Examples:\n"
               << "  " << program << "                  # public server, fire boy\n"
+              << "  " << program << " --solo             # offline solo mode\n"
               << "  " << program << " 8.141.101.126 water  # custom server, water girl\n\n"
               << "Title screen:\n"
               << "  Up/Down         Select menu item\n"
@@ -49,11 +50,14 @@ int main(int argc, char* argv[]) {
     std::string host = fireice::DEFAULT_SERVER_HOST;
     fireice::PlayerRole role = fireice::PlayerRole::Fire;
     bool autoConnect = false;
+    bool autoSolo = false;
 
     for (int i = 1; i < argc; ++i) {
         std::string arg(argv[i]);
         if (arg == "--auto" || arg == "--join") {
             autoConnect = true;
+        } else if (arg == "--solo") {
+            autoSolo = true;
         } else if (arg == "--help") {
             printUsage(argv[0]);
             return 0;
@@ -68,7 +72,7 @@ int main(int argc, char* argv[]) {
     }
 
     fireice::GameClient client;
-    if (!client.initialize(host, role, autoConnect)) {
+    if (!client.initialize(host, role, autoConnect, autoSolo)) {
         return 1;
     }
 

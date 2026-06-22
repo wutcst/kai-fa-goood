@@ -55,6 +55,7 @@ endif()
 
 add_executable(fireice_client
     src/client/GameClient.cpp
+    src/client/LocalGameSession.cpp
     src/client/UiHelper.cpp
     src/client/AssetManager.cpp
     src/client/CharacterAnimator.cpp

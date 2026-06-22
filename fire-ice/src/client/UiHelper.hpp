@@ -14,6 +14,8 @@ public:
                   sf::Color color = sf::Color::White) const;
     void drawCenteredText(sf::RenderWindow& window, const std::string& text, float centerX, float y, unsigned size,
                           sf::Color color = sf::Color::White) const;
+    void drawRightAlignedText(sf::RenderWindow& window, const std::string& text, float rightX, float y, unsigned size,
+                              sf::Color color = sf::Color::White) const;  // 顶栏房间信息等长文本
     void drawButton(sf::RenderWindow& window, const sf::FloatRect& area, const std::string& label, bool highlighted,
                     sf::Color accent) const;
     void drawImageButton(sf::RenderWindow& window, const sf::FloatRect& area, const sf::Texture& texture,

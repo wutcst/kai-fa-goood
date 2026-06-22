@@ -116,6 +116,22 @@ void UiHelper::drawCenteredText(sf::RenderWindow& window, const std::string& tex
     window.draw(label);
 }
 
+// 右对齐绘制，用于顶栏房间信息等长文本
+void UiHelper::drawRightAlignedText(sf::RenderWindow& window, const std::string& text, float rightX, float y,
+                                    unsigned size, sf::Color color) const {
+    if (!fontLoaded_) {
+        drawText(window, text, rightX - static_cast<float>(text.size() * 8), y, size, color);
+        return;
+    }
+
+    sf::Text label(toSfString(text), font_, size);
+    label.setFillColor(color);
+    const sf::FloatRect bounds = label.getLocalBounds();
+    label.setOrigin(bounds.left + bounds.width, bounds.top);
+    label.setPosition(rightX, y);
+    window.draw(label);
+}
+
 void UiHelper::drawButton(sf::RenderWindow& window, const sf::FloatRect& area, const std::string& label,
                           bool highlighted, sf::Color accent) const {
     const sf::Color base = highlighted ? accent : sf::Color(accent.r / 3, accent.g / 3, accent.b / 3, 210);

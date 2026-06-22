@@ -4,15 +4,42 @@
 #include "LevelMapLayout.hpp"
 #include "LevelMechanics.hpp"
 #include "LevelProgress.hpp"
+#include "LocalGameSession.hpp"
 #include "LocaleText.hpp"
 #include "Physics.hpp"
 
 #include <algorithm>
 #include <iostream>
+#include <vector>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 namespace fireice {
 
 namespace {
+
+#ifdef _WIN32
+void setWindowTitleUtf8(sf::Window& window, const std::string& title) {
+    window.setTitle(title);
+    if (HWND hwnd = static_cast<HWND>(window.getSystemHandle())) {
+        const int wideLen = MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, nullptr, 0);
+        if (wideLen > 0) {
+            std::vector<wchar_t> wide(static_cast<std::size_t>(wideLen), L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, title.c_str(), -1, wide.data(), wideLen);
+            SetWindowTextW(hwnd, wide.data());
+        }
+    }
+}
+#else
+void setWindowTitleUtf8(sf::Window& window, const std::string& title) {
+    window.setTitle(title);
+}
+#endif
 
 constexpr float kPreviewMargin = 12.0f;
 constexpr float kTitleFooterHeight = 86.0f;
@@ -238,7 +265,7 @@ std::array<sf::FloatRect, 3> roomActionButtonAreas() {
 
 }  // namespace
 
-bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, bool autoConnect) {
+bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, bool autoConnect, bool autoSolo) {
     host_ = host.empty() ? DEFAULT_SERVER_HOST : host;
     serverAddress_ = sf::IpAddress(host_);
     if (serverAddress_ == sf::IpAddress::None) {
@@ -292,13 +319,19 @@ bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, b
     lastConnectRetry_ = std::chrono::steady_clock::now();
     lastInputSend_ = lastConnectRetry_;
 
-    std::cout << "[Client] Title screen ready. Public server: " << DEFAULT_SERVER_HOST << ":" << SERVER_PORT
-              << "  Role: " << roleName(preferredRole_) << std::endl;
+    if (localServerMode_) {
+        std::cout << "[Client] Title screen ready. Local server: " << host_ << ":" << SERVER_PORT
+                  << "  Role: " << roleName(preferredRole_) << std::endl;
+    } else {
+        std::cout << "[Client] Title screen ready. Public server: " << DEFAULT_SERVER_HOST << ":" << SERVER_PORT
+                  << "  Role: " << roleName(preferredRole_) << std::endl;
+    }
 
-    if (autoConnect && host_ != DEFAULT_SERVER_HOST) {
+    if (autoSolo) {
+        startSoloPlay();
+    } else if (autoConnect && host_ != DEFAULT_SERVER_HOST) {
         std::cout << "[Client] Auto-connecting to " << host_ << "..." << std::endl;
-        typedRoomCode_.clear();
-        beginConnect();
+        quickJoin();
     }
 
     return true;
@@ -311,10 +344,112 @@ void GameClient::useTitleLayout() {
         window_.create(sf::VideoMode(size.x, size.y), text::windowTitle());
     } else {
         window_.setSize(size);
-        window_.setTitle(text::windowTitle());
     }
+    setWindowTitleUtf8(window_, text::windowTitle());
     window_.setVerticalSyncEnabled(true);
     window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(size.x), static_cast<float>(size.y))));
+}
+
+void GameClient::startSoloPlay() {
+    if (soloMode_ || connected_) {
+        return;
+    }
+
+    if (connectRequested_) {
+        connectRequested_ = false;
+    }
+
+    soloSession_ = std::make_unique<LocalGameSession>();
+    if (!soloSession_->start(preferredRole_, playerName_)) {
+        soloSession_.reset();
+        std::cerr << "[Client] Failed to start solo session" << std::endl;
+        return;
+    }
+
+    soloMode_ = true;
+    connected_ = true;
+    slot_ = soloSession_->playerSlot();
+    role_ = preferredRole_;
+    host_ = "本地";
+    localReady_ = false;
+    roomAnimTimer_ = 0.0f;
+    clientScreen_ = ClientScreen::Room;
+
+    syncWorldFromSession();
+    useLobbyLayout();
+    updateMusic(GamePhase::Lobby);
+    scrollLevelMapToNode(renderWorld_.levelIndex);
+
+    std::cout << "[Client] Solo mode started as " << roleName(role_) << " (slot " << static_cast<int>(slot_) << ")"
+              << std::endl;
+}
+
+void GameClient::stopSoloPlay() {
+    if (!soloMode_) {
+        return;
+    }
+
+    soloSession_.reset();
+    soloMode_ = false;
+    connected_ = false;
+    localReady_ = false;
+    clientScreen_ = ClientScreen::Title;
+    useTitleLayout();
+    std::cout << "[Client] Solo mode stopped" << std::endl;
+}
+
+void GameClient::syncWorldFromSession() {
+    if (!soloSession_) {
+        return;
+    }
+
+    const GamePhase previousPhase = world_.phase;
+    const uint8_t previousLobbyStep = world_.lobbyStep;
+    const uint8_t previousLevelIndex = world_.levelIndex;
+
+    world_ = soloSession_->world();
+    renderWorld_ = world_;
+
+    const LevelCatalog& catalog = LevelCatalog::instance();
+    const uint8_t globalLevelIndex = catalog.filteredIndexToGlobalIndex(
+        renderWorld_.levelIndex, std::max(uint8_t{1}, renderWorld_.connectedCount));
+    if (globalLevelIndex != loadedLevelIndex_) {
+        handleLevelChange(renderWorld_.levelIndex, !lobbyLayout_);
+    }
+
+    if (renderWorld_.lobbyStep == 0 && previousLobbyStep == 1) {
+        localReady_ = false;
+        levelMapScrollY_ = 0.0f;
+    }
+    if (renderWorld_.lobbyStep == 1 && previousLobbyStep == 0) {
+        levelMapScrollY_ = 0.0f;
+        scrollLevelMapToNode(renderWorld_.levelIndex);
+    }
+    if (renderWorld_.lobbyStep == 1 && renderWorld_.levelIndex != previousLevelIndex) {
+        localReady_ = false;
+        scrollLevelMapToNode(renderWorld_.levelIndex);
+    }
+
+    if (previousPhase != renderWorld_.phase) {
+        onPhaseChanged(previousPhase, renderWorld_.phase);
+    }
+}
+
+void GameClient::updateSoloSession(float dt) {
+    if (!soloMode_ || !soloSession_) {
+        return;
+    }
+
+    soloSession_->simulate(dt);
+    syncWorldFromSession();
+}
+
+void GameClient::quickJoin() {
+    typedRoomCode_.clear();
+    if (!localServerMode_) {
+        usePublicServer();
+    }
+    beginConnect();
 }
 
 void GameClient::beginConnect() {
@@ -362,33 +497,19 @@ std::vector<sf::FloatRect> GameClient::titleMenuHitAreas() const {
 void GameClient::handleTitleMenuSelect(int index) {
     switch (index) {
         case 0:
-            typedRoomCode_.clear();
-            if (!localServerMode_) {
-                usePublicServer();
-            }
-            beginConnect();
+            startSoloPlay();
             break;
         case 1:
+            quickJoin();
+            break;
+        case 2:
             typedRoomCode_.clear();
             discoveredRooms_.clear();
             selectedDiscoveredRoom_ = -1;
             clientScreen_ = ClientScreen::JoinRoom;
             break;
-        case 2:
-            clientScreen_ = ClientScreen::Help;
-            break;
         case 3:
-            if (preferredRole_ == PlayerRole::Fire) {
-                preferredRole_ = PlayerRole::Water;
-            } else if (preferredRole_ == PlayerRole::Water) {
-                preferredRole_ = PlayerRole::Poison;
-            } else {
-                preferredRole_ = PlayerRole::Fire;
-            }
-            role_ = preferredRole_;
-            playerName_ = preferredRole_ == PlayerRole::Fire    ? "NinjaFrog"
-                          : preferredRole_ == PlayerRole::Water ? "PinkMan"
-                                                                : "MaskDude";
+            clientScreen_ = ClientScreen::Help;
             break;
         case 4:
             window_.close();
@@ -494,11 +615,11 @@ void GameClient::useLobbyLayout() {
     lobbyLayout_ = true;
     const sf::Vector2u size(LOBBY_WINDOW_WIDTH, LOBBY_WINDOW_HEIGHT);
     if (!window_.isOpen()) {
-        window_.create(sf::VideoMode(size.x, size.y), "Fire-Ice Online - Lobby");
+        window_.create(sf::VideoMode(size.x, size.y), text::windowTitle());
     } else {
         window_.setSize(size);
-        window_.setTitle("Fire-Ice Online - Lobby");
     }
+    setWindowTitleUtf8(window_, text::windowTitle() + " - Lobby");
     window_.setVerticalSyncEnabled(true);
     window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(size.x), static_cast<float>(size.y))));
 }
@@ -508,7 +629,7 @@ void GameClient::useGameLayout() {
     const unsigned width = static_cast<unsigned>(std::max(960, static_cast<int>(map_.width() * TILE_SIZE)));
     const unsigned height = static_cast<unsigned>(std::max(540, static_cast<int>(map_.height() * TILE_SIZE)));
     window_.setSize({width, height});
-    window_.setTitle("Fire-Ice Online");
+    setWindowTitleUtf8(window_, text::windowTitle());
     window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height))));
 }
 
@@ -581,21 +702,28 @@ void GameClient::updateMusic(GamePhase phase) {
 
 void GameClient::run() {
     while (window_.isOpen()) {
-        animTime_ += animClock_.restart().asSeconds();
+        const float frameDt = animClock_.restart().asSeconds();
+        animTime_ += frameDt;
 
         sf::Event event{};
         while (window_.pollEvent(event)) {
             handleWindowEvent(event);
         }
 
-        pollNetwork();
+        if (soloMode_) {
+            updateSoloSession(frameDt);
+        } else {
+            pollNetwork();
 
-        if (connectRequested_ && !connected_) {
-            const auto now = std::chrono::steady_clock::now();
-            if (std::chrono::duration<float>(now - lastConnectRetry_).count() > 1.0f) {
-                sendConnectRequest();
+            if (connectRequested_ && !connected_) {
+                const auto now = std::chrono::steady_clock::now();
+                if (std::chrono::duration<float>(now - lastConnectRetry_).count() > 1.0f) {
+                    sendConnectRequest();
+                }
             }
-        } else if (connected_ && !paused_ && renderWorld_.phase == GamePhase::Playing) {
+        }
+
+        if (connected_ && !paused_ && renderWorld_.phase == GamePhase::Playing) {
             currentInput_ = readLocalInput();
             sendInput();
         }
@@ -609,6 +737,11 @@ void GameClient::run() {
 void GameClient::disconnect() {
     if (lobbyMusic_.getStatus() == sf::Music::Playing) {
         lobbyMusic_.stop();
+    }
+
+    if (soloMode_) {
+        stopSoloPlay();
+        return;
     }
 
     if (!connected_) {
@@ -876,6 +1009,13 @@ void GameClient::pollNetwork() {
 }
 
 bool GameClient::sendInput() {
+    if (soloMode_ && soloSession_) {
+        soloSession_->setInput(slot_, currentInput_);
+        lastSentInput_ = currentInput_;
+        lastInputSend_ = std::chrono::steady_clock::now();
+        return true;
+    }
+
     InputPacket packet{};
     packet.slot = slot_;
     packet.tick = ++inputTick_;
@@ -897,6 +1037,12 @@ bool GameClient::sendInput() {
 }
 
 bool GameClient::sendAction(PlayerAction action, uint8_t value) {
+    if (soloMode_ && soloSession_) {
+        soloSession_->handleAction(slot_, action, value);
+        syncWorldFromSession();
+        return true;
+    }
+
     ActionPacket packet{};
     packet.slot = slot_;
     packet.action = action;
@@ -1029,6 +1175,10 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
     }
 
     if (event.key.code == sf::Keyboard::Escape && connected_ && renderWorld_.phase == GamePhase::Lobby) {
+        if (soloMode_) {
+            disconnect();
+            return;
+        }
         if (renderWorld_.lobbyStep == 1) {
             localReady_ = false;
             sendAction(PlayerAction::BackToWaitingRoom);
@@ -1765,16 +1915,11 @@ void GameClient::renderJoinRoomScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
     const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
-    if (assets_.ready()) {
-        drawBackgroundSprite(window_, assets_.lobbyBackground());
-    } else {
-        sf::RectangleShape fallback({w, h});
-        fallback.setFillColor(sf::Color(12, 20, 30));
-        window_.draw(fallback);
-    }
+    renderTitleBackground();
+    renderTitleEffects();
 
     sf::RectangleShape dim({w, h});
-    dim.setFillColor(sf::Color(0, 0, 0, 120));
+    dim.setFillColor(sf::Color(0, 0, 0, 100));
     window_.draw(dim);
 
     const float panelW = std::min(w * 0.72f, lobbyScaled(680.0f));
@@ -1837,15 +1982,11 @@ void GameClient::renderRoomScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
     const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
-    drawLobbyBackdrop(sf::Color(18, 30, 48), sf::Color(34, 20, 30));
-    if (assets_.ready()) {
-        drawBackgroundSprite(window_, assets_.lobbyBackground());
-        sf::RectangleShape tint({w, h});
-        tint.setFillColor(sf::Color(8, 12, 22, 105));
-        window_.draw(tint);
-    }
+    // 与标题页一致的多层视差背景，替代旧 title_menu_bg
+    renderTitleBackground();
+
     sf::RectangleShape dim({w, h});
-    dim.setFillColor(sf::Color(0, 0, 0, 150));
+    dim.setFillColor(sf::Color(0, 0, 0, 110));
     window_.draw(dim);
 
     const float headerH = roomHeaderHeight();
@@ -1867,27 +2008,26 @@ void GameClient::renderRoomScreen() {
 
     const std::string roomCodeStr =
         renderWorld_.roomCode[0] ? std::string("房间号: ") + std::string(renderWorld_.roomCode) : "房间号: ------";
-    const float infoRight = w - lobbyScaled(24.0f);
-    // 右侧房间信息左对齐排列，同样在顶栏内垂直居中
+    const float infoRight = w - lobbyScaled(20.0f);
+    // 右侧房间信息右对齐，避免长 IP 被裁切
     const unsigned infoTitleSize =
         static_cast<unsigned>(std::clamp(h * 0.020f, lobbyScaled(16.0f), lobbyScaled(22.0f)));
     const unsigned infoLineSize = static_cast<unsigned>(std::clamp(h * 0.016f, lobbyScaled(13.0f), lobbyScaled(18.0f)));
+    const float infoLineGap = lobbyScaled(6.0f);
     const float infoBlockH =
-        static_cast<float>(infoTitleSize) + lobbyScaled(8.0f) + static_cast<float>(infoLineSize) * 2.0f;
+        static_cast<float>(infoTitleSize) + infoLineGap * 2.0f + static_cast<float>(infoLineSize) * 2.0f;
     const float infoY = (headerH - infoBlockH) / 2.0f;
-    ui_.drawText(window_, roomCodeStr, infoRight - lobbyScaled(180.0f), infoY, infoTitleSize, sf::Color(100, 255, 140));
+    ui_.drawRightAlignedText(window_, roomCodeStr, infoRight, infoY, infoTitleSize, sf::Color(100, 255, 140));
 
-    std::string ipStr = std::string("联机服务器: ") + DEFAULT_SERVER_HOST + ":" + std::to_string(SERVER_PORT);
-    ui_.drawText(window_, ipStr, infoRight - lobbyScaled(180.0f),
-                 infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f), infoLineSize, sf::Color(180, 200, 255));
+    const std::string ipStr = std::string("联机服务器: ") + DEFAULT_SERVER_HOST + ":" + std::to_string(SERVER_PORT);
+    const float ipY = infoY + static_cast<float>(infoTitleSize) + infoLineGap;
+    ui_.drawRightAlignedText(window_, ipStr, infoRight, ipY, infoLineSize, sf::Color(180, 200, 255));
 
-    ui_.drawText(
+    const float onlineY = ipY + static_cast<float>(infoLineSize) + infoLineGap;
+    ui_.drawRightAlignedText(
         window_,
         std::string("在线: ") + std::to_string(renderWorld_.connectedCount) + "/" + std::to_string(MAX_PLAYERS),
-        infoRight - lobbyScaled(180.0f),
-        infoY + static_cast<float>(infoTitleSize) + lobbyScaled(4.0f) + static_cast<float>(infoLineSize) +
-            lobbyScaled(2.0f),
-        infoLineSize, sf::Color(160, 200, 140));
+        infoRight, onlineY, infoLineSize, sf::Color(160, 200, 140));
 
     const float panelW = roomPanelWidth();
     const float panelH = roomPanelHeight();
@@ -1949,24 +2089,31 @@ void GameClient::renderRoomScreen() {
 
     const bool waitingReady = localWaitingReady();
     const bool canProceed = allPlayersWaitingReady();
-    // 等待提示放在状态面板底部内侧，避免与下方按钮重叠
-    const float waitMsgY = statusY + statusH - lobbyScaled(34.0f);
+    const float bottomBarY = roomBottomBarY();
+    // 等待提示锚定在底栏上方，避免与操作按钮重叠
+    const unsigned subWaitMsgSize = static_cast<unsigned>(lobbyScaled(14.0f));
+    const float waitMsgGapAboveBar = lobbyScaled(16.0f);
+    const float waitMsgLineGap = lobbyScaled(10.0f);
+    const bool showSubWaitMsg = !canProceed && renderWorld_.connectedCount < MAX_PLAYERS;
+    const float subWaitMsgY =
+        bottomBarY - waitMsgGapAboveBar - static_cast<float>(subWaitMsgSize);
+    const float mainWaitMsgY =
+        showSubWaitMsg ? subWaitMsgY - waitMsgLineGap - static_cast<float>(waitMsgSize)
+                       : bottomBarY - waitMsgGapAboveBar - static_cast<float>(waitMsgSize);
 
     if (!canProceed) {
-        ui_.drawOutlinedCenteredText(window_, "请先点击「我已准备」，等待全员准备后可进入选关", w / 2.0f, waitMsgY,
+        ui_.drawOutlinedCenteredText(window_, "请先点击「我已准备」，等待全员准备后可进入选关", w / 2.0f, mainWaitMsgY,
                                      waitMsgSize, sf::Color(255, 220, 100), sf::Color(80, 50, 10), 2.0f);
-        if (renderWorld_.connectedCount < MAX_PLAYERS) {
+        if (showSubWaitMsg) {
             ui_.drawCenteredText(window_,
                                  "当前 " + std::to_string(renderWorld_.connectedCount) + "/" +
                                      std::to_string(MAX_PLAYERS) + " 人，可继续等待或直接开始",
-                                 w / 2.0f, waitMsgY + lobbyScaled(28.0f), 14, sf::Color(160, 180, 210));
+                                 w / 2.0f, subWaitMsgY, subWaitMsgSize, sf::Color(160, 180, 210));
         }
     } else {
-        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击「下一步」选择关卡", w / 2.0f, waitMsgY, waitMsgSize,
+        ui_.drawOutlinedCenteredText(window_, "全员已准备，请点击「下一步」选择关卡", w / 2.0f, mainWaitMsgY, waitMsgSize,
                                      sf::Color(120, 255, 160), sf::Color(40, 80, 50), 2.0f);
     }
-
-    const float bottomBarY = roomBottomBarY();
     ui_.drawPanel(window_, {0.0f, bottomBarY, w, roomBottomBarHeight()}, sf::Color(16, 22, 40, 240), 240.0f);
 
     const auto buttons = roomActionButtonAreas();
@@ -2110,7 +2257,6 @@ void GameClient::renderRoomPlayerPanel(float panelX, float panelY, float panelW,
 
 void GameClient::renderLobbyScreen() {
     const float w = static_cast<float>(LOBBY_WINDOW_WIDTH);
-    const float h = static_cast<float>(LOBBY_WINDOW_HEIGHT);
 
     drawLobbyBackdrop(sf::Color(38, 31, 44), sf::Color(62, 46, 30));
 
@@ -2124,7 +2270,8 @@ void GameClient::renderLobbyScreen() {
     drawLevelProgressMap();
 
     const float previewTop = levelMapPanelTop();
-    const float previewHeight = lobbyBottomBarTop() - previewTop - lobbyScaled(8.0f);
+    const float bottomReserve = lobbyBottomBarHeight() + lobbyScaled(24.0f);
+    const float previewHeight = lobbyBottomBarTop() - previewTop - bottomReserve;
     const float previewW = previewPanelWidth();
     const float previewMargin = lobbyScaled(kPreviewPanelMargin);
     const sf::FloatRect previewPanel{w - previewMargin - previewW, previewTop, previewW, previewHeight};
@@ -2138,7 +2285,7 @@ void GameClient::renderLobbyScreen() {
                  sf::Color(255, 230, 170));
 
     const float previewZoneTop = previewPanel.top + previewTitleH;
-    const float previewZoneH = previewPanel.height * 0.44f;
+    const float previewZoneH = previewPanel.height * 0.38f;
     const sf::FloatRect mapPreviewArea{previewPanel.left + previewPad, previewZoneTop,
                                        previewPanel.width - previewPad * 2.0f, previewZoneH};
 
