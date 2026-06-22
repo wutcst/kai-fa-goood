@@ -134,7 +134,6 @@ private:
     sf::RenderWindow window_;
     GameMap map_;
     TiledMapRenderer tiledMap_;
-    std::vector<SawTrap> sawTraps_;
     std::vector<FanZone> fanZones_;
     UiHelper ui_;
     AssetManager assets_;

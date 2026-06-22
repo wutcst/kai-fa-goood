@@ -70,7 +70,6 @@ struct MagnetPull {
 constexpr float SAW_DEFAULT_TRAVEL_TMX = 80.0f;
 constexpr float SAW_DEFAULT_SPEED = 2.4f;
 constexpr float SAW_HITBOX_SCALE = 0.82f;
-constexpr uint8_t MAX_SAW_TRAPS = 16;
 
 constexpr float ROCK_HEAD_SPEED = 260.0f;
 constexpr float ROCK_HEAD_WAIT_TIME = 1.0f;
@@ -196,6 +195,9 @@ bool sampleSawHazard(const std::vector<SawTrap>& saws, const PlayerState& player
 void configureRockHeadTravelBounds(const GameMap& map, std::vector<RockHeadTrap>& rocks);
 void updateRockHeads(LevelRuntime& runtime, const GameMap& map, WorldState& world, float dt);
 void updatePendulums(const LevelRuntime& runtime, WorldState& world, float timeSec);
+void updateSawTraps(const LevelRuntime& runtime, WorldState& world, float timeSec);
+void alignSawTrapsToMap(const GameMap& map, std::vector<SawTrap>& saws);
+void configureSawTravelBounds(const GameMap& map, std::vector<SawTrap>& saws);
 bool samplePendulumHazard(const std::vector<PendulumTrap>& pendulums, const PlayerState& player, float timeSec);
 AABB rockHeadHitbox(const RockHeadTrap& rock);
 std::vector<RockHeadTrap> loadRockHeadsFromTmx(const std::string& tmxPath, int tmxTileWidth = 16);

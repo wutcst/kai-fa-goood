@@ -642,6 +642,42 @@ void TiledMapRenderer::drawObjectGidAt(sf::RenderWindow& window, int rawGid, flo
     window.draw(sprite);
 }
 
+void TiledMapRenderer::drawAnimatedObjectGidAt(sf::RenderWindow& window, int rawGid, float gameX, float gameY,
+                                               float gameW, float gameH, float animTimeSec) const {
+    const int gid = decodeGid(rawGid);
+    const TilesetRef* tileset = findTileset(gid);
+    if (tileset == nullptr) {
+        return;
+    }
+
+    int localId = gid - tileset->firstGid;
+    if (localId < 0) {
+        return;
+    }
+    localId = resolveAnimatedLocalId(*tileset, localId, animTimeSec);
+
+    const int columns = std::max(1, tileset->columns);
+    const int rows =
+        static_cast<int>(tileset->texture.getSize().y / static_cast<unsigned>(std::max(1, tileset->tileHeight)));
+    const int maxTiles = rows * columns;
+    if (localId >= maxTiles) {
+        return;
+    }
+    const int sx = (localId % columns) * tileset->tileWidth;
+    const int sy = (localId / columns) * tileset->tileHeight;
+
+    const float drawWidth = gameW > 0.0f ? gameW : static_cast<float>(tileset->tileWidth) * mapScale_;
+    const float drawHeight = gameH > 0.0f ? gameH : static_cast<float>(tileset->tileHeight) * mapScale_;
+
+    sf::Sprite sprite(tileset->texture);
+    sprite.setTextureRect(sf::IntRect(sx, sy, tileset->tileWidth, tileset->tileHeight));
+    sprite.setOrigin(static_cast<float>(tileset->tileWidth) * 0.5f, static_cast<float>(tileset->tileHeight) * 0.5f);
+    sprite.setPosition(gameX + drawWidth * 0.5f, gameY + drawHeight * 0.5f);
+    sprite.setScale(drawWidth / static_cast<float>(tileset->tileWidth),
+                    drawHeight / static_cast<float>(tileset->tileHeight));
+    window.draw(sprite);
+}
+
 void TiledMapRenderer::drawLayerToTarget(sf::RenderTexture& target, const Layer& layer,
                                          const std::function<bool(int, int)>& excludeTile) const {
     for (int y = 0; y < mapHeight_; ++y) {

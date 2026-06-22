@@ -22,6 +22,8 @@ public:
                           const std::function<bool(uint8_t pickupIndex)>& skipPickup = {}) const;
     void drawObjectGidAt(sf::RenderWindow& window, int gid, float gameX, float gameY, float gameW, float gameH,
                          float animTimeSec) const;
+    void drawAnimatedObjectGidAt(sf::RenderWindow& window, int gid, float gameX, float gameY, float gameW, float gameH,
+                                 float animTimeSec) const;
     void drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;  // 选关缩略图
 
     bool ready() const { return isLoaded_; }

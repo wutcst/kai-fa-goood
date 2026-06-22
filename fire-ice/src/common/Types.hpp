@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstdint>
 
@@ -74,6 +74,7 @@ constexpr uint8_t MAX_FLYING_ENEMIES = 2;
 constexpr uint8_t MAX_TRIDENT_PROJECTILES = 12;
 constexpr uint8_t MAX_ROCK_HEAD_TRAPS = 8;
 constexpr uint8_t MAX_PENDULUM_TRAPS = 8;
+constexpr uint8_t MAX_SAW_TRAPS = 16;
 constexpr uint16_t MAX_VANISHING_SLOTS = 288;
 
 inline InputFlags operator|(InputFlags a, InputFlags b) {
@@ -258,6 +259,17 @@ struct WorldState {
     };
     SyncMagnetPull magnetPulls[MAX_MAGNET_PULLS]{};
     uint8_t magnetSpawnsRemaining = 0;
+    uint8_t sawCount = 0;
+    struct SyncSaw {
+        float x = 0.0f;
+        float y = 0.0f;
+        float w = 0.0f;
+        float h = 0.0f;
+        int gid = 0;
+        uint8_t active = 0;
+        uint8_t pad[3]{};
+    };
+    SyncSaw saws[MAX_SAW_TRAPS]{};
 };
 inline const char* phaseName(GamePhase phase) {
     switch (phase) {

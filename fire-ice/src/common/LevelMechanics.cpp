@@ -1172,6 +1172,123 @@ void updatePendulums(const LevelRuntime& runtime, WorldState& world, float timeS
     }
 }
 
+void updateSawTraps(const LevelRuntime& runtime, WorldState& world, float timeSec) {
+    world.sawCount = static_cast<uint8_t>(std::min(runtime.sawTraps.size(), static_cast<std::size_t>(MAX_SAW_TRAPS)));
+    for (uint8_t i = 0; i < world.sawCount; ++i) {
+        const SawTrap& saw = runtime.sawTraps[i];
+        world.saws[i].x = saw.anchorX;
+        world.saws[i].y = sawCurrentY(saw, timeSec);
+        world.saws[i].w = saw.width;
+        world.saws[i].h = saw.height;
+        world.saws[i].gid = saw.gid;
+        world.saws[i].active = 1;
+    }
+    for (uint8_t i = world.sawCount; i < MAX_SAW_TRAPS; ++i) {
+        world.saws[i] = WorldState::SyncSaw{};
+    }
+}
+
+namespace {
+
+float solidRowBottomY(const GameMap& map, int tx, int ty) {
+    if (tx < 0 || ty < 0 || tx >= map.width() || ty >= map.height()) {
+        return 0.0f;
+    }
+    if (!map.isSolid(map.tileAt(tx, ty))) {
+        return 0.0f;
+    }
+    return static_cast<float>((ty + 1) * TILE_SIZE);
+}
+
+float solidRowTopY(const GameMap& map, int tx, int ty) {
+    if (tx < 0 || ty < 0 || tx >= map.width() || ty >= map.height()) {
+        return static_cast<float>(map.height() * TILE_SIZE);
+    }
+    if (!map.isSolid(map.tileAt(tx, ty))) {
+        return static_cast<float>(map.height() * TILE_SIZE);
+    }
+    return static_cast<float>(ty * TILE_SIZE);
+}
+
+}  // namespace
+
+void alignSawTrapsToMap(const GameMap& map, std::vector<SawTrap>& saws) {
+    if (map.width() <= 0 || map.height() <= 0) {
+        return;
+    }
+
+    for (SawTrap& saw : saws) {
+        const float centerX = saw.anchorX + saw.width * 0.5f;
+        int tx = static_cast<int>(centerX / TILE_SIZE);
+        tx = std::clamp(tx, 0, map.width() - 1);
+
+        const int anchorRow = std::clamp(static_cast<int>(saw.anchorY / TILE_SIZE), 0, map.height() - 1);
+
+        float ceilingBottom = 0.0f;
+        for (int ty = anchorRow - 1; ty >= 0; --ty) {
+            const float bottom = solidRowBottomY(map, tx, ty);
+            if (bottom > 0.0f) {
+                ceilingBottom = bottom;
+                break;
+            }
+        }
+
+        float floorTop = static_cast<float>(map.height() * TILE_SIZE);
+        for (int ty = anchorRow + 1; ty < map.height(); ++ty) {
+            const float top = solidRowTopY(map, tx, ty);
+            if (top < static_cast<float>(map.height() * TILE_SIZE)) {
+                floorTop = top;
+                break;
+            }
+        }
+
+        if (floorTop - ceilingBottom > saw.height + TILE_SIZE * 0.5f) {
+            saw.anchorY = ceilingBottom + (floorTop - ceilingBottom - saw.height) * 0.5f;
+        }
+
+        saw.anchorX = static_cast<float>(tx) * TILE_SIZE + (TILE_SIZE - saw.width) * 0.5f;
+    }
+}
+
+void configureSawTravelBounds(const GameMap& map, std::vector<SawTrap>& saws) {
+    constexpr float kTravelMargin = 6.0f;
+
+    for (SawTrap& saw : saws) {
+        const float centerX = saw.anchorX + saw.width * 0.5f;
+        int tx = static_cast<int>(centerX / TILE_SIZE);
+        tx = std::clamp(tx, 0, map.width() - 1);
+
+        const int anchorRow = std::clamp(static_cast<int>(saw.anchorY / TILE_SIZE), 0, map.height() - 1);
+
+        float ceilingBottom = 0.0f;
+        for (int ty = anchorRow - 1; ty >= 0; --ty) {
+            const float bottom = solidRowBottomY(map, tx, ty);
+            if (bottom > 0.0f) {
+                ceilingBottom = bottom;
+                break;
+            }
+        }
+
+        float floorTop = static_cast<float>(map.height() * TILE_SIZE);
+        for (int ty = anchorRow + 1; ty < map.height(); ++ty) {
+            const float top = solidRowTopY(map, tx, ty);
+            if (top < static_cast<float>(map.height() * TILE_SIZE)) {
+                floorTop = top;
+                break;
+            }
+        }
+
+        const float maxUpAmplitude =
+            std::max(0.0f, saw.anchorY - (ceilingBottom + kTravelMargin));
+        const float maxDownAmplitude =
+            std::max(0.0f, (floorTop - kTravelMargin) - (saw.anchorY + saw.height));
+        const float maxAmplitude = std::min(maxUpAmplitude, maxDownAmplitude);
+        if (maxAmplitude > 0.0f) {
+            saw.travelRange = std::min(saw.travelRange, maxAmplitude * 2.0f);
+        }
+    }
+}
+
 std::vector<PendulumTrap> loadPendulumsFromTmx(const std::string& tmxPath, int tmxTileWidth) {
     struct ObjectInfo {
         int gid = 0;

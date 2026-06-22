@@ -46,6 +46,8 @@ void Room::selectLevel(uint8_t index, bool keepMapSelect) {
     levelRuntime.powerUpSpawns =
         visualMapPath.empty() ? std::vector<PowerUpSpawn>{} : loadPowerUpSpawnsFromTmx(visualMapPath, 16);
     levelRuntime.sawTraps = visualMapPath.empty() ? std::vector<SawTrap>{} : loadSawTrapsFromTmx(visualMapPath, 16);
+    alignSawTrapsToMap(map, levelRuntime.sawTraps);
+    configureSawTravelBounds(map, levelRuntime.sawTraps);
     levelRuntime.rockHeads =
         visualMapPath.empty() ? std::vector<RockHeadTrap>{} : loadRockHeadsFromTmx(visualMapPath, 16);
     levelRuntime.pendulums =
@@ -97,6 +99,8 @@ bool Room::isLevelUnlocked(uint8_t index) const {
 void Room::reloadMap() {
     map.loadFromFile(mapPath);
     applyLevelMetadata();
+    alignSawTrapsToMap(map, levelRuntime.sawTraps);
+    configureSawTravelBounds(map, levelRuntime.sawTraps);
     configureRockHeadTravelBounds(map, levelRuntime.rockHeads);
     initLevelRuntime(map, levelRuntime);
 }
@@ -117,6 +121,7 @@ void Room::resetWorld() {
     syncVanishingMask(levelRuntime, world);
     updateRockHeads(levelRuntime, map, world, 0.0f);
     updatePendulums(levelRuntime, world, 0.0f);
+    updateSawTraps(levelRuntime, world, 0.0f);
 
     for (PlayerState& player : world.players) {
         player = PlayerState{};
@@ -377,6 +382,8 @@ void Room::simulateTick() {
     if (world.phase == GamePhase::Countdown) {
         countdownTimer = std::max(0.0f, countdownTimer - TICK_DT);
         world.countdown = static_cast<uint8_t>(std::ceil(countdownTimer));
+        updatePendulums(levelRuntime, world, static_cast<float>(world.tick) * TICK_DT);
+        updateSawTraps(levelRuntime, world, static_cast<float>(world.tick) * TICK_DT);
         if (countdownTimer <= 0.0f)
             beginPlaying();
         ++world.tick;
@@ -461,6 +468,7 @@ void Room::simulateTick() {
     updateFlyingEnemiesAndProjectiles(levelRuntime, map, world, TICK_DT);
     updateRockHeads(levelRuntime, map, world, TICK_DT);
     updatePendulums(levelRuntime, world, static_cast<float>(world.tick) * TICK_DT);
+    updateSawTraps(levelRuntime, world, static_cast<float>(world.tick) * TICK_DT);
     updatePhase();
     ++world.tick;
 }

@@ -651,17 +651,14 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
 
     if (!visualPath.empty() && tiledMap_.load(visualPath)) {
         tiledMap_.bake();
-        sawTraps_ = loadSawTrapsFromTmx(visualPath, 16);
         fanZones_ = loadFanZonesFromTmx(visualPath, 16);
         std::cout << "[Client] Visual map ready for level " << static_cast<int>(globalIndex + 1)
                   << " customBg=" << (tiledMap_.hasCustomBackground() ? "yes" : "no") << " fans=" << fanZones_.size()
                   << std::endl;
     } else if (!visualPath.empty()) {
         std::cerr << "[Client] Failed to load tiled visual map: " << visualPath << std::endl;
-        sawTraps_.clear();
         fanZones_.clear();
     } else {
-        sawTraps_.clear();
         fanZones_.clear();
     }
 
@@ -2526,14 +2523,17 @@ void GameClient::drawDynamicTiles(sf::RenderWindow& window) const {
 }
 
 void GameClient::drawSawTraps(sf::RenderWindow& window) const {
-    if (sawTraps_.empty() || !tiledMap_.ready()) {
+    if (!tiledMap_.ready()) {
         return;
     }
 
     const float timeSec = static_cast<float>(renderWorld_.tick) * TICK_DT;
-    for (const SawTrap& saw : sawTraps_) {
-        const float y = sawCurrentY(saw, timeSec);
-        tiledMap_.drawObjectGidAt(window, saw.gid, saw.anchorX, y, saw.width, saw.height, timeSec);
+    for (uint8_t i = 0; i < renderWorld_.sawCount; ++i) {
+        const WorldState::SyncSaw& saw = renderWorld_.saws[i];
+        if (saw.active == 0) {
+            continue;
+        }
+        tiledMap_.drawAnimatedObjectGidAt(window, saw.gid, saw.x, saw.y, saw.w, saw.h, timeSec);
     }
 }
 
