@@ -49,20 +49,69 @@ public final class Launcher {
 
         List<String> command = new ArrayList<>();
         command.add(executable.toAbsolutePath().toString());
-        if ("client".equals(mode) && args.length > 1) {
-            command.addAll(Arrays.asList(Arrays.copyOfRange(args, 1, args.length)));
+
+        boolean background = false;
+        int argStart = 1;
+        if ("server".equals(mode) && args.length > 1 && "--background".equals(args[1])) {
+            background = true;
+            argStart = 2;
+            Path pidFile = runtimeDir.resolve("fireice_server.pid");
+            Path logFile = runtimeDir.resolve("fireice_server.log");
+            command.add("--pid-file");
+            command.add(pidFile.toAbsolutePath().toString());
+            command.add("--log-file");
+            command.add(logFile.toAbsolutePath().toString());
+        }
+
+        if ("client".equals(mode) && args.length > argStart) {
+            command.addAll(Arrays.asList(Arrays.copyOfRange(args, argStart, args.length)));
         }
 
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(runtimeDir.toFile());
+        if (background) {
+            Path logFile = runtimeDir.resolve("fireice_server.log");
+            builder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile.toFile()));
+            builder.redirectError(ProcessBuilder.Redirect.appendTo(logFile.toFile()));
+            Process process = builder.start();
+            Thread.sleep(1000L);
+            Path pidFile = runtimeDir.resolve("fireice_server.pid");
+            if (Files.isRegularFile(pidFile)) {
+                String pid = new String(Files.readAllBytes(pidFile)).trim();
+                System.out.println("Server started in background (PID " + pid + ").");
+            } else {
+                System.out.println("Server started in background (PID " + processId(process) + ").");
+            }
+            System.out.println("UDP port: 24567");
+            System.out.println("Log: " + logFile.toAbsolutePath());
+            System.out.println("Runtime dir: " + runtimeDir.toAbsolutePath());
+            return;
+        }
+
         builder.inheritIO();
         Process process = builder.start();
         System.exit(process.waitFor());
     }
 
+    private static long processId(Process process) {
+        try {
+            java.lang.reflect.Method method = process.getClass().getMethod("pid");
+            Object value = method.invoke(process);
+            if (value instanceof Long) {
+                return (Long) value;
+            }
+            if (value instanceof Integer) {
+                return ((Integer) value).longValue();
+            }
+        } catch (ReflectiveOperationException ignored) {
+            // Java 8 fallback below
+        }
+        return -1L;
+    }
+
     static void printUsage() {
         System.out.println("Fire-Ice Online release launcher");
-        System.out.println("  java -jar fire-ice-" + ReleaseVersion.VERSION + ".jar server");
+        System.out.println("  java -jar fire-ice-" + ReleaseVersion.VERSION + ".jar server [--background]");
         System.out.println("  java -jar fire-ice-" + ReleaseVersion.VERSION + ".jar client [host] [role]");
         System.out.println("  java -jar fire-ice-" + ReleaseVersion.VERSION + ".jar --version");
     }

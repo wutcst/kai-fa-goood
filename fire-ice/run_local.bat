@@ -16,29 +16,22 @@ if not exist "%BIN%\fireice_client.exe" (
 
 )
 
-
-
 echo Stopping previous game processes...
-
 taskkill /F /IM fireice_client.exe >nul 2>&1
-
 taskkill /F /IM fireice_server.exe >nul 2>&1
 
-
-
 call "%~dp0sync_assets.bat"
-
 if errorlevel 1 (
-
     pause
-
     exit /b 1
-
 )
 
+call "%~dp0run_server.bat"
+if errorlevel 1 (
+    pause
+    exit /b 1
+)
 
-
+timeout /t 1 /nobreak >nul
 echo Starting client...
-
-start "Fire-Ice" /D "%BIN%" "%BIN%\fireice_client.exe"
-
+start "Fire-Ice" /D "%BIN%" "%BIN%\fireice_client.exe" 127.0.0.1
