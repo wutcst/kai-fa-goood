@@ -83,7 +83,9 @@ struct DiscoveryPacket {
 
 #pragma pack(pop)
 
-constexpr std::size_t PACKET_BUFFER_SIZE = 1400;
+constexpr std::size_t PACKET_BUFFER_SIZE = 1600;
+
+static_assert(sizeof(StatePacket) <= PACKET_BUFFER_SIZE, "StatePacket exceeds UDP buffer");
 
 template <typename T>
 bool packPacket(const T& packet, std::array<char, PACKET_BUFFER_SIZE>& buffer, std::size_t& size) {

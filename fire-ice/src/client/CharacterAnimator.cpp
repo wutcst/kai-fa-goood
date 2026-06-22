@@ -30,7 +30,7 @@ int fpsForAnim(CharAnim anim) {
 }
 
 // 带滞后的动画状态机，避免空中/地面状态频繁切换
-CharAnim pickStableAnim(const PlayerState& player, int& airborneFrames, int& stableAnim) {
+CharAnim pickStableAnim(const PlayerState& player, int& airborneFrames, int& stableAnim, InputFlags moveHint) {
     if (!player.alive) {
         airborneFrames = 0;
         stableAnim = static_cast<int>(CharAnim::Hit);
@@ -43,13 +43,15 @@ CharAnim pickStableAnim(const PlayerState& player, int& airborneFrames, int& sta
         airborneFrames = 0;
     }
 
+    const bool wantsMove = hasFlag(moveHint, InputFlags::Left) || hasFlag(moveHint, InputFlags::Right);
     CharAnim target = static_cast<CharAnim>(stableAnim);
     if (airborneFrames >= 2 || (!player.onGround && std::abs(player.vy) > 60.0f)) {
         target = player.vy < -40.0f ? CharAnim::Jump : CharAnim::Fall;
     } else if (std::abs(player.vx) > 35.0f ||
-               (stableAnim == static_cast<int>(CharAnim::Run) && std::abs(player.vx) > 12.0f)) {
+               (stableAnim == static_cast<int>(CharAnim::Run) && (std::abs(player.vx) > 12.0f || wantsMove)) ||
+               (wantsMove && player.onGround)) {
         target = CharAnim::Run;
-    } else if (std::abs(player.vx) < 8.0f) {
+    } else if (std::abs(player.vx) < 8.0f && !wantsMove) {
         target = CharAnim::Idle;
     }
 
@@ -99,7 +101,7 @@ void CharacterAnimator::draw(sf::RenderWindow& window, const PlayerState& player
     }
 
     facingDir_ = pickFacingDir(player, facingHint, facingDir_);
-    const CharAnim anim = pickStableAnim(player, airborneFrames_, stableAnim_);
+    const CharAnim anim = pickStableAnim(player, airborneFrames_, stableAnim_, facingHint);
 
     const AnimSheet* sheet = &idle_;
     switch (anim) {
@@ -125,7 +127,12 @@ void CharacterAnimator::draw(sf::RenderWindow& window, const PlayerState& player
 
     int frame = 0;
     if (sheet->frameCount > 1) {
-        frame = static_cast<int>(animTime * static_cast<float>(fpsForAnim(anim))) % sheet->frameCount;
+        float animFps = static_cast<float>(fpsForAnim(anim));
+        if (anim == CharAnim::Run) {
+            const float speedRatio = std::clamp(std::abs(player.vx) / MOVE_SPEED, 0.2f, 1.0f);
+            animFps *= speedRatio;
+        }
+        frame = static_cast<int>(animTime * animFps) % sheet->frameCount;
     }
 
     const float visualH = PLAYER_VISUAL_HEIGHT;

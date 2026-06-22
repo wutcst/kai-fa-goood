@@ -5,6 +5,7 @@
 #include "LevelMechanics.hpp"
 #include "Map.hpp"
 #include "Protocol.hpp"
+#include "Pickup.hpp"
 #include "TiledMapRenderer.hpp"
 #include "UiHelper.hpp"
 
@@ -89,14 +90,26 @@ private:
     void drawBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawTitleBackgroundSprite(sf::RenderWindow& window, const sf::Texture& texture) const;
     void drawMap(sf::RenderWindow& window) const;
+    void drawFanWindEffects(sf::RenderWindow& window) const;
+    void drawMagnetDrops(sf::RenderWindow& window) const;
+    void drawMagnetPulls(sf::RenderWindow& window) const;
+    void drawMagnetAura(sf::RenderWindow& window, const PlayerState& player) const;
+    void drawSpeedBoostAura(sf::RenderWindow& window, const PlayerState& player) const;
+    void drawMagnetItem(sf::RenderWindow& window, float cx, float cy, float size, float spin) const;
+    void drawSpeedBoostItem(sf::RenderWindow& window, float cx, float cy, float size, float spin) const;
+    bool isFruitMagnetPulled(uint8_t pickupIndex) const;
+    bool isGemMagnetPulled(int tx, int ty) const;
     void drawMudParticles(sf::RenderWindow& window) const;
     void drawSawTraps(sf::RenderWindow& window) const;
     void drawRockHeads(sf::RenderWindow& window) const;
+    void drawFlyingEnemies(sf::RenderWindow& window) const;
+    void drawTridentProjectiles(sf::RenderWindow& window) const;
     void drawPendulums(sf::RenderWindow& window) const;
     void drawDynamicTiles(sf::RenderWindow& window) const;
     void drawMapPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;
     void drawPlayer(sf::RenderWindow& window, const PlayerState& player) const;
     void drawHud(sf::RenderWindow& window) const;
+    void drawPowerUpStatus(sf::RenderWindow& window, float hudY) const;
     void drawCountdownOverlay(sf::RenderWindow& window, float centerX) const;
     void drawResultOverlay(sf::RenderWindow& window, float centerX, bool victory) const;
     void drawPauseButton(sf::RenderWindow& window) const;
@@ -116,6 +129,7 @@ private:
     GameMap map_;
     TiledMapRenderer tiledMap_;
     std::vector<SawTrap> sawTraps_;
+    std::vector<FanZone> fanZones_;
     UiHelper ui_;
     AssetManager assets_;
     sf::Music lobbyMusic_;

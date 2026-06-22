@@ -8,6 +8,7 @@
 #include "Physics.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <iostream>
 
 namespace fireice {
@@ -530,13 +531,17 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
     if (!visualPath.empty() && tiledMap_.load(visualPath)) {
         tiledMap_.bake();
         sawTraps_ = loadSawTrapsFromTmx(visualPath, 16);
+        fanZones_ = loadFanZonesFromTmx(visualPath, 16);
         std::cout << "[Client] Visual map ready for level " << static_cast<int>(globalIndex + 1)
-                  << " customBg=" << (tiledMap_.hasCustomBackground() ? "yes" : "no") << std::endl;
+                  << " customBg=" << (tiledMap_.hasCustomBackground() ? "yes" : "no") << " fans=" << fanZones_.size()
+                  << std::endl;
     } else if (!visualPath.empty()) {
         std::cerr << "[Client] Failed to load tiled visual map: " << visualPath << std::endl;
         sawTraps_.clear();
+        fanZones_.clear();
     } else {
         sawTraps_.clear();
+        fanZones_.clear();
     }
 
     loadedLevelIndex_ = globalIndex;
@@ -2245,6 +2250,9 @@ void GameClient::renderGameScreen() {
         drawPlayer(window_, renderWorld_.players[1]);
     }
 
+    drawFanWindEffects(window_);
+    drawMagnetPulls(window_);
+
     if (inGamePausePhase && !paused_) {
         drawPauseButton(window_);
     }
@@ -2437,6 +2445,332 @@ void GameClient::drawMudParticles(sf::RenderWindow& window) const {
     }
 }
 
+void GameClient::drawFlyingEnemies(sf::RenderWindow& window) const {
+    for (uint8_t i = 0; i < renderWorld_.flyingEnemyCount; ++i) {
+        const WorldState::SyncFlyingEnemy& enemy = renderWorld_.flyingEnemies[i];
+        if (enemy.active == 0) {
+            continue;
+        }
+
+        const float wingLift = std::sin(animTime_ * 5.0f + static_cast<float>(i) * 1.8f) * 4.0f;
+        const sf::Color bodyColor(92, 48, 128);
+        const sf::Color wingColor(130, 72, 170);
+        const sf::Color eyeColor(255, 230, 90);
+
+        sf::CircleShape body(ENEMY_HITBOX_H * 0.42f);
+        body.setFillColor(bodyColor);
+        body.setOutlineColor(sf::Color(40, 18, 58));
+        body.setOutlineThickness(2.0f);
+        body.setOrigin(body.getRadius(), body.getRadius());
+        body.setPosition(enemy.x, enemy.y);
+        window.draw(body);
+
+        sf::CircleShape eye(4.0f);
+        eye.setFillColor(eyeColor);
+        eye.setOrigin(4.0f, 4.0f);
+        eye.setPosition(enemy.x + static_cast<float>(enemy.facing) * 8.0f, enemy.y - 4.0f);
+        window.draw(eye);
+
+        sf::CircleShape horn(3.0f, 3);
+        horn.setFillColor(sf::Color(180, 140, 200));
+        horn.setOrigin(3.0f, 6.0f);
+        horn.setPosition(enemy.x, enemy.y - ENEMY_HITBOX_H * 0.35f);
+        window.draw(horn);
+
+        const float wingSpread = ENEMY_HITBOX_W * 0.38f;
+        sf::CircleShape wingL(wingSpread * 0.55f);
+        wingL.setFillColor(wingColor);
+        wingL.setOrigin(wingSpread * 0.55f, wingSpread * 0.55f);
+        wingL.setPosition(enemy.x - wingSpread, enemy.y + wingLift);
+        window.draw(wingL);
+
+        sf::CircleShape wingR(wingSpread * 0.55f);
+        wingR.setFillColor(wingColor);
+        wingR.setOrigin(wingSpread * 0.55f, wingSpread * 0.55f);
+        wingR.setPosition(enemy.x + wingSpread, enemy.y + wingLift);
+        window.draw(wingR);
+    }
+}
+
+void GameClient::drawTridentProjectiles(sf::RenderWindow& window) const {
+    for (uint8_t i = 0; i < renderWorld_.projectileCount; ++i) {
+        const WorldState::SyncProjectile& projectile = renderWorld_.projectiles[i];
+        if (projectile.active == 0) {
+            continue;
+        }
+
+        sf::ConvexShape trident;
+        trident.setPointCount(5);
+        const float half = TRIDENT_HITBOX * 0.45f;
+        trident.setPoint(0, {0.0f, -half * 1.4f});
+        trident.setPoint(1, {-half * 0.55f, half * 0.2f});
+        trident.setPoint(2, {0.0f, half * 0.55f});
+        trident.setPoint(3, {half * 0.55f, half * 0.2f});
+        trident.setPoint(4, {0.0f, -half * 0.6f});
+        trident.setFillColor(sf::Color(210, 180, 60));
+        trident.setOutlineColor(sf::Color(120, 90, 30));
+        trident.setOutlineThickness(1.5f);
+        trident.setOrigin(0.0f, 0.0f);
+        trident.setPosition(projectile.x, projectile.y);
+        trident.setRotation(projectile.rotation);
+        window.draw(trident);
+    }
+}
+
+void GameClient::drawFanWindEffects(sf::RenderWindow& window) const {
+    if (fanZones_.empty()) {
+        return;
+    }
+
+    sf::RenderStates addBlend;
+    addBlend.blendMode = sf::BlendAdd;
+
+    constexpr int kStreamsPerFan = 11;
+    for (const FanZone& fan : fanZones_) {
+        const float streamHeight = std::max(32.0f, fan.top + fan.height - fan.targetFeetY);
+        const float baseX = fan.emitterX > 0.0f ? fan.emitterX : fan.left + fan.width * 0.5f;
+        const float baseY = fan.emitterY > 0.0f ? fan.emitterY : fan.top + fan.height;
+
+        for (int i = 0; i < kStreamsPerFan; ++i) {
+            const float laneOffset = (static_cast<float>(i) - static_cast<float>(kStreamsPerFan - 1) * 0.5f) * 6.0f;
+            const float phase = animTime_ * 4.2f + static_cast<float>(i) * 0.45f + baseX * 0.004f;
+            const float t = phase - std::floor(phase);
+            const float y = baseY - t * streamHeight;
+            const float wobble = std::sin(animTime_ * 11.0f + static_cast<float>(i) * 1.4f) * 4.0f;
+            const float alpha = 0.35f + 0.55f * (1.0f - t);
+            const float radius = 3.0f + t * 5.0f;
+
+            sf::CircleShape puff(radius);
+            puff.setOrigin(radius, radius);
+            puff.setPosition(baseX + laneOffset + wobble, y);
+            puff.setFillColor(sf::Color(200, 240, 255, static_cast<sf::Uint8>(alpha * 255.0f)));
+            window.draw(puff, addBlend);
+        }
+
+        sf::VertexArray streaks(sf::Lines, 12);
+        for (std::size_t i = 0; i < 6; ++i) {
+            const float lane = (static_cast<float>(i) - 2.5f) * 7.0f;
+            const float phase = animTime_ * 4.5f + static_cast<float>(i) * 0.75f;
+            const float t = phase - std::floor(phase);
+            const float y0 = baseY - t * streamHeight;
+            const float y1 = y0 - 28.0f - t * 14.0f;
+            const sf::Color color(235, 250, 255, static_cast<sf::Uint8>((0.25f + 0.45f * (1.0f - t)) * 255.0f));
+            streaks[i * 2].position = {baseX + lane, y0};
+            streaks[i * 2].color = color;
+            streaks[i * 2 + 1].position = {baseX + lane + std::sin(animTime_ * 8.0f + i) * 3.0f, y1};
+            streaks[i * 2 + 1].color = sf::Color(color.r, color.g, color.b, 0);
+        }
+        window.draw(streaks, addBlend);
+    }
+}
+
+bool GameClient::isFruitMagnetPulled(uint8_t pickupIndex) const {
+    for (uint8_t i = 0; i < renderWorld_.magnetPullCount; ++i) {
+        const WorldState::SyncMagnetPull& pull = renderWorld_.magnetPulls[i];
+        if (pull.active != 0 && pull.kind == 1 && pull.pickupIndex == pickupIndex) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool GameClient::isGemMagnetPulled(int tx, int ty) const {
+    for (uint8_t i = 0; i < renderWorld_.magnetPullCount; ++i) {
+        const WorldState::SyncMagnetPull& pull = renderWorld_.magnetPulls[i];
+        if (pull.active != 0 && pull.kind == 0 && pull.gemTx == tx && pull.gemTy == ty) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void GameClient::drawMagnetItem(sf::RenderWindow& window, float cx, float cy, float size, float spin) const {
+    const float bob = std::sin(animTime_ * 5.0f + cx * 0.01f) * 2.0f;
+    cy += bob;
+
+    sf::CircleShape aura(size * 1.4f);
+    aura.setOrigin(aura.getRadius(), aura.getRadius());
+    aura.setPosition(cx, cy);
+    aura.setFillColor(sf::Color(120, 180, 255, 45));
+    window.draw(aura);
+
+    sf::CircleShape body(size * 0.62f);
+    body.setOrigin(body.getRadius(), body.getRadius());
+    body.setPosition(cx, cy);
+    body.setFillColor(sf::Color(70, 90, 120));
+    body.setOutlineThickness(2.0f);
+    body.setOutlineColor(sf::Color(210, 230, 255));
+    window.draw(body);
+
+    sf::CircleShape pole(size * 0.18f);
+    pole.setOrigin(pole.getRadius(), pole.getRadius());
+    pole.setPosition(cx, cy - size * 0.15f);
+    pole.setFillColor(sf::Color(230, 240, 255));
+    window.draw(pole);
+
+    sf::CircleShape leftTip(size * 0.28f);
+    leftTip.setOrigin(size * 0.28f, size * 0.28f);
+    leftTip.setPosition(cx - size * 0.42f + std::sin(spin) * 1.5f, cy + size * 0.05f);
+    leftTip.setFillColor(sf::Color(220, 70, 70));
+    window.draw(leftTip);
+
+    sf::CircleShape rightTip(size * 0.28f);
+    rightTip.setOrigin(size * 0.28f, size * 0.28f);
+    rightTip.setPosition(cx + size * 0.42f + std::sin(spin + 1.2f) * 1.5f, cy + size * 0.05f);
+    rightTip.setFillColor(sf::Color(70, 120, 230));
+    window.draw(rightTip);
+}
+
+void GameClient::drawSpeedBoostItem(sf::RenderWindow& window, float cx, float cy, float size, float spin) const {
+    const float bob = std::sin(animTime_ * 6.0f + cx * 0.015f) * 2.5f;
+    cy += bob;
+
+    sf::CircleShape aura(size * 1.25f);
+    aura.setOrigin(aura.getRadius(), aura.getRadius());
+    aura.setPosition(cx, cy);
+    aura.setFillColor(sf::Color(255, 200, 80, 40));
+    window.draw(aura);
+
+    sf::CircleShape core(size * 0.5f);
+    core.setOrigin(core.getRadius(), core.getRadius());
+    core.setPosition(cx, cy);
+    core.setFillColor(sf::Color(255, 170, 40));
+    core.setOutlineThickness(2.0f);
+    core.setOutlineColor(sf::Color(255, 240, 180));
+    window.draw(core);
+
+    for (int i = 0; i < 3; ++i) {
+        const float angle = spin + static_cast<float>(i) * 2.1f;
+        sf::CircleShape bolt(size * 0.12f, 3);
+        bolt.setOrigin(bolt.getRadius(), bolt.getRadius());
+        bolt.setPosition(cx + std::cos(angle) * size * 0.55f, cy + std::sin(angle) * size * 0.35f);
+        bolt.setFillColor(sf::Color(255, 255, 140));
+        bolt.setRotation(angle * 57.3f);
+        window.draw(bolt);
+    }
+}
+
+void GameClient::drawMagnetDrops(sf::RenderWindow& window) const {
+    for (uint8_t i = 0; i < renderWorld_.magnetDropCount; ++i) {
+        const WorldState::SyncMagnetDrop& drop = renderWorld_.magnetDrops[i];
+        if (drop.active == 0) {
+            continue;
+        }
+        const float cx = drop.x;
+        const float cy = drop.y + POWERUP_DROP_HEIGHT * 0.5f;
+        const float spin = animTime_ * 6.0f + static_cast<float>(i);
+        const float itemSize = POWERUP_VISUAL_SIZE;
+
+        if (drop.falling != 0) {
+            sf::VertexArray trail(sf::Lines, 6);
+            for (int t = 0; t < 3; ++t) {
+                const float offset = static_cast<float>(t) * 18.0f + std::fmod(animTime_ * 80.0f + i * 20.0f, 18.0f);
+                trail[t * 2].position = {cx, cy - offset};
+                trail[t * 2].color = sf::Color(255, 255, 255, static_cast<sf::Uint8>(150 - t * 40));
+                trail[t * 2 + 1].position = {cx, cy - offset - 10.0f};
+                trail[t * 2 + 1].color = sf::Color(255, 255, 255, 0);
+            }
+            window.draw(trail);
+        }
+
+        if (drop.kind == static_cast<uint8_t>(PowerUpKind::SpeedBoost)) {
+            drawSpeedBoostItem(window, cx, cy, itemSize, spin);
+        } else {
+            drawMagnetItem(window, cx, cy, itemSize, spin);
+        }
+    }
+}
+
+void GameClient::drawMagnetPulls(sf::RenderWindow& window) const {
+    constexpr int kBananaGid = 304;
+    for (uint8_t i = 0; i < renderWorld_.magnetPullCount; ++i) {
+        const WorldState::SyncMagnetPull& pull = renderWorld_.magnetPulls[i];
+        if (pull.active == 0) {
+            continue;
+        }
+
+        sf::CircleShape spark(3.0f);
+        spark.setOrigin(3.0f, 3.0f);
+        spark.setPosition(pull.x, pull.y);
+        spark.setFillColor(sf::Color(220, 240, 255, 180));
+        window.draw(spark);
+
+        if (pull.kind == 0) {
+            if (assets_.ready()) {
+                const sf::Texture& gemTex = ((pull.gemTx + pull.gemTy) % 2 == 0) ? assets_.gemRed() : assets_.gemBlue();
+                sf::Sprite gem(gemTex);
+                const float gemScale =
+                    (TILE_SIZE * 0.75f) / static_cast<float>(std::max(gemTex.getSize().x, gemTex.getSize().y));
+                gem.setScale(gemScale, gemScale);
+                gem.setOrigin(gemTex.getSize().x * gemScale * 0.5f, gemTex.getSize().y * gemScale * 0.5f);
+                gem.setPosition(pull.x, pull.y);
+                window.draw(gem);
+            }
+        } else if (tiledMap_.ready()) {
+            const float size = TILE_SIZE;
+            tiledMap_.drawObjectGidAt(window, kBananaGid, pull.x - size * 0.5f, pull.y - size * 0.5f, size, size,
+                                      animTime_ + static_cast<float>(pull.pickupIndex) * 0.07f);
+        }
+    }
+}
+
+void GameClient::drawMagnetAura(sf::RenderWindow& window, const PlayerState& player) const {
+    if (!player.alive || player.magnetTimer <= 0.0f) {
+        return;
+    }
+
+    const float cx = player.x + PLAYER_WIDTH * 0.5f;
+    const float cy = player.y + PLAYER_HEIGHT * 0.5f;
+    const float pulse = 0.85f + 0.15f * std::sin(animTime_ * 8.0f);
+    const float radius = MAGNET_RADIUS * pulse;
+
+    sf::CircleShape ring(radius);
+    ring.setOrigin(radius, radius);
+    ring.setPosition(cx, cy);
+    ring.setFillColor(sf::Color(120, 180, 255, 18));
+    ring.setOutlineThickness(2.0f);
+    ring.setOutlineColor(sf::Color(180, 220, 255, 90));
+    window.draw(ring);
+
+    for (int i = 0; i < 6; ++i) {
+        const float angle = animTime_ * 2.5f + static_cast<float>(i) * (6.2831853f / 6.0f);
+        const float sparkR = radius * 0.72f;
+        sf::CircleShape spark(2.5f);
+        spark.setOrigin(2.5f, 2.5f);
+        spark.setPosition(cx + std::cos(angle) * sparkR, cy + std::sin(angle) * sparkR);
+        spark.setFillColor(sf::Color(220, 240, 255, 160));
+        window.draw(spark);
+    }
+}
+
+void GameClient::drawSpeedBoostAura(sf::RenderWindow& window, const PlayerState& player) const {
+    if (!player.alive || player.speedBoostTimer <= 0.0f) {
+        return;
+    }
+
+    const float cx = player.x + PLAYER_WIDTH * 0.5f;
+    const float cy = player.y + PLAYER_HEIGHT * 0.5f;
+    const float pulse = 0.7f + 0.3f * std::sin(animTime_ * 12.0f);
+
+    for (int i = 0; i < 4; ++i) {
+        const float trailX = cx - player.vx * 0.04f * static_cast<float>(i + 1);
+        const float trailY = cy + std::sin(animTime_ * 10.0f + i) * 2.0f;
+        sf::CircleShape trail(5.0f - static_cast<float>(i));
+        trail.setOrigin(trail.getRadius(), trail.getRadius());
+        trail.setPosition(trailX, trailY);
+        trail.setFillColor(sf::Color(255, 210, 80, static_cast<sf::Uint8>((90 - i * 18) * pulse)));
+        window.draw(trail);
+    }
+
+    sf::CircleShape ring(TILE_SIZE * 0.55f * pulse);
+    ring.setOrigin(ring.getRadius(), ring.getRadius());
+    ring.setPosition(cx, cy);
+    ring.setFillColor(sf::Color(255, 190, 60, 22));
+    ring.setOutlineThickness(2.0f);
+    ring.setOutlineColor(sf::Color(255, 230, 120, 110));
+    window.draw(ring);
+}
+
 void GameClient::drawMap(sf::RenderWindow& window) const {
     if (tiledMap_.ready()) {
         const auto skipHiddenVanishing = [this](int x, int y) {
@@ -2453,8 +2787,12 @@ void GameClient::drawMap(sf::RenderWindow& window) const {
         drawSawTraps(window);
         drawRockHeads(window);
         drawPendulums(window);
+        drawFlyingEnemies(window);
+        drawTridentProjectiles(window);
+        drawMagnetDrops(window);
         tiledMap_.drawCollectibles(window, animTime_, renderWorld_.collectedPickupsMask,
-                                   renderWorld_.collectedPickupsMaskHi, renderWorld_.collectedPickupsMaskExt);
+                                   renderWorld_.collectedPickupsMaskHi, renderWorld_.collectedPickupsMaskExt,
+                                   [this](uint8_t pickupIndex) { return isFruitMagnetPulled(pickupIndex); });
         drawMudParticles(window);
         return;
     }
@@ -2502,6 +2840,9 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
         return;
     }
 
+    drawMagnetAura(window, player);
+    drawSpeedBoostAura(window, player);
+
     if (assets_.ready() && assets_.character(player.role).ready()) {
         const InputFlags facingHint = player.role == role_ ? currentInput_ : InputFlags::None;
         assets_.character(player.role).draw(window, player, animTime_, facingHint);
@@ -2540,6 +2881,52 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
         glow.setPosition(player.x + PLAYER_WIDTH / 2.0f, visualY + 12.0f);
         glow.setFillColor(sf::Color(160, 255, 120, 75));
         window.draw(glow);
+    }
+}
+
+void GameClient::drawPowerUpStatus(sf::RenderWindow& window, float hudY) const {
+    if (renderWorld_.phase != GamePhase::Playing || !connected_ || slot_ >= MAX_PLAYERS) {
+        return;
+    }
+
+    const PlayerState& player = renderWorld_.players[slot_];
+    float iconX = 16.0f;
+    const float iconY = hudY + 42.0f;
+    const float iconSize = 18.0f;
+
+    if (player.magnetTimer > 0.0f) {
+        const float cx = iconX + iconSize * 0.5f;
+        const float cy = iconY + iconSize * 0.5f;
+        drawMagnetItem(window, cx, cy, iconSize, animTime_ * 4.0f);
+        const float barW = 52.0f;
+        const float barH = 6.0f;
+        sf::RectangleShape barBg({barW, barH});
+        barBg.setPosition(iconX + iconSize + 4.0f, iconY + iconSize * 0.5f - barH * 0.5f);
+        barBg.setFillColor(sf::Color(40, 40, 40, 180));
+        window.draw(barBg);
+        sf::RectangleShape barFill({barW * std::min(1.0f, player.magnetTimer / MAGNET_DURATION), barH});
+        barFill.setPosition(barBg.getPosition());
+        barFill.setFillColor(sf::Color(120, 180, 255));
+        window.draw(barFill);
+        ui_.drawText(window, "Magnet", iconX + iconSize + barW + 8.0f, iconY + 2.0f, 14, sf::Color(180, 210, 255));
+        iconX += iconSize + barW + 72.0f;
+    }
+
+    if (player.speedBoostTimer > 0.0f) {
+        const float cx = iconX + iconSize * 0.5f;
+        const float cy = iconY + iconSize * 0.5f;
+        drawSpeedBoostItem(window, cx, cy, iconSize, animTime_ * 4.0f);
+        const float barW = 52.0f;
+        const float barH = 6.0f;
+        sf::RectangleShape barBg({barW, barH});
+        barBg.setPosition(iconX + iconSize + 4.0f, iconY + iconSize * 0.5f - barH * 0.5f);
+        barBg.setFillColor(sf::Color(40, 40, 40, 180));
+        window.draw(barBg);
+        sf::RectangleShape barFill({barW * std::min(1.0f, player.speedBoostTimer / SPEED_BOOST_DURATION), barH});
+        barFill.setPosition(barBg.getPosition());
+        barFill.setFillColor(sf::Color(255, 190, 60));
+        window.draw(barFill);
+        ui_.drawText(window, "Speed", iconX + iconSize + barW + 8.0f, iconY + 2.0f, 14, sf::Color(255, 220, 140));
     }
 }
 
@@ -2583,6 +2970,8 @@ void GameClient::drawHud(sf::RenderWindow& window) const {
             ui_.drawText(window, "ESC - Back to Lobby", windowW - 220.0f, hudY + 16.0f, 18, sf::Color(255, 180, 100));
         }
     }
+
+    drawPowerUpStatus(window, hudY);
 }
 
 sf::FloatRect GameClient::pauseButtonRect() const {

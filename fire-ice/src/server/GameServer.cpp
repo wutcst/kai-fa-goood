@@ -43,6 +43,8 @@ void Room::selectLevel(uint8_t index, bool keepMapSelect) {
     levelRuntime.mudSpawners = visualMapPath.empty() ? std::vector<Vec2>{} : loadMudSpawnsFromTmx(visualMapPath);
     levelRuntime.fanZones = visualMapPath.empty() ? std::vector<FanZone>{}
                                                   : loadFanZonesFromTmx(visualMapPath, 16, &levelRuntime.fanTileCoords);
+    levelRuntime.powerUpSpawns =
+        visualMapPath.empty() ? std::vector<PowerUpSpawn>{} : loadPowerUpSpawnsFromTmx(visualMapPath, 16);
     levelRuntime.sawTraps = visualMapPath.empty() ? std::vector<SawTrap>{} : loadSawTrapsFromTmx(visualMapPath, 16);
     levelRuntime.rockHeads =
         visualMapPath.empty() ? std::vector<RockHeadTrap>{} : loadRockHeadsFromTmx(visualMapPath, 16);
@@ -50,6 +52,7 @@ void Room::selectLevel(uint8_t index, bool keepMapSelect) {
         visualMapPath.empty() ? std::vector<PendulumTrap>{} : loadPendulumsFromTmx(visualMapPath, 16);
     configureRockHeadTravelBounds(map, levelRuntime.rockHeads);
     initLevelRuntime(map, levelRuntime);
+    initFlyingEnemiesForLevel(levelRuntime, index, visualMapPath, 16);
 
     applyLevelMetadata();
     resetWorld();
@@ -110,6 +113,7 @@ void Room::resetWorld() {
     world.collectedPickupsMaskHi = 0;
     world.collectedPickupsMaskExt = 0;
     resetLevelRuntime(levelRuntime);
+    initFlyingEnemiesForLevel(levelRuntime, selectedLevelIndex, visualMapPath, 16);
     syncVanishingMask(levelRuntime, world);
     updateRockHeads(levelRuntime, map, world, 0.0f);
     updatePendulums(levelRuntime, world, 0.0f);
@@ -383,6 +387,11 @@ void Room::simulateTick() {
 
     updateButtons(map, world);
 
+    if (world.phase == GamePhase::Playing) {
+        updatePowerUpDrops(levelRuntime, map, world, TICK_DT);
+        syncMagnetState(levelRuntime, world);
+    }
+
     for (std::size_t i = 0; i < clients.size(); ++i) {
         if (!clients[i].connected)
             continue;
@@ -408,8 +417,8 @@ void Room::simulateTick() {
 
         const bool airJump = jumpPressed && !grounded;
         applyInput(player, client.pendingInput, TICK_DT, groundJump, airJump, client.airJumpUsedThisHold);
-        applyFanZones(player, levelRuntime.fanZones, TICK_DT);
         integratePlayer(player, map, world, TICK_DT);
+        applyFanZones(player, levelRuntime.fanZones, TICK_DT);
         if (player.onGround) {
             client.coyoteTimer = COYOTE_TIME;
         } else {
@@ -427,13 +436,26 @@ void Room::simulateTick() {
             player.alive = false;
         if (samplePendulumHazard(levelRuntime.pendulums, player, static_cast<float>(world.tick) * TICK_DT))
             player.alive = false;
+        if (sampleFlyingEnemyHazard(levelRuntime, player))
+            player.alive = false;
+        if (sampleProjectileHazard(levelRuntime, player))
+            player.alive = false;
         collectGems(player, map);
         collectPickups(player, pickups, world.collectedPickupsMask, world.collectedPickupsMaskHi,
                        world.collectedPickupsMaskExt);
+        collectMagnetDrops(player, levelRuntime);
         player.atExit = sampleExit(map, player);
     }
 
+    if (world.phase == GamePhase::Playing) {
+        removeUncollectedLandedPowerUps(levelRuntime);
+        syncMagnetState(levelRuntime, world);
+    }
+
+    updateMagnetPulls(levelRuntime, map, world, pickups, TICK_DT);
+
     updateLevelMechanics(levelRuntime, map, world, TICK_DT);
+    updateFlyingEnemiesAndProjectiles(levelRuntime, map, world, TICK_DT);
     updateRockHeads(levelRuntime, map, world, TICK_DT);
     updatePendulums(levelRuntime, world, static_cast<float>(world.tick) * TICK_DT);
     updatePhase();
@@ -670,14 +692,21 @@ bool GameServer::start() {
 }
 
 void GameServer::run() {
+    constexpr int kMaxCatchUpTicks = 8;
+    const auto tickDuration =
+        std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(TICK_DT));
+
     while (running_) {
         processPackets();
 
         const auto now = std::chrono::steady_clock::now();
-        const float tickElapsed = std::chrono::duration<float>(now - lastTick_).count();
-        if (tickElapsed >= TICK_DT) {
+        float tickElapsed = std::chrono::duration<float>(now - lastTick_).count();
+        int simulatedTicks = 0;
+        while (tickElapsed >= TICK_DT && simulatedTicks < kMaxCatchUpTicks) {
             simulateAllRooms();
-            lastTick_ = now;
+            tickElapsed -= TICK_DT;
+            lastTick_ += tickDuration;
+            ++simulatedTicks;
         }
 
         const float broadcastElapsed = std::chrono::duration<float>(now - lastBroadcast_).count();

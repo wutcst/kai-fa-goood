@@ -18,7 +18,8 @@ public:
     void bake();  // 预渲染静态层到纹理，用于选关缩略图
     void drawStatic(sf::RenderWindow& window, const std::function<bool(int, int)>& skipTile = {}) const;
     void drawCollectibles(sf::RenderWindow& window, float animTimeSec, uint32_t collectedMask,
-                          uint32_t collectedMaskHi = 0, uint32_t collectedMaskExt = 0) const;
+                          uint32_t collectedMaskHi = 0, uint32_t collectedMaskExt = 0,
+                          const std::function<bool(uint8_t pickupIndex)>& skipPickup = {}) const;
     void drawObjectGidAt(sf::RenderWindow& window, int gid, float gameX, float gameY, float gameW, float gameH,
                          float animTimeSec) const;
     void drawPreview(sf::RenderWindow& window, const sf::FloatRect& area) const;  // 选关缩略图

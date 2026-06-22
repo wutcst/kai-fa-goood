@@ -70,6 +70,8 @@ constexpr uint8_t MAX_PLAYER_NAME = 16;
 constexpr uint8_t MAX_PLAYERS = 3;
 constexpr uint8_t MAX_ROOM_CODE = 8;
 constexpr uint8_t MAX_MUD_PARTICLES = 12;
+constexpr uint8_t MAX_FLYING_ENEMIES = 2;
+constexpr uint8_t MAX_TRIDENT_PROJECTILES = 12;
 constexpr uint8_t MAX_ROCK_HEAD_TRAPS = 8;
 constexpr uint8_t MAX_PENDULUM_TRAPS = 8;
 constexpr uint16_t MAX_VANISHING_SLOTS = 288;
@@ -131,7 +133,26 @@ struct PlayerState {
     uint8_t airJumpsLeft = 0;
     uint8_t gems = 0;
     bool atExit = false;
+    float magnetTimer = 0.0f;
+    float speedBoostTimer = 0.0f;
 };
+
+constexpr float MAGNET_DURATION = 12.0f;
+constexpr float MAGNET_RADIUS = 140.0f;
+constexpr float MAGNET_PULL_SPEED = 420.0f;
+constexpr float MAGNET_COLLECT_DISTANCE = 18.0f;
+constexpr float POWERUP_DROP_HEIGHT = TILE_SIZE * 1.4f;
+constexpr float POWERUP_DROP_WIDTH = TILE_SIZE * 1.5f;
+constexpr float POWERUP_VISUAL_SIZE = TILE_SIZE * 1.25f;
+constexpr float POWERUP_FALL_GRAVITY = 240.0f;
+constexpr float POWERUP_MAX_FALL_SPEED = 140.0f;
+constexpr float POWERUP_SPAWN_Y = -POWERUP_DROP_HEIGHT - TILE_SIZE * 6.0f;
+constexpr float POWERUP_LANDED_LIFETIME = 5.0f;
+constexpr float MAX_POWERUP_TIMER = 24.0f;
+constexpr float SPEED_BOOST_DURATION = 9.0f;
+constexpr float SPEED_BOOST_MULTIPLIER = 1.65f;
+constexpr uint8_t MAX_MAGNET_DROPS = 4;
+constexpr uint8_t MAX_MAGNET_PULLS = 8;
 
 struct WorldState {
     uint32_t tick = 0;
@@ -195,6 +216,48 @@ struct WorldState {
         uint8_t pad[2]{};
     };
     SyncPendulum pendulums[MAX_PENDULUM_TRAPS]{};
+    uint8_t flyingEnemyCount = 0;
+    struct SyncFlyingEnemy {
+        float x = 0.0f;
+        float y = 0.0f;
+        int8_t facing = 1;
+        uint8_t active = 0;
+        uint8_t wingPhase = 0;
+        uint8_t pad = 0;
+    };
+    SyncFlyingEnemy flyingEnemies[MAX_FLYING_ENEMIES]{};
+    uint8_t projectileCount = 0;
+    struct SyncProjectile {
+        float x = 0.0f;
+        float y = 0.0f;
+        float rotation = 0.0f;
+        uint8_t active = 0;
+        uint8_t pad[3]{};
+    };
+    SyncProjectile projectiles[MAX_TRIDENT_PROJECTILES]{};
+    uint8_t magnetDropCount = 0;
+    struct SyncMagnetDrop {
+        float x = 0.0f;
+        float y = 0.0f;
+        uint8_t kind = 0;
+        uint8_t falling = 0;
+        uint8_t active = 0;
+        uint8_t pad = 0;
+    };
+    SyncMagnetDrop magnetDrops[MAX_MAGNET_DROPS]{};
+    uint8_t magnetPullCount = 0;
+    struct SyncMagnetPull {
+        float x = 0.0f;
+        float y = 0.0f;
+        uint8_t kind = 0;
+        uint8_t pickupIndex = 0;
+        int16_t gemTx = 0;
+        int16_t gemTy = 0;
+        uint8_t active = 0;
+        uint8_t pad = 0;
+    };
+    SyncMagnetPull magnetPulls[MAX_MAGNET_PULLS]{};
+    uint8_t magnetSpawnsRemaining = 0;
 };
 inline const char* phaseName(GamePhase phase) {
     switch (phase) {

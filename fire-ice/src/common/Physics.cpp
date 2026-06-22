@@ -124,7 +124,12 @@ void applyInput(PlayerState& player, InputFlags input, float dt, bool groundJump
         move += 1.0f;
     }
 
-    player.vx = move * MOVE_SPEED;
+    float moveSpeed = MOVE_SPEED;
+    if (player.speedBoostTimer > 0.0f) {
+        moveSpeed *= SPEED_BOOST_MULTIPLIER;
+    }
+
+    player.vx = move * moveSpeed;
 
     if (groundJump) {
         player.vy = -JUMP_SPEED;
@@ -210,7 +215,6 @@ void integratePlayer(PlayerState& player, const GameMap& map, WorldState& world,
 }
 
 void applyFanZones(PlayerState& player, const std::vector<FanZone>& fans, float dt) {
-    (void) dt;
     if (!player.alive || fans.empty()) {
         return;
     }
@@ -223,12 +227,22 @@ void applyFanZones(PlayerState& player, const std::vector<FanZone>& fans, float 
         }
 
         player.onGround = false;
-        if (player.y > fan.targetFeetY + 1.0f) {
-            player.vy = -FAN_RISE_SPEED;
-        } else {
-            player.y = fan.targetFeetY;
-            player.vy = 0.0f;
-            player.onGround = true;
+
+        if (player.y <= fan.targetFeetY) {
+            continue;
+        }
+
+        const float columnBottom = fan.top + fan.height;
+        const float riseRange = std::max(1.0f, columnBottom - fan.targetFeetY);
+        const float heightInColumn = player.y - fan.targetFeetY;
+        float strength = std::clamp(heightInColumn / riseRange, 0.0f, 1.0f);
+        strength = std::sqrt(strength);
+
+        player.vy -= FAN_UP_ACCEL * strength * dt;
+
+        const float maxRiseSpeed = FAN_RISE_SPEED * strength;
+        if (player.vy < -maxRiseSpeed) {
+            player.vy = -maxRiseSpeed;
         }
         break;
     }

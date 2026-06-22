@@ -1,5 +1,7 @@
 #include "LevelCatalog.hpp"
+#include "LevelMechanics.hpp"
 #include "Map.hpp"
+#include "Physics.hpp"
 #include "Protocol.hpp"
 #include "TmxUtil.hpp"
 
@@ -98,6 +100,33 @@ TEST(TmxUtilTest, FindImageLayerInsideImageLayerTag) {
     EXPECT_EQ(layers.front().imageSource, "level03/bule.png");
     EXPECT_TRUE(layers.front().repeatX);
     EXPECT_TRUE(layers.front().repeatY);
+}
+
+TEST(PowerUpTest, CollectsMagnetAndSpeedBoostTogether) {
+    fireice::LevelRuntime runtime;
+    fireice::PlayerState player{};
+    player.alive = true;
+    player.x = 100.0f;
+    player.y = 200.0f;
+
+    runtime.magnetDrops[0].active = true;
+    runtime.magnetDrops[0].kind = static_cast<uint8_t>(fireice::PowerUpKind::Magnet);
+    runtime.magnetDrops[0].x = player.x + fireice::PLAYER_WIDTH * 0.5f;
+    runtime.magnetDrops[0].y = player.y;
+    runtime.magnetDrops[0].falling = false;
+
+    runtime.magnetDrops[1].active = true;
+    runtime.magnetDrops[1].kind = static_cast<uint8_t>(fireice::PowerUpKind::SpeedBoost);
+    runtime.magnetDrops[1].x = player.x + fireice::PLAYER_WIDTH * 0.5f;
+    runtime.magnetDrops[1].y = player.y;
+    runtime.magnetDrops[1].falling = false;
+
+    fireice::collectMagnetDrops(player, runtime);
+
+    EXPECT_GT(player.magnetTimer, 0.0f);
+    EXPECT_GT(player.speedBoostTimer, 0.0f);
+    EXPECT_FALSE(runtime.magnetDrops[0].active);
+    EXPECT_FALSE(runtime.magnetDrops[1].active);
 }
 
 }  // namespace

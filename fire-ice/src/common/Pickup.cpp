@@ -402,7 +402,11 @@ std::vector<Pickup> loadPickupsFromTmx(const std::string& tmxPath, int tmxTileWi
 
     uint8_t index = 0;
     for (const std::string& tag : findObjectTagsInGroups(xml)) {
-        if (tag.find("gid=\"") == std::string::npos || isSpawnName(tag)) {
+        if (isSpawnName(tag) || hasAttr(tag, "name", "flying_enemy") || hasAttr(tag, "name", "magnet_spawn") ||
+            hasAttr(tag, "name", "speed_spawn") || hasAttr(tag, "name", "magnet")) {
+            continue;
+        }
+        if (tag.find("gid=\"") == std::string::npos) {
             continue;
         }
         const int gid = attrInt(tag, "gid", 0);
@@ -424,6 +428,7 @@ std::vector<Pickup> loadPickupsFromTmx(const std::string& tmxPath, int tmxTileWi
         pickup.w = ow * scale;
         pickup.h = oh * scale;
         pickup.index = index++;
+        pickup.kind = PickupKind::Fruit;
         pickups.push_back(pickup);
     }
 

@@ -7,7 +7,11 @@
 
 namespace fireice {
 
+class GameMap;
+
 constexpr uint8_t MAX_PICKUPS = 96;
+
+enum class PickupKind : uint8_t { Fruit = 0, Magnet = 1 };
 
 struct Pickup {
     float x = 0.0f;
@@ -15,6 +19,7 @@ struct Pickup {
     float w = 0.0f;
     float h = 0.0f;
     uint8_t index = 0;
+    PickupKind kind = PickupKind::Fruit;
 };
 
 struct TmxTilesetInfo {

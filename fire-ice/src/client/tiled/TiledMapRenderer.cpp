@@ -811,13 +811,17 @@ void TiledMapRenderer::drawStatic(sf::RenderWindow& window, const std::function<
 }
 
 void TiledMapRenderer::drawCollectibles(sf::RenderWindow& window, float animTimeSec, uint32_t collectedMask,
-                                        uint32_t collectedMaskHi, uint32_t collectedMaskExt) const {
+                                        uint32_t collectedMaskHi, uint32_t collectedMaskExt,
+                                        const std::function<bool(uint8_t pickupIndex)>& skipPickup) const {
     for (const CollectibleObjectTile& obj : collectibleObjectTiles_) {
         const uint32_t bit = 1u << (obj.index % 32u);
         const uint8_t word = obj.index / 32u;
         const bool taken = word == 0 ? ((collectedMask & bit) != 0)
                                      : (word == 1 ? ((collectedMaskHi & bit) != 0) : ((collectedMaskExt & bit) != 0));
         if (taken) {
+            continue;
+        }
+        if (skipPickup && skipPickup(obj.index)) {
             continue;
         }
         drawGidSpriteToWindow(window, obj.gid, obj.x, obj.y, obj.width, obj.height, animTimeSec);
