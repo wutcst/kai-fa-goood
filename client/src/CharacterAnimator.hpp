@@ -14,7 +14,7 @@ public:
     bool ready() const { return ready_; }
 
     void draw(sf::RenderWindow& window, const PlayerState& player, float animTime,
-              InputFlags facingHint = InputFlags::None) const;
+              InputFlags facingHint = InputFlags::None, float footLift = 0.0f) const;
     void drawPortrait(sf::RenderWindow& window, float x, float y, float targetHeight, bool flipX,
                       sf::Color tint = sf::Color::White) const;
     void drawPortraitAnimated(sf::RenderWindow& window, float x, float y, float targetHeight, bool flipX,

@@ -284,6 +284,16 @@ inline const std::string& levelPreviewElementList(uint8_t index) {
     return elements[std::min(static_cast<std::size_t>(index), elements.size() - 1)];
 }
 
+inline const std::string& resultNextLevelButton() {
+    static const std::string value = utf8({0xE4, 0xB8, 0x8B, 0xE4, 0xB8, 0x80, 0xE5, 0x85, 0xB3});
+    return value;
+}
+
+inline const std::string& resultVictoryTitle() {
+    static const std::string value = utf8({0xE9, 0x80, 0x9A, 0xE5, 0x85, 0xB3});
+    return value;
+}
+
 inline const std::string& resultGameOverTitle() {
     static const std::string value = utf8({0xE6, 0xB8, 0xB8, 0xE6, 0x88, 0x8F, 0xE7, 0xBB, 0x93, 0xE6, 0x9D, 0x9F});
     return value;

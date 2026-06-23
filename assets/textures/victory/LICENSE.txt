@@ -1,0 +1,3 @@
+UI assets sourced from Kenney (www.kenney.nl), CC0 1.0.
+- UI Pack - Pixel Adventure: victory panel, banner, stars
+- UI Pack: action buttons

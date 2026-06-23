@@ -164,8 +164,8 @@ def classify_by_tileset(source: str, local_id: int) -> str | None:
             return "vanishing"
         if local_id in {105, 106, 107, 149, 150, 151}:
             return "solid"
-        # 薄横条平台（仅 level02 地形集中的横条图块）
-        if "level02/terrain" in source_lower.replace("\\", "/") and local_id in {40, 41, 95}:
+        # 薄横条平台（Terrain 图集中 39–41 为横条及端盖，95 为变体）
+        if local_id in {39, 40, 41, 95}:
             return "thin"
         # Temple Gates 等关卡：地形图块中的门扇（gid 102/125/147 → local 101/124/146）
         if local_id == 101:

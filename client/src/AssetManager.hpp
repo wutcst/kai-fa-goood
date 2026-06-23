@@ -36,10 +36,15 @@ public:
     const sf::Texture& continueButton() const { return continueButton_; }
     const sf::Texture& menuButton() const { return menuButton_; }
     const sf::Texture& pauseIcon() const { return pauseIcon_; }
+    const sf::Texture& victoryMenu() const { return victoryMenu_; }
+    const sf::Texture& victoryButtonMenu() const { return victoryButtonMenu_; }
+    const sf::Texture& victoryButtonRetry() const { return victoryButtonRetry_; }
+    const sf::Texture& victoryButtonNext() const { return victoryButtonNext_; }
 
     bool hasButtons() const { return buttonsReady_; }
     bool hasPauseIcon() const { return pauseIconReady_; }
     bool hasPauseMenu() const { return pauseMenuReady_; }
+    bool hasVictoryUi() const { return victoryUiReady_; }
     bool hasMapIcons() const { return mapIconsReady_; }
 
     const sf::Texture& mapLevelIcon(uint8_t levelIndex, bool unlocked, bool completed) const;
@@ -69,6 +74,10 @@ private:
     sf::Texture continueButton_;
     sf::Texture menuButton_;
     sf::Texture pauseIcon_;
+    sf::Texture victoryMenu_;
+    sf::Texture victoryButtonMenu_;
+    sf::Texture victoryButtonRetry_;
+    sf::Texture victoryButtonNext_;
     std::array<sf::Texture, 7> mapLevelAvailable_{};
     std::array<sf::Texture, 7> mapLevelLocked_{};
     std::array<sf::Texture, 7> mapLevelCompleted_{};
@@ -82,6 +91,7 @@ private:
     bool mapIconsReady_ = false;
     bool pauseIconReady_ = false;
     bool pauseMenuReady_ = false;
+    bool victoryUiReady_ = false;
 };
 
 }  // namespace fireice

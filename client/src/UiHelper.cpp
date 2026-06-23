@@ -404,4 +404,104 @@ void UiHelper::drawArtTitleCentered(sf::RenderWindow& window, const std::string&
     }
 }
 
+void UiHelper::drawVictoryTitleCentered(sf::RenderWindow& window, const std::string& text, float centerX, float y,
+                                        unsigned size, float animPhase) const {
+    if (!fontLoaded_ && !boldFontLoaded_) {
+        drawOutlinedCenteredText(window, text, centerX, y, size, sf::Color(220, 160, 45), sf::Color(45, 28, 12), 4.5f);
+        return;
+    }
+
+    const sf::Font& titleFont = boldFontLoaded_ ? boldFont_ : font_;
+    const auto chars = splitUtf8Chars(text);
+    if (chars.empty()) {
+        return;
+    }
+
+    float totalWidth = 0.f;
+    std::vector<float> charWidths;
+    charWidths.reserve(chars.size());
+    for (const std::string& ch : chars) {
+        sf::Text probe(toSfString(ch), titleFont, size);
+        const float width = probe.getLocalBounds().width;
+        charWidths.push_back(width);
+        totalWidth += width;
+    }
+    const float letterSpacing = static_cast<float>(size) * 0.10f;
+    totalWidth += letterSpacing * static_cast<float>(chars.size() > 0 ? chars.size() - 1 : 0);
+
+    float cursorX = centerX - totalWidth * 0.5f;
+    for (std::size_t i = 0; i < chars.size(); ++i) {
+        const float wave = std::sin(animPhase * 1.4f + static_cast<float>(i) * 0.75f) * 2.5f;
+        const float charY = y + wave + static_cast<float>((i % 2) * 2);
+        const sf::Color outlineColor(38, 22, 8);
+        const sf::Color fillColor = (i % 2 == 0) ? sf::Color(225, 168, 48) : sf::Color(205, 138, 32);
+        const sf::Color highlightColor(255, 236, 150, 170);
+
+        auto drawLayer = [&](float dx, float dy, unsigned layerSize, sf::Color fill, sf::Color outline,
+                             float thickness) {
+            sf::Text label(toSfString(chars[i]), titleFont, layerSize);
+            label.setFillColor(fill);
+            label.setOutlineColor(outline);
+            label.setOutlineThickness(thickness);
+            label.setPosition(cursorX + dx, charY + dy);
+            window.draw(label);
+        };
+
+        drawLayer(3.f, 5.f, size, sf::Color(12, 6, 4, 215), sf::Color(12, 6, 4), 6.f);
+        drawLayer(0.f, 0.f, size, fillColor, outlineColor, 5.5f);
+        drawLayer(-1.f, -2.f, size, highlightColor, sf::Color(0, 0, 0, 0), 0.f);
+
+        cursorX += charWidths[i] + letterSpacing;
+    }
+}
+
+void UiHelper::drawVictoryScoreCentered(sf::RenderWindow& window, const std::string& text, float centerX, float y,
+                                        unsigned size) const {
+    if (!fontLoaded_ && !boldFontLoaded_) {
+        drawOutlinedCenteredText(window, text, centerX, y, size, sf::Color(90, 58, 28), sf::Color(35, 20, 10), 3.5f);
+        return;
+    }
+
+    const sf::Font& scoreFont = boldFontLoaded_ ? boldFont_ : font_;
+    const auto chars = splitUtf8Chars(text);
+    if (chars.empty()) {
+        return;
+    }
+
+    float totalWidth = 0.f;
+    std::vector<float> charWidths;
+    charWidths.reserve(chars.size());
+    for (const std::string& ch : chars) {
+        sf::Text probe(toSfString(ch), scoreFont, size);
+        const float width = probe.getLocalBounds().width;
+        charWidths.push_back(width);
+        totalWidth += width;
+    }
+    const float letterSpacing = static_cast<float>(size) * 0.04f;
+    totalWidth += letterSpacing * static_cast<float>(chars.size() > 0 ? chars.size() - 1 : 0);
+
+    float cursorX = centerX - totalWidth * 0.5f;
+    const float charY = y;
+    for (std::size_t i = 0; i < chars.size(); ++i) {
+        const sf::Color outlineColor(32, 18, 8);
+        const sf::Color fillColor = (i % 2 == 0) ? sf::Color(118, 72, 32) : sf::Color(98, 58, 24);
+
+        auto drawLayer = [&](float dx, float dy, unsigned layerSize, sf::Color fill, sf::Color outline,
+                             float thickness) {
+            sf::Text label(toSfString(chars[i]), scoreFont, layerSize);
+            label.setFillColor(fill);
+            label.setOutlineColor(outline);
+            label.setOutlineThickness(thickness);
+            label.setPosition(cursorX + dx, charY + dy);
+            window.draw(label);
+        };
+
+        drawLayer(2.f, 3.f, size, sf::Color(10, 6, 4, 200), sf::Color(10, 6, 4), 4.f);
+        drawLayer(0.f, 0.f, size, fillColor, outlineColor, 3.5f);
+        drawLayer(-1.f, -1.f, size, sf::Color(200, 150, 70, 120), sf::Color(0, 0, 0, 0), 0.f);
+
+        cursorX += charWidths[i] + letterSpacing;
+    }
+}
+
 }  // namespace fireice

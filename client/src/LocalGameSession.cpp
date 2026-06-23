@@ -15,6 +15,7 @@ uint8_t LocalGameSession::slotForRole(PlayerRole role) {
 
 bool LocalGameSession::start(PlayerRole role, const std::string& playerName) {
     room_ = Room{};
+    room_.skipWaitingRoom = true;
     room_.code = "LOCAL";
     room_.lastTick = std::chrono::steady_clock::now();
     room_.lastBroadcast = room_.lastTick;
@@ -27,7 +28,6 @@ bool LocalGameSession::start(PlayerRole role, const std::string& playerName) {
     client.name = playerName;
 
     room_.syncConnectedCount();
-    room_.world.lobbyStep = 1;
     std::snprintf(room_.world.roomCode, MAX_ROOM_CODE, "LOCAL");
 
     active_ = true;

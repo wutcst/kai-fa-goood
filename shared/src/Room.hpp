@@ -43,6 +43,7 @@ struct Room {
     uint8_t completedMask = 0;
     std::chrono::steady_clock::time_point lastTick;
     std::chrono::steady_clock::time_point lastBroadcast;
+    bool skipWaitingRoom = false;
 
     void selectLevel(uint8_t index, bool keepMapSelect = false);
     void applyLevelMetadata();
