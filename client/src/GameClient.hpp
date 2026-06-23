@@ -15,6 +15,7 @@
 
 #include <array>
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -64,6 +65,7 @@ private:
     void useTitleLayout();
     void useLobbyLayout();
     void useGameLayout();
+    void ensureLayoutView();
     InputFlags readLocalInput() const;
     void render();
     void renderTitleScreen();
@@ -139,6 +141,8 @@ private:
     WorldState renderWorld_{};
     uint8_t loadedLevelIndex_ = 255;
     std::string loadedVisualPath_;
+    std::filesystem::file_time_type loadedVisualFileTime_{};
+    std::filesystem::file_time_type loadedCollisionFileTime_{};
     bool lobbyLayout_ = true;
     bool musicEnabled_ = false;
 

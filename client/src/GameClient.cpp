@@ -6,12 +6,26 @@
 #include "LevelProgress.hpp"
 #include "LocalGameSession.hpp"
 #include "LocaleText.hpp"
+#include "Paths.hpp"
 #include "Physics.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <vector>
+
+namespace {
+
+std::filesystem::file_time_type assetFileTime(const std::string& assetPath) {
+    const std::string resolved = fireice::resolveAssetPath(assetPath);
+    if (!std::filesystem::exists(resolved)) {
+        return std::filesystem::file_time_type::min();
+    }
+    return std::filesystem::last_write_time(resolved);
+}
+
+}  // namespace
 
 #ifdef _WIN32
 #ifndef NOMINMAX
@@ -203,6 +217,59 @@ GameOverLayout computeGameOverLayout(float mapH, float centerX, float windowW) {
     return layout;
 }
 
+struct VictoryLayout {
+    float panelTop = 0.0f;
+    float panelDrawW = 0.0f;
+    float panelDrawH = 0.0f;
+    float titleY = 0.0f;
+    float subtitleY = 0.0f;
+    float scoreY = 0.0f;
+    float uiScale = 1.0f;
+    sf::FloatRect retryBtn;
+    sf::FloatRect continueBtn;
+    sf::FloatRect menuBtn;
+    bool hasContinueBtn = false;
+};
+
+VictoryLayout computeVictoryLayout(float mapH, float centerX, float windowW, bool hasNextLevel) {
+    VictoryLayout layout;
+    layout.uiScale = gameOverlayUiScale(windowW);
+
+    layout.panelDrawW = 640.0f * layout.uiScale;
+    layout.panelDrawH = 500.0f * layout.uiScale;
+
+    const float btnH = 52.0f * layout.uiScale;
+    const float gapBelowPanel = 18.0f * layout.uiScale;
+    const float totalH = layout.panelDrawH + gapBelowPanel + btnH;
+    if (totalH > mapH - 20.0f) {
+        const float fitScale = (mapH - 20.0f) / totalH;
+        layout.panelDrawH *= fitScale;
+        layout.panelDrawW *= fitScale;
+        layout.uiScale *= fitScale;
+    }
+
+    layout.panelTop = (mapH - layout.panelDrawH - gapBelowPanel - btnH) / 2.0f;
+    layout.titleY = layout.panelTop + layout.panelDrawH * 0.20f;
+    layout.subtitleY = layout.panelTop + layout.panelDrawH * 0.30f;
+    layout.scoreY = layout.panelTop + layout.panelDrawH * 0.40f;
+
+    const float btnW = 150.0f * layout.uiScale;
+    const float gap = 28.0f * layout.uiScale;
+    const float rowY = layout.panelTop + layout.panelDrawH + gapBelowPanel;
+    layout.hasContinueBtn = hasNextLevel;
+    if (hasNextLevel) {
+        const float totalW = btnW * 3.0f + gap * 2.0f;
+        const float startX = centerX - totalW / 2.0f;
+        layout.retryBtn = {startX, rowY, btnW, btnH};
+        layout.continueBtn = {startX + btnW + gap, rowY, btnW, btnH};
+        layout.menuBtn = {startX + (btnW + gap) * 2.0f, rowY, btnW, btnH};
+    } else {
+        layout.retryBtn = {centerX - btnW - gap / 2.0f, rowY, btnW, btnH};
+        layout.menuBtn = {centerX + gap / 2.0f, rowY, btnW, btnH};
+    }
+    return layout;
+}
+
 constexpr float kRoomPanelRefW = 300.0f;
 constexpr float kRoomPanelRefH = 360.0f;
 constexpr float kRoomPanelGapRef = 24.0f;
@@ -331,6 +398,12 @@ bool GameClient::initialize(const std::string& host, PlayerRole preferredRole, b
     return true;
 }
 
+void applyFullWindowView(sf::RenderWindow& window, unsigned width, unsigned height) {
+    sf::View view(sf::FloatRect(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)));
+    view.setViewport(sf::FloatRect(0.0f, 0.0f, 1.0f, 1.0f));
+    window.setView(view);
+}
+
 void GameClient::useTitleLayout() {
     lobbyLayout_ = true;
     const sf::Vector2u size(LOBBY_WINDOW_WIDTH, LOBBY_WINDOW_HEIGHT);
@@ -341,7 +414,7 @@ void GameClient::useTitleLayout() {
     }
     setWindowTitleUtf8(window_, text::windowTitle());
     window_.setVerticalSyncEnabled(true);
-    window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(size.x), static_cast<float>(size.y))));
+    applyFullWindowView(window_, size.x, size.y);
 }
 
 void GameClient::startSoloPlay() {
@@ -609,16 +682,46 @@ void GameClient::useLobbyLayout() {
     }
     setWindowTitleUtf8(window_, text::windowTitle() + " - Lobby");
     window_.setVerticalSyncEnabled(true);
-    window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(size.x), static_cast<float>(size.y))));
+    applyFullWindowView(window_, size.x, size.y);
 }
 
 void GameClient::useGameLayout() {
     lobbyLayout_ = false;
-    const unsigned width = static_cast<unsigned>(std::max(960, static_cast<int>(map_.width() * TILE_SIZE)));
-    const unsigned height = static_cast<unsigned>(std::max(540, static_cast<int>(map_.height() * TILE_SIZE)));
+    int mapW = map_.width();
+    int mapH = map_.height();
+    // Level 1 apples are object pickups; keep window/overlay aligned with the visual map.
+    if (loadedLevelIndex_ == 0 && tiledMap_.ready()) {
+        mapW = std::max(mapW, tiledMap_.mapWidth());
+        mapH = std::max(mapH, tiledMap_.mapHeight());
+    }
+    const unsigned width = static_cast<unsigned>(std::max(960, mapW * static_cast<int>(TILE_SIZE)));
+    const unsigned height = static_cast<unsigned>(std::max(540, mapH * static_cast<int>(TILE_SIZE)));
     window_.setSize({width, height});
     setWindowTitleUtf8(window_, text::windowTitle());
-    window_.setView(sf::View(sf::FloatRect(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height))));
+    applyFullWindowView(window_, width, height);
+}
+
+void GameClient::ensureLayoutView() {
+    const bool showLobbyUi = !connected_ || renderWorld_.phase == GamePhase::Lobby;
+    if (showLobbyUi) {
+        const sf::Vector2u winSize = window_.getSize();
+        const sf::View view = window_.getView();
+        const sf::FloatRect viewport = view.getViewport();
+        const bool sizeMismatch =
+            winSize.x != LOBBY_WINDOW_WIDTH || winSize.y != LOBBY_WINDOW_HEIGHT ||
+            static_cast<unsigned>(view.getSize().x + 0.5f) != LOBBY_WINDOW_WIDTH ||
+            static_cast<unsigned>(view.getSize().y + 0.5f) != LOBBY_WINDOW_HEIGHT;
+        const bool viewportMismatch =
+            viewport.left != 0.0f || viewport.top != 0.0f || viewport.width != 1.0f || viewport.height != 1.0f;
+        if (sizeMismatch || viewportMismatch || !lobbyLayout_) {
+            useLobbyLayout();
+        }
+        return;
+    }
+
+    if (lobbyLayout_) {
+        useGameLayout();
+    }
 }
 
 void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
@@ -626,20 +729,33 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
     const uint8_t playerCount = std::max(uint8_t{1}, renderWorld_.connectedCount);
     const uint8_t globalIndex = catalog.filteredIndexToGlobalIndex(levelIndex, playerCount);
     const std::string visualPath = catalog.resolveVisualPath(globalIndex);
-    if (globalIndex == loadedLevelIndex_ && visualPath == loadedVisualPath_ && tiledMap_.ready()) {
+    const std::string collisionPath = catalog.resolvePath(globalIndex);
+    const auto visualMtime = assetFileTime(visualPath);
+    const auto collisionMtime = assetFileTime(collisionPath);
+    if (globalIndex == loadedLevelIndex_ && visualPath == loadedVisualPath_ && tiledMap_.ready() &&
+        visualMtime == loadedVisualFileTime_ && collisionMtime == loadedCollisionFileTime_) {
         return;
     }
 
-    const std::string path = catalog.resolvePath(globalIndex);
-    if (!map_.loadFromFile(path)) {
-        std::cerr << "[Client] Failed to load level preview: " << path << std::endl;
+    const std::string resolvedCollision = resolveAssetPath(collisionPath);
+    if (!map_.loadFromFile(collisionPath)) {
+        std::cerr << "[Client] Failed to load level preview: " << resolvedCollision << std::endl;
         return;
     }
 
     if (!visualPath.empty() && tiledMap_.load(visualPath)) {
         tiledMap_.bake();
         fanZones_ = loadFanZonesFromTmx(visualPath, 16);
-        std::cout << "[Client] Visual map ready for level " << static_cast<int>(globalIndex + 1)
+        const std::string resolvedVisual = resolveAssetPath(visualPath);
+        if (globalIndex == 0 && (map_.width() != tiledMap_.mapWidth() || map_.height() != tiledMap_.mapHeight())) {
+            std::cerr << "[Client] Level 1 collision/visual size mismatch: collision " << map_.width() << "x"
+                      << map_.height() << " vs visual " << tiledMap_.mapWidth() << "x" << tiledMap_.mapHeight()
+                      << " — re-export with tools/export_level.py" << std::endl;
+        }
+        std::cout << "[Client] Level " << static_cast<int>(globalIndex + 1) << " loaded\n"
+                  << "  collision: " << resolvedCollision << " (" << map_.width() << "x" << map_.height() << ")\n"
+                  << "  visual:    " << resolvedVisual << " (" << tiledMap_.mapWidth() << "x"
+                  << tiledMap_.mapHeight() << " tiles)"
                   << " customBg=" << (tiledMap_.hasCustomBackground() ? "yes" : "no") << " fans=" << fanZones_.size()
                   << std::endl;
     } else if (!visualPath.empty()) {
@@ -651,6 +767,8 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
 
     loadedLevelIndex_ = globalIndex;
     loadedVisualPath_ = visualPath;
+    loadedVisualFileTime_ = visualMtime;
+    loadedCollisionFileTime_ = collisionMtime;
     if (resizeWindow && !lobbyLayout_) {
         useGameLayout();
     }
@@ -661,9 +779,7 @@ void GameClient::onPhaseChanged(GamePhase previous, GamePhase current) {
         localReady_ = false;
         paused_ = false;
         levelMapScrollY_ = 0.0f;
-        if (clientScreen_ == ClientScreen::Room) {
-            useLobbyLayout();
-        }
+        useLobbyLayout();
         handleLevelChange(renderWorld_.levelIndex, false);
     } else if (previous == GamePhase::Lobby && current != GamePhase::Lobby) {
         handleLevelChange(renderWorld_.levelIndex, false);
@@ -1183,6 +1299,8 @@ InputFlags GameClient::readLocalInput() const {
 }
 
 void GameClient::render() {
+    ensureLayoutView();
+
     if (tiledMap_.ready() && connected_ && renderWorld_.phase != GamePhase::Lobby) {
         window_.clear(tiledMap_.hasCustomBackground() ? sf::Color(24, 32, 28) : sf::Color(88, 140, 72));
     } else {
@@ -1712,7 +1830,9 @@ void GameClient::drawLevelProgressMap() {
         drawLevelNode(i, levelCount, selected || hovered, unlocked, completed);
     }
 
-    window_.setView(previousView);
+    sf::View restoredView = previousView;
+    restoredView.setViewport(sf::FloatRect(0.0f, 0.0f, 1.0f, 1.0f));
+    window_.setView(restoredView);
 
     ui_.drawText(window_, text::lobbyMapTitle(), mapArea.left + levelMapContentPadding(),
                  mapArea.top + (levelMapHeaderHeight() - lobbyScaled(22.0f)) * 0.38f,
@@ -2224,7 +2344,13 @@ void GameClient::renderGameScreen() {
         drawPauseButton(window_);
     }
 
-    drawHud(window_);
+    // 第一关 Tiled 大地图：结算全屏贴图时不叠 HUD 文字
+    const bool hideHudOnResult =
+        renderWorld_.levelIndex == 0 &&
+        (renderWorld_.phase == GamePhase::Victory || renderWorld_.phase == GamePhase::GameOver);
+    if (!hideHudOnResult) {
+        drawHud(window_);
+    }
 
     const float centerX = static_cast<float>(window_.getSize().x) / 2.0f;
     switch (renderWorld_.phase) {
@@ -3102,69 +3228,26 @@ bool GameClient::handleResultOverlayClick(const sf::Event& event) {
         return false;
     }
 
-    const float btnW = 150.0f;
-    const float btnH = 52.0f;
-    const float gap = 28.0f;
-    const float rowY = mapH / 2.0f + 130.0f;
     const bool hasNextLevel =
         renderWorld_.levelIndex + 1 < renderWorld_.levelCount &&
         isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(renderWorld_.levelIndex + 1));
+    const VictoryLayout layout =
+        computeVictoryLayout(mapH, centerX, static_cast<float>(window_.getSize().x), hasNextLevel);
 
-    if (assets_.hasButtons()) {
-        if (hasNextLevel) {
-            const float totalW = btnW * 3.0f + gap * 2.0f;
-            const float startX = centerX - totalW / 2.0f;
-            const sf::FloatRect retryBtn{startX, rowY, btnW, btnH};
-            const sf::FloatRect nextBtn{startX + btnW + gap, rowY, btnW, btnH};
-            const sf::FloatRect menuBtn{startX + (btnW + gap) * 2.0f, rowY, btnW, btnH};
-            if (retryBtn.contains(mouse)) {
-                localReady_ = false;
-                sendAction(PlayerAction::Restart);
-                return true;
-            }
-            if (nextBtn.contains(mouse)) {
-                localReady_ = false;
-                sendAction(PlayerAction::NextLevel);
-                return true;
-            }
-            if (menuBtn.contains(mouse)) {
-                localReady_ = false;
-                sendAction(PlayerAction::ReturnToLobby);
-                return true;
-            }
-        } else {
-            const sf::FloatRect retryBtn{centerX - btnW - gap / 2.0f, rowY, btnW, btnH};
-            const sf::FloatRect menuBtn{centerX + gap / 2.0f, rowY, btnW, btnH};
-            if (retryBtn.contains(mouse)) {
-                localReady_ = false;
-                sendAction(PlayerAction::Restart);
-                return true;
-            }
-            if (menuBtn.contains(mouse)) {
-                localReady_ = false;
-                sendAction(PlayerAction::ReturnToLobby);
-                return true;
-            }
-        }
-    } else {
-        const sf::FloatRect retryBtn{centerX - 125.0f, mapH / 2.0f + 62.0f, 250.0f, 40.0f};
-        const sf::FloatRect menuBtn{centerX - 125.0f, mapH / 2.0f + 110.0f, 250.0f, 40.0f};
-        const sf::FloatRect nextBtn{centerX - 125.0f, mapH / 2.0f + 158.0f, 250.0f, 40.0f};
-        if (retryBtn.contains(mouse)) {
-            localReady_ = false;
-            sendAction(PlayerAction::Restart);
-            return true;
-        }
-        if (menuBtn.contains(mouse)) {
-            localReady_ = false;
-            sendAction(PlayerAction::ReturnToLobby);
-            return true;
-        }
-        if (hasNextLevel && nextBtn.contains(mouse)) {
-            localReady_ = false;
-            sendAction(PlayerAction::NextLevel);
-            return true;
-        }
+    if (layout.retryBtn.contains(mouse)) {
+        localReady_ = false;
+        sendAction(PlayerAction::Restart);
+        return true;
+    }
+    if (layout.hasContinueBtn && layout.continueBtn.contains(mouse)) {
+        localReady_ = false;
+        sendAction(PlayerAction::NextLevel);
+        return true;
+    }
+    if (layout.menuBtn.contains(mouse)) {
+        localReady_ = false;
+        sendAction(PlayerAction::ReturnToLobby);
+        return true;
     }
     return false;
 }
@@ -3180,7 +3263,12 @@ void GameClient::drawCountdownOverlay(sf::RenderWindow& window, float centerX) c
 }
 
 void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool victory) const {
-    const float mapH = static_cast<float>(map_.height()) * TILE_SIZE;
+    // 第一关碰撞层较矮、视觉层更高，结算遮罩取较大高度
+    int overlayRows = map_.height();
+    if (renderWorld_.levelIndex == 0 && tiledMap_.ready()) {
+        overlayRows = std::max(overlayRows, tiledMap_.mapHeight());
+    }
+    const float mapH = static_cast<float>(overlayRows) * TILE_SIZE;
     const float windowW = static_cast<float>(window.getSize().x);
 
     sf::RectangleShape dim({windowW, mapH});
@@ -3188,6 +3276,11 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     window.draw(dim);
 
     const int totalGems = renderWorld_.players[0].gems + renderWorld_.players[1].gems;
+    // 服务端未同步宝石总数时，从 Tiled pickup 对象数推算目标
+    int gemGoal = renderWorld_.totalGems;
+    if (renderWorld_.levelIndex == 0 && gemGoal == 0 && tiledMap_.ready()) {
+        gemGoal = static_cast<int>(std::min(255, tiledMap_.collectibleCount()));
+    }
 
     if (!victory) {
         const GameOverLayout layout = computeGameOverLayout(mapH, centerX, windowW);
@@ -3208,7 +3301,7 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
         ui_.drawOutlinedCenteredText(window, text::resultGameOverTitle(), centerX, layout.titleY, titleSize,
                                      sf::Color(255, 220, 80), sf::Color(40, 30, 20), 3.0f);
 
-        const std::string scoreLine = text::resultGemScore(totalGems, renderWorld_.totalGems);
+        const std::string scoreLine = text::resultGemScore(totalGems, gemGoal);
         ui_.drawOutlinedCenteredText(window, scoreLine, centerX, layout.scoreY, scoreSize, sf::Color(255, 220, 80),
                                      sf::Color(40, 30, 20), 2.5f);
 
@@ -3224,68 +3317,69 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
         return;
     }
 
-    if (assets_.ready()) {
-        const sf::Texture& screenTex =
-            (renderWorld_.players[0].gems + renderWorld_.players[1].gems >= renderWorld_.totalGems &&
-             renderWorld_.totalGems > 0)
-                ? assets_.winScreen()
-                : assets_.winScreenPartial();
-
-        sf::Sprite screen(screenTex);
-        const float targetW = 520.0f;
-        const float targetH = 280.0f;
-        const float scale = std::min(targetW / static_cast<float>(screenTex.getSize().x),
-                                     targetH / static_cast<float>(screenTex.getSize().y));
-        screen.setScale(scale, scale);
-        screen.setPosition(centerX - screenTex.getSize().x * scale / 2.0f,
-                           mapH / 2.0f - screenTex.getSize().y * scale / 2.0f);
-        window.draw(screen);
-    } else {
-        ui_.drawPanel(window, {centerX - 260.0f, mapH / 2.0f - 140.0f, 520.0f, 280.0f}, sf::Color(20, 60, 35), 235.0f);
-        ui_.drawCenteredText(window, "Level Complete!", centerX, mapH / 2.0f - 92.0f, 36, sf::Color(140, 255, 170));
-    }
-
-    const std::string levelLine =
-        "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + renderWorld_.levelName;
-    ui_.drawCenteredText(window, levelLine, centerX, mapH / 2.0f - 48.0f, 22, sf::Color(220, 240, 220));
-    ui_.drawCenteredText(window, "Both players reached the exit.", centerX, mapH / 2.0f - 16.0f, 20,
-                         sf::Color(210, 230, 210));
-
-    ui_.drawCenteredText(window, "Gems: " + std::to_string(totalGems) + " / " + std::to_string(renderWorld_.totalGems),
-                         centerX, mapH / 2.0f + 28.0f, 22, sf::Color(255, 220, 100));
-
-    const float btnW = 150.0f;
-    const float btnH = 52.0f;
-    const float gap = 28.0f;
-    const float rowY = mapH / 2.0f + 130.0f;
     const bool hasNextLevel =
         renderWorld_.levelIndex + 1 < renderWorld_.levelCount &&
         isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(renderWorld_.levelIndex + 1));
+    const VictoryLayout layout = computeVictoryLayout(mapH, centerX, windowW, hasNextLevel);
+    const sf::FloatRect panelRect{centerX - layout.panelDrawW / 2.0f, layout.panelTop, layout.panelDrawW,
+                                  layout.panelDrawH};
+
+    if (assets_.ready()) {
+        const sf::Texture& screenTex =
+            (totalGems >= gemGoal && gemGoal > 0) ? assets_.winScreen() : assets_.winScreenPartial();
+
+        sf::Sprite screen(screenTex);
+        const float scale = std::min(layout.panelDrawW / static_cast<float>(screenTex.getSize().x),
+                                     layout.panelDrawH / static_cast<float>(screenTex.getSize().y));
+        const float drawW = static_cast<float>(screenTex.getSize().x) * scale;
+        const float drawH = static_cast<float>(screenTex.getSize().y) * scale;
+        screen.setScale(scale, scale);
+        screen.setPosition(centerX - drawW / 2.0f, layout.panelTop + (layout.panelDrawH - drawH) / 2.0f);
+        window.draw(screen);
+    } else {
+        ui_.drawPanel(window, panelRect, sf::Color(175, 175, 175), 240.0f);
+        sf::RectangleShape innerFrame(
+            {panelRect.width - layout.uiScale * 28.0f, panelRect.height - layout.uiScale * 28.0f});
+        innerFrame.setPosition(panelRect.left + layout.uiScale * 14.0f, panelRect.top + layout.uiScale * 14.0f);
+        innerFrame.setFillColor(sf::Color(165, 165, 165, 220));
+        innerFrame.setOutlineThickness(3.0f);
+        innerFrame.setOutlineColor(sf::Color(90, 90, 90));
+        window.draw(innerFrame);
+
+        const unsigned titleSize = static_cast<unsigned>(36.0f * layout.uiScale);
+        const unsigned bodySize = static_cast<unsigned>(22.0f * layout.uiScale);
+        ui_.drawOutlinedCenteredText(window, "Level Complete!", centerX, layout.titleY, titleSize,
+                                     sf::Color(255, 220, 80), sf::Color(40, 30, 20), 3.0f);
+
+        const std::string levelLine =
+            "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + renderWorld_.levelName;
+        ui_.drawOutlinedCenteredText(window, levelLine, centerX, layout.subtitleY, bodySize, sf::Color(255, 220, 80),
+                                     sf::Color(40, 30, 20), 2.5f);
+
+        const std::string scoreLine = text::resultGemScore(totalGems, gemGoal);
+        ui_.drawOutlinedCenteredText(window, scoreLine, centerX, layout.scoreY, bodySize, sf::Color(255, 220, 80),
+                                     sf::Color(40, 30, 20), 2.5f);
+    }
 
     if (assets_.hasButtons()) {
-        if (hasNextLevel) {
-            const float totalW = btnW * 3.0f + gap * 2.0f;
-            const float startX = centerX - totalW / 2.0f;
-            ui_.drawImageButtonWithHint(window, {startX, rowY, btnW, btnH}, assets_.retryButton(), "[R] Retry");
-            ui_.drawImageButtonWithHint(window, {startX + btnW + gap, rowY, btnW, btnH}, assets_.continueButton(),
-                                        "[N] Next");
-            ui_.drawImageButtonWithHint(window, {startX + (btnW + gap) * 2.0f, rowY, btnW, btnH}, assets_.menuButton(),
-                                        "[Esc] Lobby");
-        } else {
-            const float startX = centerX - btnW - gap / 2.0f;
-            ui_.drawImageButtonWithHint(window, {startX, rowY, btnW, btnH}, assets_.retryButton(), "[R] Retry");
-            ui_.drawImageButtonWithHint(window, {startX + btnW + gap, rowY, btnW, btnH}, assets_.menuButton(),
-                                        "[Esc] Lobby");
+        ui_.drawImageButtonWithHint(window, layout.retryBtn, assets_.retryButton(), "[R] Retry");
+        if (layout.hasContinueBtn) {
+            ui_.drawImageButtonWithHint(window, layout.continueBtn, assets_.continueButton(), "[N] Next");
         }
+        ui_.drawImageButtonWithHint(window, layout.menuBtn, assets_.menuButton(), "[Esc] Lobby");
     } else {
-        ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 62.0f, 250.0f, 40.0f}, "R - Replay", true,
-                       sf::Color(50, 130, 90));
-        ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 110.0f, 250.0f, 40.0f}, "ESC - Lobby", true,
-                       sf::Color(90, 90, 120));
-        if (hasNextLevel) {
-            ui_.drawButton(window, {centerX - 125.0f, mapH / 2.0f + 158.0f, 250.0f, 40.0f}, "N - Next Level", true,
-                           sf::Color(60, 120, 200));
+        const unsigned btnFontSize = static_cast<unsigned>(22.0f * layout.uiScale);
+        const auto drawVictoryButton = [&](const sf::FloatRect& area, const std::string& label) {
+            ui_.drawPanel(window, area, sf::Color(190, 190, 190), 255.0f);
+            const float textY = area.top + (area.height - static_cast<float>(btnFontSize)) * 0.38f;
+            ui_.drawOutlinedCenteredText(window, label, area.left + area.width / 2.0f, textY, btnFontSize,
+                                         sf::Color(255, 220, 80), sf::Color(40, 30, 20), 2.0f);
+        };
+        drawVictoryButton(layout.retryBtn, text::resultRetryButton());
+        if (layout.hasContinueBtn) {
+            drawVictoryButton(layout.continueBtn, text::pauseContinueButton());
         }
+        drawVictoryButton(layout.menuBtn, text::resultMenuButton());
     }
 }
 

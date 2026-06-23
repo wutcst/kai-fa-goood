@@ -38,7 +38,7 @@
 - 机关：`B` 按钮、`F` / `I` / `D` 元素门  
 - 收集物：`G` 宝石  
 
-`assets/levels/` 中仍保留早期带机关的 `level02_twin_pools.txt` 等旧版文件，**运行时以 `levelXX_collision.txt` 为准**。
+运行时仅加载 `LevelCatalog` 中登记的 `level01`～`level08`，碰撞数据以 `assets/levels/levelXX_collision.txt` 为准。
 
 ### 待完善 / 已知限制
 

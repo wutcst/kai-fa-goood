@@ -35,7 +35,8 @@ enum class TileType : uint8_t {
     PoisonDoor,
     PoisonExit,
     VanishingPlatform,
-    Spike
+    Spike,
+    ThinPlatform  // 薄横条平台（collision 字符 t，物理顶面低于整格顶）
 };
 
 enum class GamePhase : uint8_t {

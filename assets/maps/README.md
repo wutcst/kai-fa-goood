@@ -8,6 +8,21 @@
 | `assets/maps/levelXX/` | 该关卡图块集 `.tsj` / `.png` |
 | `assets/levels/levelXX_collision.txt` | 导出产物，服务端物理 |
 
+**游戏关卡顺序（Level N → 资源文件）：**
+
+| 游戏关卡 | 地图文件 | 名称 | 说明 |
+|----------|----------|------|------|
+| Level 1 | `level01.tmx` | Forest Entrance | 森林入门，平台 + 草莓收集 |
+| Level 2 | `level02.tmx` | Banana Temple | 消失平台、泥浆、风扇 |
+| Level 3 | `level03.tmx` | Temple Gates | 元素门与按钮 |
+| Level 4 | `level04.tmx` | Gem Grotto | 收集全部宝石 |
+| Level 5 | `level05.tmx` | Vertical Shaft | 垂直攀爬 |
+| Level 6 | `level06.tmx` | Co-op Bridge | 协作过桥 |
+| Level 7 | `level07.tmx` | Element Maze | 熔岩 / 水池迷宫 |
+| Level 8 | `level08.tmx` | Forest Shrine | 终章神龛 |
+
+登记与加载以 `shared/src/LevelCatalog.cpp` 为准；未登记的 `.tmx` 不会进入游戏。
+
 ---
 
 ## 1. 打开工程

@@ -9,7 +9,16 @@ const LevelCatalog& LevelCatalog::instance() {
 }
 
 LevelCatalog::LevelCatalog() {
-    // fileName 给服务端物理；visualFileName 给客户端 Tiled 渲染
+    // fileName = server collision; visualFileName = client Tiled map.
+    // Game "Level N" uses levelNN assets (only entries here are playable):
+    //   1 level01  Forest Entrance   brown forest, platforms, strawberries
+    //   2 level02  Banana Temple     vanishing platforms, mud, fans
+    //   3 level03  Temple Gates      elemental doors and buttons
+    //   4 level04  Gem Grotto        collect every gem
+    //   5 level05  Vertical Shaft    climb upward
+    //   6 level06  Co-op Bridge      cooperation required
+    //   7 level07  Element Maze      lava / water zones
+    //   8 level08  Forest Shrine     final shrine
     levels_ = {
         {1, "level01_collision.txt", "level01.tmx", "Forest Entrance", "Learn the basics", 1, 3},
         {2, "level02_collision.txt", "level02.tmx", "Banana Temple",

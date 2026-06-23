@@ -17,6 +17,7 @@ from pathlib import Path
 LOGIC_TO_CHAR = {
     "solid": "#",
     "oneway": "^",
+    "thin": "t",  # 薄横条；Physics 用较低顶面碰撞
     "vanishing": "~",
     "spike": "S",
     "empty": ".",
@@ -138,6 +139,9 @@ def classify_by_tileset(source: str, local_id: int) -> str | None:
             return "vanishing"
         if local_id in {105, 106, 107, 149, 150, 151}:
             return "solid"
+        # 薄横条平台（仅 level02 地形集中的横条图块）
+        if "level02/terrain" in source_lower.replace("\\", "/") and local_id in {40, 41, 95}:
+            return "thin"
         # Temple Gates 等关卡：地形图块中的门扇（gid 102/125/147 → local 101/124/146）
         if local_id == 101:
             return "fire_door"
@@ -162,11 +166,12 @@ def gid_to_logic(gid: int, tilesets: list[tuple[int, dict[int, str], str]]) -> s
         else:
             break
     if chosen is not None:
-        if local_id in chosen:
-            return chosen[local_id]
+        # 图块集规则优先于 tile 自定义 solid 属性（避免横条被标成整格 solid）
         inferred = classify_by_tileset(source, local_id)
         if inferred:
             return inferred
+        if local_id in chosen:
+            return chosen[local_id]
     source, local_id = gid_to_local(gid, tilesets)
     if source is None:
         return None
@@ -266,6 +271,26 @@ def stamp_tile(rows: list[list[str]], tx: int, ty: int, char: str) -> None:
         rows[ey][ex] = char
 
 
+def nearest_spawn_tile(rows: list[list[str]], tx: int, ty: int) -> tuple[int, int] | None:
+    """Prefer an empty tile on the object's column, standing on solid ground below."""
+    if not rows:
+        return None
+    height = len(rows)
+    width = len(rows[0])
+    start_y = max(0, min(ty, height - 1))
+    for y in range(start_y, -1, -1):
+        if not (0 <= tx < width):
+            continue
+        if rows[y][tx] != ".":
+            continue
+        if y + 1 < height and rows[y + 1][tx] in ("#", "^", "~"):
+            return tx, y
+    for y in range(start_y, -1, -1):
+        if 0 <= tx < width and rows[y][tx] == ".":
+            return tx, y
+    return nearest_empty_tile(rows, tx, ty)
+
+
 def apply_objects(
     rows: list[list[str]],
     map_root: ET.Element,
@@ -293,18 +318,17 @@ def apply_objects(
                 continue
             x = float(obj.get("x", "0"))
             y = float(obj.get("y", "0"))
-            tx = int(x // tile_width)
-            ty = int(y // tile_height)
+            w = float(obj.get("width", tile_width))
+            h = float(obj.get("height", tile_height))
+            # Tiled 对象 y 为底边；取脚底中心所在格作为出生点
+            tx = int((x + w * 0.5) // tile_width)
+            ty = int((y - 1) // tile_height)
             spawn_requests.append((char, tx, ty))
 
     for char, tx, ty in spawn_requests:
-        if 0 <= ty < len(rows) and 0 <= tx < len(rows[ty]):
-            if rows[ty][tx] == ".":
-                rows[ty][tx] = char
-                continue
-        empty = nearest_empty_tile(rows, tx, ty)
-        if empty is not None:
-            x, y = empty
+        spot = nearest_spawn_tile(rows, tx, ty) or nearest_empty_tile(rows, tx, ty)
+        if spot is not None:
+            x, y = spot
             rows[y][x] = char
 
     has_fire = any("f" in row for row in rows)

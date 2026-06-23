@@ -344,7 +344,7 @@
    "id": 36,
    "properties": [
     {
-     "name": "oneway",
+     "name": "solid",
      "type": "bool",
      "value": true
     }
@@ -354,7 +354,7 @@
    "id": 37,
    "properties": [
     {
-     "name": "oneway",
+     "name": "solid",
      "type": "bool",
      "value": true
     }
@@ -534,7 +534,7 @@
    "id": 58,
    "properties": [
     {
-     "name": "oneway",
+     "name": "solid",
      "type": "bool",
      "value": true
     }
@@ -544,7 +544,7 @@
    "id": 59,
    "properties": [
     {
-     "name": "oneway",
+     "name": "solid",
      "type": "bool",
      "value": true
     }

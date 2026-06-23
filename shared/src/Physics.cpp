@@ -9,6 +9,36 @@ namespace fireice {
 
 namespace {
 
+// 站立面 Y：薄横条图块只占格内下半部，顶面上移以匹配渲染
+float tileStandSurfaceYImpl(TileType type, int ty) {
+    const float tileTop = ty * TILE_SIZE;
+    if (type == TileType::ThinPlatform) {
+        return tileTop + TILE_SIZE - THIN_PLATFORM_VISUAL_HEIGHT;
+    }
+    return tileTop;
+}
+
+// 薄平台：横向全挡；纵向仅与可视顶面以下区域碰撞
+bool thinPlatformBlocks(const PlayerState& player, int ty, bool horizontal) {
+    const float surfaceTop = tileStandSurfaceYImpl(TileType::ThinPlatform, ty);
+    const float tileBottom = (ty + 1) * TILE_SIZE;
+    const float feet = player.y + PLAYER_HEIGHT;
+    const float head = player.y;
+
+    if (head >= tileBottom - 0.01f || feet <= surfaceTop + 0.01f) {
+        return false;
+    }
+
+    if (horizontal) {
+        return true;
+    }
+
+    if (player.vy < 0.0f && head < surfaceTop) {
+        return false;
+    }
+    return player.vy >= 0.0f || head >= surfaceTop;
+}
+
 bool oneWayBlocks(const PlayerState& player, int ty) {
     const float tileTop = ty * TILE_SIZE;
     const float tileBottom = tileTop + TILE_SIZE;
@@ -45,6 +75,9 @@ bool tileBlocks(const GameMap& map, int tx, int ty, PlayerRole role, const World
         }
         return oneWayBlocks(player, ty);
     }
+    if (type == TileType::ThinPlatform) {
+        return thinPlatformBlocks(player, ty, horizontal);
+    }
     return map.blocksPlayer(type, role, world.fireDoorOpen, world.waterDoorOpen, world.poisonDoorOpen);
 }
 
@@ -67,6 +100,8 @@ void resolveAxis(PlayerState& player, const GameMap& map, const WorldState& worl
             const float tileRight = tileLeft + TILE_SIZE;
             const float tileTop = ty * TILE_SIZE;
             const float tileBottom = tileTop + TILE_SIZE;
+            const TileType tileType = map.tileAt(tx, ty);
+            const float standTop = tileStandSurfaceYImpl(tileType, ty);
 
             if (horizontal) {
                 if (player.vx > 0.0f) {
@@ -76,7 +111,7 @@ void resolveAxis(PlayerState& player, const GameMap& map, const WorldState& worl
                 }
             } else {
                 if (player.vy > 0.0f) {
-                    player.y = tileTop - PLAYER_HEIGHT;
+                    player.y = standTop - PLAYER_HEIGHT;
                     player.vy = 0.0f;
                     player.onGround = true;
                 } else if (player.vy < 0.0f) {
@@ -96,6 +131,10 @@ bool overlapsTile(const AABB& box, int tx, int ty) {
 }
 
 }  // namespace
+
+float tileStandSurfaceY(TileType type, int ty) {
+    return tileStandSurfaceYImpl(type, ty);
+}
 
 AABB playerBounds(const PlayerState& player) {
     return {player.x, player.y, PLAYER_WIDTH, PLAYER_HEIGHT};
@@ -161,11 +200,6 @@ bool snapPlayerToGround(PlayerState& player, const GameMap& map, const WorldStat
     const float feet = player.y + PLAYER_HEIGHT;
     const int tx = static_cast<int>(std::floor(probeX / TILE_SIZE));
     const int ty = static_cast<int>(std::floor((feet + 2.0f) / TILE_SIZE));
-    const float tileTop = static_cast<float>(ty) * TILE_SIZE;
-
-    if (feet < tileTop - 3.0f || feet > tileTop + 6.0f) {
-        return false;
-    }
 
     const TileType type = map.tileAt(tx, ty);
     if (type == TileType::Empty || type == TileType::Gem) {
@@ -174,11 +208,17 @@ bool snapPlayerToGround(PlayerState& player, const GameMap& map, const WorldStat
     if (type == TileType::OneWayPlatform || type == TileType::VanishingPlatform) {
         return false;
     }
-    if (!map.blocksPlayer(type, player.role, world.fireDoorOpen, world.waterDoorOpen, world.poisonDoorOpen)) {
+    if (!map.blocksPlayer(type, player.role, world.fireDoorOpen, world.waterDoorOpen, world.poisonDoorOpen) &&
+        type != TileType::ThinPlatform) {
         return false;
     }
 
-    player.y = tileTop - PLAYER_HEIGHT;
+    const float standTop = tileStandSurfaceYImpl(type, ty);
+    if (feet < standTop - 3.0f || feet > standTop + 6.0f) {
+        return false;
+    }
+
+    player.y = standTop - PLAYER_HEIGHT;
     player.vy = 0.0f;
     player.onGround = true;
     return true;

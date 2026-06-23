@@ -40,7 +40,20 @@ std::string resolveAssetPath(const std::string& path) {
         return requested.lexically_normal().string();
     }
 
-    const std::filesystem::path besideExe = executableDirectory() / requested;
+    // Prefer source tree assets/ when running from build/ or build/Release (dev workflow).
+    const std::filesystem::path exeDir = executableDirectory();
+    const std::filesystem::path assetCandidates[] = {
+        (exeDir / ".." / ".." / "assets" / requested).lexically_normal(),
+        (exeDir / ".." / "assets" / requested).lexically_normal(),
+        (exeDir / "assets" / requested).lexically_normal(),
+    };
+    for (const std::filesystem::path& candidate : assetCandidates) {
+        if (fileReadable(candidate)) {
+            return candidate.string();
+        }
+    }
+
+    const std::filesystem::path besideExe = exeDir / requested;
     if (fileReadable(besideExe)) {
         return besideExe.lexically_normal().string();
     }

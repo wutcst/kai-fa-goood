@@ -1,5 +1,6 @@
 #include "Map.hpp"
 #include "LevelMechanics.hpp"
+#include "Paths.hpp"
 #include "Physics.hpp"
 #include <algorithm>
 #include <fstream>
@@ -38,6 +39,8 @@ TileType GameMap::charToTile(char c) const {
             return TileType::VanishingPlatform;
         case 'S':
             return TileType::Spike;
+        case 't':  // 薄横条，由 export_level 从 level02 横条图块导出
+            return TileType::ThinPlatform;
         case 'D':
             return TileType::PoisonDoor;
         case 'P':
@@ -85,13 +88,16 @@ char GameMap::tileToChar(TileType type) const {
             return '~';
         case TileType::Spike:
             return 'S';
+        case TileType::ThinPlatform:
+            return 't';
         default:
             return '#';
     }
 }
 
 bool GameMap::loadFromFile(const std::string& path) {
-    std::ifstream file(path);
+    const std::string resolved = resolveAssetPath(path);
+    std::ifstream file(resolved);
     if (!file.is_open()) {
         return false;
     }
@@ -178,13 +184,15 @@ void GameMap::setTile(int x, int y, TileType type) {
 }
 
 bool GameMap::isSolid(TileType type) const {
-    return type == TileType::Solid || type == TileType::OneWayPlatform || type == TileType::VanishingPlatform;
+    return type == TileType::Solid || type == TileType::OneWayPlatform || type == TileType::VanishingPlatform ||
+           type == TileType::ThinPlatform;
 }
 
 bool GameMap::blocksPlayer(TileType type, PlayerRole role, bool fireDoorOpen, bool waterDoorOpen,
                            bool poisonDoorOpen) const {
     (void) role;
-    if (type == TileType::Solid) {
+    // ThinPlatform 走 Physics 专用碰撞，此处标记为阻挡以便 snap/查询
+    if (type == TileType::Solid || type == TileType::ThinPlatform) {
         return true;
     }
     // 门：对应角色踩按钮后暂时可通过

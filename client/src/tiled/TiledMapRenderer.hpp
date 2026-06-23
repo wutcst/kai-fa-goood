@@ -30,6 +30,8 @@ public:
     bool hasCustomBackground() const { return !imageLayers_.empty(); }
     int mapWidth() const { return mapWidth_; }
     int mapHeight() const { return mapHeight_; }
+    // pickup 对象层中的可收集物数量（第一关结算 gemGoal 回退用）
+    int collectibleCount() const { return static_cast<int>(collectibleObjectTiles_.size()); }
 
 private:
     struct TileAnimation {
