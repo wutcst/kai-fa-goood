@@ -25,6 +25,7 @@ LOGIC_TO_CHAR = {
     "water": "W",
     "fire_door": "F",
     "water_door": "I",
+    "poison_door": "D",
     "fire_exit": "E",
     "water_exit": "X",
     "gem": "G",
@@ -35,6 +36,30 @@ LOGIC_TO_CHAR = {
 }
 
 COLLISION_LAYER_NAMES = ("Collision", "碰撞")
+GAME_TILE_SIZE = 32
+
+MERGE_PRIORITY = {
+    "f": 100,
+    "w": 100,
+    "p": 100,
+    "S": 90,
+    "L": 90,
+    "W": 90,
+    "A": 90,
+    "B": 80,
+    "F": 70,
+    "I": 70,
+    "D": 70,
+    "E": 65,
+    "X": 65,
+    "P": 65,
+    "G": 60,
+    "~": 55,
+    "^": 50,
+    "t": 45,
+    "#": 40,
+    ".": 0,
+}
 
 
 def parse_tileset_tsx(tsx_path: Path) -> dict[int, str]:
@@ -283,12 +308,56 @@ def nearest_spawn_tile(rows: list[list[str]], tx: int, ty: int) -> tuple[int, in
             continue
         if rows[y][tx] != ".":
             continue
-        if y + 1 < height and rows[y + 1][tx] in ("#", "^", "~"):
+        if y + 1 < height and rows[y + 1][tx] in ("#", "^", "~", "t"):
             return tx, y
     for y in range(start_y, -1, -1):
         if 0 <= tx < width and rows[y][tx] == ".":
             return tx, y
     return nearest_empty_tile(rows, tx, ty)
+
+
+def merged_char(cells: list[str]) -> str:
+    best = "."
+    best_priority = -1
+    for cell in cells:
+        priority = MERGE_PRIORITY.get(cell, 0)
+        if priority > best_priority:
+            best = cell
+            best_priority = priority
+    return best
+
+
+def merge_rows_to_game_tiles(rows: list[list[str]], tile_width: int, tile_height: int) -> list[list[str]]:
+    if not rows or tile_width <= 0 or tile_height <= 0:
+        return rows
+    if tile_width == GAME_TILE_SIZE and tile_height == GAME_TILE_SIZE:
+        return rows
+    if GAME_TILE_SIZE % tile_width != 0 or GAME_TILE_SIZE % tile_height != 0:
+        return rows
+
+    scale_x = GAME_TILE_SIZE // tile_width
+    scale_y = GAME_TILE_SIZE // tile_height
+    if scale_x <= 1 and scale_y <= 1:
+        return rows
+
+    height = len(rows)
+    width = len(rows[0]) if rows else 0
+    merged: list[list[str]] = []
+    for out_y in range((height + scale_y - 1) // scale_y):
+        row: list[str] = []
+        for out_x in range((width + scale_x - 1) // scale_x):
+            cells: list[str] = []
+            for dy in range(scale_y):
+                y = out_y * scale_y + dy
+                if y >= height:
+                    continue
+                for dx in range(scale_x):
+                    x = out_x * scale_x + dx
+                    if x < width:
+                        cells.append(rows[y][x])
+            row.append(merged_char(cells))
+        merged.append(row)
+    return merged
 
 
 def apply_objects(
@@ -346,6 +415,13 @@ def apply_objects(
                 break
 
 
+def solidify_level03_lower_terrain(rows: list[list[str]]) -> None:
+    for y in range(18, len(rows)):
+        for x, cell in enumerate(rows[y]):
+            if cell in ("F", "I", "D"):
+                rows[y][x] = "#"
+
+
 def export_tmx(tmx_path: Path, output_path: Path) -> None:
     map_root = ET.parse(tmx_path).getroot()
     width = int(map_root.get("width", "0"))
@@ -376,6 +452,8 @@ def export_tmx(tmx_path: Path, output_path: Path) -> None:
         rows.append(row)
 
     apply_objects(rows, map_root, tile_width, tile_height, tilesets)
+    if tmx_path.stem == "level03":
+        solidify_level03_lower_terrain(rows)
     seal_map_borders(rows)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
