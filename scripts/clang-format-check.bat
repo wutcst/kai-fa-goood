@@ -6,7 +6,11 @@ set "FAILED=0"
 set "FILES=%TEMP%\fire-ice-format-files-%RANDOM%.txt"
 
 echo Checking C++ source formatting...
-dir /s /b "%ROOT%\fire-ice\src\*.cpp" "%ROOT%\fire-ice\src\*.hpp" > "%FILES%" 2>nul
+(
+  dir /s /b "%ROOT%\client\src\*.cpp" "%ROOT%\client\src\*.hpp" 2>nul
+  dir /s /b "%ROOT%\server\src\*.cpp" "%ROOT%\server\src\*.hpp" 2>nul
+  dir /s /b "%ROOT%\shared\src\*.cpp" "%ROOT%\shared\src\*.hpp" 2>nul
+) > "%FILES%" 2>nul
 
 for /f "usebackq delims=" %%f in ("%FILES%") do (
   clang-format --dry-run --Werror "%%f" >nul 2>&1

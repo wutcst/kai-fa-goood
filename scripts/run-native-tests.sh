@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="$ROOT_DIR/fire-ice/build"
+BUILD_DIR="$ROOT_DIR/build"
 
 test -f "$BUILD_DIR/fireice_tests.exe"
 test -f "$BUILD_DIR/fireice_server.exe"

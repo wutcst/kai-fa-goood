@@ -28,7 +28,7 @@
 | **地图系统** | 碰撞（`*_collision.txt`）与视觉（`*.tmx`）分离；客户端 Tiled 烘焙渲染 |
 | **8 张关卡** | 全部注册并默认解锁，选关界面支持 **地图缩略图预览** |
 | **UI** | 中文主菜单、三卡位等待室、关卡路径选关、HUD、胜负 overlay |
-| **地图工具链** | Tiled 导入 / 导出脚本，详见 [`fire-ice/docs/TILED_MAP_GUIDE.md`](fire-ice/docs/TILED_MAP_GUIDE.md) |
+| **地图工具链** | Tiled 导入 / 导出脚本，详见 [`assets/maps/README.md`](assets/maps/README.md) |
 
 ### 引擎已支持、关卡暂未大量使用
 
@@ -54,7 +54,7 @@
 | **v0.2.0** | 里程碑 2 — 关卡与玩法扩展 | 🚧 进行中 | Tiled 三关地图、消失平台 / 泥浆 / 风扇等机制（[Issue #3](https://github.com/wutcst/kai-fa-goood/issues/3) 已关闭） |
 | **v0.3.0** | 里程碑 3 — 质量与体验 | 📋 待开发 | 单元测试、HUD / 暂停菜单、机关扩展、单人专属关等（[Issue #5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
 
-> CMake 项目版本：`FireIceOnline VERSION 0.1.0`（`fire-ice/CMakeLists.txt`）。里程碑 2 合并后可考虑 bump 至 `0.2.0`。  
+> CMake 项目版本：`FireIceOnline VERSION 0.1.0`（根目录 `CMakeLists.txt`）。里程碑 2 合并后可考虑 bump 至 `0.2.0`。  
 > GitHub 仓库尚未创建正式的 Milestone 对象，以上以 Issue 标题与进度为准。
 
 ### CI / 代码规范
@@ -136,50 +136,41 @@ mvn -DskipFormatCheck=true verify package
 ## 架构概览
 
 ```
-fire-ice/
-├── fireice_server.exe    # 权威服务端：物理模拟、胜负判定、状态广播
-├── fireice_client.exe    # 客户端：渲染、输入、UI、接收状态
-└── fireice_common        # 共享库：地图、物理、关卡目录、协议
-```
-
-**网络模型**
-
-- 服务端以 **60 Hz**  tick 物理，以 **20 Hz** 广播 `WorldState`  
-- 客户端发送输入包（`InputPacket`）与大厅操作（`ActionPacket`）  
-- 地图碰撞只在服务端加载；客户端额外加载 TMX 做视觉  
-
-**地图双文件**
-
-| 文件 | 用途 |
-|------|------|
-| `assets/levels/levelXX_collision.txt` | ASCII 碰撞网格，服务端物理 |
-| `assets/maps/levelXX.tmx` | Tiled 视觉，客户端渲染（16px 图块缩放至 32px） |
-
----
-
-## 目录结构
-
-```
 kai-fa-goood/
-├── README.md                 # 本文件
-├── fire-ice/
-│   ├── CMakeLists.txt
-│   ├── build.bat             # Windows 一键编译
-│   ├── run_local.bat         # 启动本地服务端 + 火娃客户端
-│   ├── assets/
-│   │   ├── levels/           # 碰撞地图（*.txt）
-│   │   ├── maps/             # Tiled 工程与 *.tmx
-│   │   └── textures/         # UI 与角色贴图
-│   ├── docs/
-│   │   └── TILED_MAP_GUIDE.md
-│   ├── tools/
-│   │   ├── export_level.py   # TMX → collision.txt
-│   │   └── import_tiled_level.py
-│   └── src/
-│       ├── common/           # Map, Physics, LevelCatalog, Protocol, Types
-│       ├── server/           # GameServer
-│       └── client/           # GameClient, TiledMapRenderer, UI
+├── client/                   # 客户端：源码 + 启动脚本
+│   ├── src/                  # GameClient、UI、Tiled 渲染、网络客户端
+│   ├── run.bat               # 启动客户端
+│   ├── sync_assets.bat       # 同步资源到 build\Release
+│   └── package.bat           # 打包可分发的客户端
+├── server/                   # 服务端：源码 + 部署脚本
+│   ├── src/                  # GameServer、房间网络
+│   ├── run.bat / run.sh      # 启动服务端
+│   └── stop.bat / stop.sh    # 停止服务端
+├── shared/                   # 客户端与服务端共用逻辑
+│   └── src/                  # 地图、物理、关卡目录、协议、Room 仿真
+├── assets/                   # 游戏资源（关卡、地图、贴图）
+├── tools/                    # 地图导入/导出 Python 脚本
+├── tests/                    # C++ 单元测试
+├── build.bat                 # 编译（生成 build\Release\*.exe）
+├── start.bat                 # 快捷启动客户端
+│
+├── src/                      # Java 启动器（Maven 规范目录，CI 打包用）
+├── target/                   # Maven 编译产物（自动生成，勿手动改）
+├── scripts/                  # CI / Maven 原生构建脚本
+└── pom.xml                   # Maven 项目配置
 ```
+
+**各文件夹是干什么的？**
+
+| 文件夹 | 用途 |
+|--------|------|
+| `client/` | 你日常改客户端 UI、渲染、输入的代码 |
+| `server/` | 服务端逻辑与远端部署脚本 |
+| `shared/` | 两边都要用的游戏规则（改这里两边都会受影响） |
+| `assets/` | 关卡、地图、贴图等资源 |
+| `target/` | 跑 `mvn package` 后 Maven 自动生成的 JAR，**不是源码** |
+| `src/` | Java 启动器源码（双击 JAR 时用的包装层） |
+| `build/` | 跑 `build.bat` 后 CMake 生成的 exe，**不是源码** |
 
 ---
 
@@ -195,11 +186,10 @@ kai-fa-goood/
 ### 编译
 
 ```bat
-cd fire-ice
 build.bat
 ```
 
-编译成功后，可执行文件与资源位于 `fire-ice/build/Release/`。
+编译成功后，可执行文件与资源位于 `build\Release\`。
 
 > 若出现 `LNK1104` 链接错误，请先关闭所有游戏窗口再重新运行 `build.bat`。
 
@@ -208,16 +198,16 @@ build.bat
 **方式一：一键启动（推荐）**
 
 ```bat
-cd fire-ice
-run_local.bat
+start.bat
 ```
 
-将自动启动服务端和一个火娃客户端。在客户端主菜单选择 **「创建房间」** 并按 Enter 连接。
+将启动客户端并连接远端服务器。在客户端主菜单选择 **「创建房间」** 并按 Enter 连接。
 
 **方式二：手动多开联机**
 
 ```bat
-cd fire-ice\build\Release
+server\run.bat
+cd build\Release
 
 fireice_server.exe
 
@@ -285,22 +275,22 @@ fireice_client.exe 127.0.0.1 poison
 | 7 | `level07_collision.txt` | `level07.tmx` | Element Maze | 1～3 | 元素伤害迷宫 |
 | 8 | `level08_collision.txt` | `level08.tmx` | Forest Shrine | 1～3 | 终局神社挑战 |
 
-关卡注册位于 `fire-ice/src/common/LevelCatalog.cpp`。新增关卡后需同步修改该文件并重新编译。
+关卡注册位于 `shared/src/LevelCatalog.cpp`。新增关卡后需同步修改该文件并重新编译。
 
 ---
 
 ## 地图开发
 
-完整流程见 **[Tiled 地图工作流](fire-ice/docs/TILED_MAP_GUIDE.md)**。
+完整流程见 **[Tiled 地图工作流](assets/maps/README.md)**。
 
 **常用命令：**
 
 ```bat
 # 从 Tiled 导出碰撞
-python fire-ice/tools/export_level.py fire-ice/assets/maps/level01.tmx
+python tools/export_level.py assets/maps/level01.tmx
 
 # 从 Tiled 工程文件夹一键导入新关
-python fire-ice/tools/import_tiled_level.py "你的Tiled文件夹路径" --level 2
+python tools/import_tiled_level.py "你的Tiled文件夹路径" --level 2
 ```
 
 **collision.txt 字符约定：**
@@ -347,4 +337,4 @@ python fire-ice/tools/import_tiled_level.py "你的Tiled文件夹路径" --level
 
 ## 许可证
 
-本项目为课程实训作品，资源文件请参见 `fire-ice/assets/textures/map/LICENSE.txt`。如需二次分发，请先确认各素材授权。
+本项目为课程实训作品，资源文件请参见 `assets/textures/map/LICENSE.txt`。如需二次分发，请先确认各素材授权。

@@ -20,32 +20,37 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(SFML)
 
-add_library(fireice_common STATIC
-    src/common/Map.cpp
-    src/common/Physics.cpp
-    src/common/Paths.cpp
-    src/common/LevelCatalog.cpp
-    src/common/Pickup.cpp
-    src/common/LevelMechanics.cpp
+add_library(fireice_core STATIC
+    shared/src/Map.cpp
+    shared/src/Physics.cpp
+    shared/src/Paths.cpp
+    shared/src/LevelCatalog.cpp
+    shared/src/Pickup.cpp
+    shared/src/LevelMechanics.cpp
+    shared/src/Room.cpp
 )
-target_include_directories(fireice_common PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/common
+target_include_directories(fireice_core PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/shared/src
 )
-target_link_libraries(fireice_common PUBLIC sfml-system)
+target_link_libraries(fireice_core PUBLIC sfml-system)
 
 add_executable(fireice_server
-    src/server/GameServer.cpp
-    src/server/main.cpp
+    server/src/GameServer.cpp
+    server/src/RoomNetwork.cpp
+    server/src/main.cpp
 )
 target_include_directories(fireice_server PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/server
+    ${CMAKE_CURRENT_SOURCE_DIR}/server/src
 )
-target_link_libraries(fireice_server PRIVATE fireice_common sfml-network sfml-system pthread)
+target_link_libraries(fireice_server PRIVATE fireice_core sfml-network sfml-system pthread)
 
-# Copy level maps to build output
 add_custom_command(TARGET fireice_server POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:fireice_server>/levels"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_SOURCE_DIR}/assets/levels"
         "$<TARGET_FILE_DIR:fireice_server>/levels"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:fireice_server>/maps"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_SOURCE_DIR}/assets/maps"
+        "$<TARGET_FILE_DIR:fireice_server>/maps"
 )

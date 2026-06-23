@@ -11,7 +11,7 @@ while IFS= read -r file; do
     echo "Fix with: clang-format -i $file"
     FAILED=1
   fi
-done < <(find "$ROOT_DIR/fire-ice/src" -name '*.cpp' -o -name '*.hpp' | sort)
+done < <(find "$ROOT_DIR/client/src" "$ROOT_DIR/server/src" "$ROOT_DIR/shared/src" -name '*.cpp' -o -name '*.hpp' | sort)
 
 if [ "$FAILED" -ne 0 ]; then
   echo "Code formatting check failed."

@@ -2,7 +2,7 @@
 setlocal
 
 set "ROOT=%~dp0.."
-set "BUILD=%ROOT%\fire-ice\build"
+set "BUILD=%ROOT%\build"
 
 if not exist "%BUILD%\fireice_tests.exe" (
   echo Missing fireice_tests.exe. Rebuild native project first.

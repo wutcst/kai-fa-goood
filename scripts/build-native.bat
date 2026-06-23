@@ -2,7 +2,7 @@
 setlocal
 
 set ROOT=%~dp0..
-set BUILD=%ROOT%\fire-ice\build
+set BUILD=%ROOT%\build
 
 if exist "%BUILD%\CMakeCache.txt" (
   findstr /C:"CMAKE_GENERATOR:INTERNAL=Ninja" "%BUILD%\CMakeCache.txt" >nul
@@ -13,7 +13,7 @@ if exist "%BUILD%\CMakeCache.txt" (
 )
 
 echo Configuring native build...
-cmake -S "%ROOT%\fire-ice" -B "%BUILD%" -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake -S "%ROOT%" -B "%BUILD%" -G Ninja -DCMAKE_BUILD_TYPE=Release
 if %ERRORLEVEL% NEQ 0 (
   echo Native configure failed.
   exit /b 1

@@ -59,9 +59,9 @@ jobs:
         with:
           name: fire-ice-native-bin
           path: |
-            fire-ice/build/fireice_server.exe
-            fire-ice/build/fireice_client.exe
-            fire-ice/build/*.dll
+            build/fireice_server.exe
+            build/fireice_client.exe
+            build/*.dll
           retention-days: 7
 
   publish-release:

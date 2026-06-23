@@ -1,9 +1,9 @@
 # 忽略以下目录中的所有子目录及文件
 /target/*
 /.idea/*
-/fire-ice/build/*
-/fire-ice/build/
-/fire-ice/dist/
+/build/*
+/build/
+/dist/
 
 # 忽略以下文件
 *.iml

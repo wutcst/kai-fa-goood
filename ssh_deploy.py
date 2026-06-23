@@ -11,7 +11,7 @@ PORT = 22
 USER = "root"
 PASSWORD = "wll13569035397."
 PROJECT = "/root/fire-ice"
-LOCAL_SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fire-ice")
+LOCAL_SRC = os.path.dirname(os.path.abspath(__file__))
 
 
 class Deploy:
@@ -128,7 +128,7 @@ def install_deps(deploy):
 
 def upload_code(deploy):
     print("\n=== Uploading Source Code ===")
-    deploy.run(f"mkdir -p {PROJECT}/src/common {PROJECT}/src/server {PROJECT}/src/client {PROJECT}/assets/levels {PROJECT}/assets/textures")
+    deploy.run(f"mkdir -p {PROJECT}/shared/src {PROJECT}/server/src {PROJECT}/assets/levels {PROJECT}/assets/textures")
 
     local = LOCAL_SRC.replace("\\", "/")
     deploy_local = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
@@ -141,24 +141,29 @@ def upload_code(deploy):
 
     # Files to upload (only what server needs)
     files = [
-        (f"{local}/src/common/Types.hpp", f"{PROJECT}/src/common/Types.hpp"),
-        (f"{local}/src/common/Protocol.hpp", f"{PROJECT}/src/common/Protocol.hpp"),
-        (f"{local}/src/common/Map.hpp", f"{PROJECT}/src/common/Map.hpp"),
-        (f"{local}/src/common/Map.cpp", f"{PROJECT}/src/common/Map.cpp"),
-        (f"{local}/src/common/Paths.hpp", f"{PROJECT}/src/common/Paths.hpp"),
-        (f"{local}/src/common/Paths.cpp", f"{PROJECT}/src/common/Paths.cpp"),
-        (f"{local}/src/common/Physics.hpp", f"{PROJECT}/src/common/Physics.hpp"),
-        (f"{local}/src/common/Physics.cpp", f"{PROJECT}/src/common/Physics.cpp"),
-        (f"{local}/src/common/LevelCatalog.hpp", f"{PROJECT}/src/common/LevelCatalog.hpp"),
-        (f"{local}/src/common/LevelCatalog.cpp", f"{PROJECT}/src/common/LevelCatalog.cpp"),
-        (f"{local}/src/common/LevelProgress.hpp", f"{PROJECT}/src/common/LevelProgress.hpp"),
-        (f"{local}/src/common/Pickup.hpp", f"{PROJECT}/src/common/Pickup.hpp"),
-        (f"{local}/src/common/Pickup.cpp", f"{PROJECT}/src/common/Pickup.cpp"),
-        (f"{local}/src/common/LevelMechanics.hpp", f"{PROJECT}/src/common/LevelMechanics.hpp"),
-        (f"{local}/src/common/LevelMechanics.cpp", f"{PROJECT}/src/common/LevelMechanics.cpp"),
-        (f"{local}/src/server/GameServer.hpp", f"{PROJECT}/src/server/GameServer.hpp"),
-        (f"{local}/src/server/GameServer.cpp", f"{PROJECT}/src/server/GameServer.cpp"),
-        (f"{local}/src/server/main.cpp", f"{PROJECT}/src/server/main.cpp"),
+        (f"{local}/shared/src/Types.hpp", f"{PROJECT}/shared/src/Types.hpp"),
+        (f"{local}/shared/src/Protocol.hpp", f"{PROJECT}/shared/src/Protocol.hpp"),
+        (f"{local}/shared/src/Map.hpp", f"{PROJECT}/shared/src/Map.hpp"),
+        (f"{local}/shared/src/Map.cpp", f"{PROJECT}/shared/src/Map.cpp"),
+        (f"{local}/shared/src/Paths.hpp", f"{PROJECT}/shared/src/Paths.hpp"),
+        (f"{local}/shared/src/Paths.cpp", f"{PROJECT}/shared/src/Paths.cpp"),
+        (f"{local}/shared/src/Physics.hpp", f"{PROJECT}/shared/src/Physics.hpp"),
+        (f"{local}/shared/src/Physics.cpp", f"{PROJECT}/shared/src/Physics.cpp"),
+        (f"{local}/shared/src/LevelCatalog.hpp", f"{PROJECT}/shared/src/LevelCatalog.hpp"),
+        (f"{local}/shared/src/LevelCatalog.cpp", f"{PROJECT}/shared/src/LevelCatalog.cpp"),
+        (f"{local}/shared/src/LevelProgress.hpp", f"{PROJECT}/shared/src/LevelProgress.hpp"),
+        (f"{local}/shared/src/Pickup.hpp", f"{PROJECT}/shared/src/Pickup.hpp"),
+        (f"{local}/shared/src/Pickup.cpp", f"{PROJECT}/shared/src/Pickup.cpp"),
+        (f"{local}/shared/src/LevelMechanics.hpp", f"{PROJECT}/shared/src/LevelMechanics.hpp"),
+        (f"{local}/shared/src/LevelMechanics.cpp", f"{PROJECT}/shared/src/LevelMechanics.cpp"),
+        (f"{local}/shared/src/Room.hpp", f"{PROJECT}/shared/src/Room.hpp"),
+        (f"{local}/shared/src/Room.cpp", f"{PROJECT}/shared/src/Room.cpp"),
+        (f"{local}/server/src/GameServer.hpp", f"{PROJECT}/server/src/GameServer.hpp"),
+        (f"{local}/server/src/GameServer.cpp", f"{PROJECT}/server/src/GameServer.cpp"),
+        (f"{local}/server/src/RoomNetwork.hpp", f"{PROJECT}/server/src/RoomNetwork.hpp"),
+        (f"{local}/server/src/RoomNetwork.cpp", f"{PROJECT}/server/src/RoomNetwork.cpp"),
+        (f"{local}/server/src/ServerRoom.hpp", f"{PROJECT}/server/src/ServerRoom.hpp"),
+        (f"{local}/server/src/main.cpp", f"{PROJECT}/server/src/main.cpp"),
     ]
 
     for local_file, remote_file in files:

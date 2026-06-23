@@ -13,7 +13,7 @@
             <outputDirectory>/</outputDirectory>
         </fileSet>
         <fileSet>
-            <directory>${project.basedir}/fire-ice/build</directory>
+            <directory>${project.basedir}/build</directory>
             <outputDirectory>native</outputDirectory>
             <includes>
                 <include>fireice_server.exe</include>
@@ -22,15 +22,15 @@
             </includes>
         </fileSet>
         <fileSet>
-            <directory>${project.basedir}/fire-ice/build/levels</directory>
+            <directory>${project.basedir}/build/levels</directory>
             <outputDirectory>native/levels</outputDirectory>
         </fileSet>
         <fileSet>
-            <directory>${project.basedir}/fire-ice/build/textures</directory>
+            <directory>${project.basedir}/build/textures</directory>
             <outputDirectory>native/textures</outputDirectory>
         </fileSet>
         <fileSet>
-            <directory>${project.basedir}/fire-ice/build/maps</directory>
+            <directory>${project.basedir}/build/maps</directory>
             <outputDirectory>native/maps</outputDirectory>
         </fileSet>
     </fileSets>
