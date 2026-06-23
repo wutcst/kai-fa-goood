@@ -107,6 +107,11 @@ bool AssetManager::load() {
     pauseIconReady_ = loadPixelTexture(pauseIcon_, "pause_icon.png");
     pauseMenuReady_ = loadTexture(pauseMenu_, "pause_menu.png");
 
+    victoryUiReady_ = loadTexture(victoryMenu_, "victory/victory_menu.png") &&
+                      loadTexture(victoryButtonMenu_, "victory/victory_button_menu.png") &&
+                      loadTexture(victoryButtonRetry_, "victory/victory_button_retry.png") &&
+                      loadTexture(victoryButtonNext_, "victory/victory_button_next.png");
+
     mapIconsReady_ = loadMapIcons();
 
     musicPath_ = resolveAssetPath("textures/LevelMusic.wav");

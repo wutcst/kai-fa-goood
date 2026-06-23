@@ -183,6 +183,76 @@ PauseMenuMetrics computePauseMenuMetrics(float mapH, float centerX) {
     return metrics;
 }
 
+struct PauseMenuPanelDraw {
+    PauseMenuMetrics metrics;
+    float centerX = 0.0f;
+    float panelLeft = 0.0f;
+    float panelTop = 0.0f;
+    float drawW = 0.0f;
+    float drawH = 0.0f;
+    bool usesTexture = false;
+
+    sf::FloatRect mapRect(const sf::FloatRect& rect) const {
+        if (!usesTexture) {
+            return rect;
+        }
+        const float baseLeft = centerX - metrics.panelDrawW / 2.0f;
+        return {panelLeft + (rect.left - baseLeft) / metrics.panelDrawW * drawW,
+                panelTop + (rect.top - metrics.panelTop) / metrics.panelDrawH * drawH,
+                rect.width / metrics.panelDrawW * drawW, rect.height / metrics.panelDrawH * drawH};
+    }
+
+    sf::FloatRect menuBtn() const { return mapRect(metrics.menuBtn); }
+    sf::FloatRect retryBtn() const { return mapRect(metrics.retryBtn); }
+    sf::FloatRect continueBtn() const { return mapRect(metrics.continueBtn); }
+};
+
+PauseMenuPanelDraw computePauseMenuPanelDraw(float mapH, float centerX, const sf::Texture* texture) {
+    PauseMenuPanelDraw draw;
+    draw.centerX = centerX;
+    draw.metrics = computePauseMenuMetrics(mapH, centerX);
+    if (texture != nullptr && texture->getSize().x > 0 && texture->getSize().y > 0) {
+        draw.usesTexture = true;
+        const float scale = std::min(draw.metrics.panelDrawW / static_cast<float>(texture->getSize().x),
+                                     draw.metrics.panelDrawH / static_cast<float>(texture->getSize().y));
+        draw.drawW = static_cast<float>(texture->getSize().x) * scale;
+        draw.drawH = static_cast<float>(texture->getSize().y) * scale;
+        draw.panelLeft = centerX - draw.drawW / 2.0f;
+        draw.panelTop = mapH / 2.0f - draw.drawH / 2.0f;
+    }
+    return draw;
+}
+
+void drawPauseMenuTexture(sf::RenderWindow& window, const PauseMenuPanelDraw& draw, const sf::Texture& texture) {
+    sf::Sprite screen(texture);
+    const float scale = draw.drawW / static_cast<float>(texture.getSize().x);
+    screen.setScale(scale, scale);
+    screen.setPosition(draw.panelLeft, draw.panelTop);
+    window.draw(screen);
+}
+
+float resultOverlayMapHeight(int mapRows, int tiledMapRows, bool tiledReady, uint8_t levelIndex) {
+    int overlayRows = mapRows;
+    if (levelIndex == 0 && tiledReady) {
+        overlayRows = std::max(overlayRows, tiledMapRows);
+    }
+    return static_cast<float>(overlayRows) * TILE_SIZE;
+}
+
+void drawPauseStyleMenuPanel(sf::RenderWindow& window, const fireice::UiHelper& ui, float centerX, float mapH) {
+    const PauseMenuMetrics metrics = computePauseMenuMetrics(mapH, centerX);
+
+    ui.drawPanel(window,
+                 {centerX - metrics.panelDrawW / 2.0f, metrics.panelTop, metrics.panelDrawW, metrics.panelDrawH},
+                 sf::Color(180, 180, 180), 235.0f);
+    ui.drawOutlinedCenteredText(window, fireice::text::pauseTitle(), centerX,
+                                metrics.panelTop + metrics.panelDrawH * 0.18f, 42, sf::Color(255, 220, 80),
+                                sf::Color(40, 30, 20), 3.0f);
+    ui.drawButton(window, metrics.menuBtn, fireice::text::pauseMenuButton(), true, sf::Color(120, 120, 130));
+    ui.drawButton(window, metrics.retryBtn, fireice::text::resultRetryButton(), true, sf::Color(180, 120, 50));
+    ui.drawButton(window, metrics.continueBtn, fireice::text::pauseContinueButton(), true, sf::Color(80, 150, 90));
+}
+
 struct GameOverLayout {
     float panelTop = 0.0f;
     float panelDrawW = 0.0f;
@@ -222,52 +292,51 @@ struct VictoryLayout {
     float panelDrawW = 0.0f;
     float panelDrawH = 0.0f;
     float titleY = 0.0f;
-    float subtitleY = 0.0f;
     float scoreY = 0.0f;
     float uiScale = 1.0f;
-    sf::FloatRect retryBtn;
-    sf::FloatRect continueBtn;
     sf::FloatRect menuBtn;
-    bool hasContinueBtn = false;
+    sf::FloatRect retryBtn;
+    sf::FloatRect nextBtn;
 };
 
-VictoryLayout computeVictoryLayout(float mapH, float centerX, float windowW, bool hasNextLevel) {
+VictoryLayout computeVictoryLayout(float mapH, float centerX, float windowW) {
     VictoryLayout layout;
     layout.uiScale = gameOverlayUiScale(windowW);
 
     layout.panelDrawW = 640.0f * layout.uiScale;
-    layout.panelDrawH = 500.0f * layout.uiScale;
+    layout.panelDrawH = 440.0f * layout.uiScale;
+    layout.panelTop = mapH / 2.0f - layout.panelDrawH / 2.0f;
+    layout.titleY = layout.panelTop + layout.panelDrawH * 0.13f;
+    layout.scoreY = layout.panelTop + layout.panelDrawH * 0.36f;
 
-    const float btnH = 52.0f * layout.uiScale;
-    const float gapBelowPanel = 18.0f * layout.uiScale;
-    const float totalH = layout.panelDrawH + gapBelowPanel + btnH;
-    if (totalH > mapH - 20.0f) {
-        const float fitScale = (mapH - 20.0f) / totalH;
-        layout.panelDrawH *= fitScale;
-        layout.panelDrawW *= fitScale;
-        layout.uiScale *= fitScale;
-    }
-
-    layout.panelTop = (mapH - layout.panelDrawH - gapBelowPanel - btnH) / 2.0f;
-    layout.titleY = layout.panelTop + layout.panelDrawH * 0.20f;
-    layout.subtitleY = layout.panelTop + layout.panelDrawH * 0.30f;
-    layout.scoreY = layout.panelTop + layout.panelDrawH * 0.40f;
-
-    const float btnW = 150.0f * layout.uiScale;
-    const float gap = 28.0f * layout.uiScale;
-    const float rowY = layout.panelTop + layout.panelDrawH + gapBelowPanel;
-    layout.hasContinueBtn = hasNextLevel;
-    if (hasNextLevel) {
-        const float totalW = btnW * 3.0f + gap * 2.0f;
-        const float startX = centerX - totalW / 2.0f;
-        layout.retryBtn = {startX, rowY, btnW, btnH};
-        layout.continueBtn = {startX + btnW + gap, rowY, btnW, btnH};
-        layout.menuBtn = {startX + (btnW + gap) * 2.0f, rowY, btnW, btnH};
-    } else {
-        layout.retryBtn = {centerX - btnW - gap / 2.0f, rowY, btnW, btnH};
-        layout.menuBtn = {centerX + gap / 2.0f, rowY, btnW, btnH};
-    }
+    const float btnW = 210.0f * layout.uiScale;
+    const float btnH = 68.0f * layout.uiScale;
+    const float gap = 44.0f * layout.uiScale;
+    const float row1Y = layout.panelTop + layout.panelDrawH * 0.54f;
+    const float row2Y = layout.panelTop + layout.panelDrawH * 0.74f;
+    layout.menuBtn = {centerX - btnW - gap / 2.0f, row1Y, btnW, btnH};
+    layout.retryBtn = {centerX + gap / 2.0f, row1Y, btnW, btnH};
+    layout.nextBtn = {centerX - btnW / 2.0f, row2Y, btnW, btnH};
     return layout;
+}
+
+void drawVictoryLabelButton(sf::RenderWindow& window, const fireice::UiHelper& ui, const sf::FloatRect& area,
+                            const sf::Texture& texture, const std::string& label, bool enabled, float uiScale,
+                            sf::Color tint) {
+    if (texture.getSize().x > 0 && texture.getSize().y > 0) {
+        sf::Sprite sprite(texture);
+        sprite.setScale(area.width / static_cast<float>(texture.getSize().x),
+                        area.height / static_cast<float>(texture.getSize().y));
+        sprite.setPosition(area.left, area.top);
+        sprite.setColor(enabled ? tint : sf::Color(220, 220, 218, 170));
+        window.draw(sprite);
+    }
+
+    const unsigned fontSize = static_cast<unsigned>(22.0f * uiScale);
+    const float textY = area.top + (area.height - static_cast<float>(fontSize)) * 0.40f;
+    ui.drawOutlinedCenteredText(window, label, area.left + area.width / 2.0f, textY, fontSize,
+                                enabled ? sf::Color(248, 246, 240) : sf::Color(200, 198, 192), sf::Color(110, 95, 80),
+                                1.5f);
 }
 
 constexpr float kRoomPanelRefW = 300.0f;
@@ -440,7 +509,6 @@ void GameClient::startSoloPlay() {
     host_ = "本地";
     localReady_ = false;
     roomAnimTimer_ = 0.0f;
-    clientScreen_ = ClientScreen::Room;
 
     syncWorldFromSession();
     useLobbyLayout();
@@ -1175,7 +1243,7 @@ void GameClient::handleWindowEvent(const sf::Event& event) {
         return;
     }
 
-    if (connected_ && renderWorld_.phase == GamePhase::Lobby && renderWorld_.lobbyStep == 0) {
+    if (connected_ && renderWorld_.phase == GamePhase::Lobby && renderWorld_.lobbyStep == 0 && !soloMode_) {
         if (event.key.code == sf::Keyboard::Enter && !localWaitingReady()) {
             requestWaitingReadyToggle();
             return;
@@ -1318,7 +1386,7 @@ void GameClient::render() {
             drawConnectingScreen(window_);
         }
     } else if (connected_ && renderWorld_.phase == GamePhase::Lobby) {
-        if (renderWorld_.lobbyStep == 0) {
+        if (renderWorld_.lobbyStep == 0 && !soloMode_) {
             renderRoomScreen();
         } else {
             renderLobbyScreen();
@@ -2937,16 +3005,18 @@ void GameClient::drawPlayer(sf::RenderWindow& window, const PlayerState& player)
     drawMagnetAura(window, player);
     drawSpeedBoostAura(window, player);
 
+    const float footLift = tiledMap_.ready() ? TILED_GROUND_FOOT_LIFT : 0.0f;
+
     if (assets_.ready() && assets_.character(player.role).ready()) {
         const InputFlags facingHint = player.role == role_ ? currentInput_ : InputFlags::None;
-        assets_.character(player.role).draw(window, player, animTime_, facingHint);
+        assets_.character(player.role).draw(window, player, animTime_, facingHint, footLift);
         return;
     }
 
     const float visualH = PLAYER_VISUAL_HEIGHT;
     const float visualW = PLAYER_WIDTH * (visualH / PLAYER_HEIGHT);
     const float visualX = player.x + (PLAYER_WIDTH - visualW) * 0.5f;
-    const float visualY = player.y + PLAYER_HEIGHT - visualH;
+    const float visualY = player.y + PLAYER_HEIGHT - visualH - footLift;
 
     sf::RectangleShape shadow({visualW, visualH});
     shadow.setPosition(visualX + 3.0f, visualY + 4.0f);
@@ -3105,36 +3175,14 @@ void GameClient::drawPauseOverlay(sf::RenderWindow& window, float centerX) const
     dim.setFillColor(sf::Color(0, 0, 0, 120));
     window.draw(dim);
 
-    const PauseMenuMetrics metrics = computePauseMenuMetrics(mapH, centerX);
-
-    if (assets_.hasPauseMenu()) {
-        const sf::Texture& screenTex = assets_.pauseMenu();
-        sf::Sprite screen(screenTex);
-        const float scale = std::min(metrics.panelDrawW / static_cast<float>(screenTex.getSize().x),
-                                     metrics.panelDrawH / static_cast<float>(screenTex.getSize().y));
-        const float drawW = static_cast<float>(screenTex.getSize().x) * scale;
-        const float drawH = static_cast<float>(screenTex.getSize().y) * scale;
-        const float drawTop = mapH / 2.0f - drawH / 2.0f;
-        screen.setScale(scale, scale);
-        screen.setPosition(centerX - drawW / 2.0f, drawTop);
-        window.draw(screen);
+    const sf::Texture* panelTex = assets_.hasPauseMenu() ? &assets_.pauseMenu() : nullptr;
+    if (panelTex != nullptr) {
+        const PauseMenuPanelDraw panelDraw = computePauseMenuPanelDraw(mapH, centerX, panelTex);
+        drawPauseMenuTexture(window, panelDraw, *panelTex);
         return;
     }
 
-    ui_.drawPanel(window,
-                  {centerX - metrics.panelDrawW / 2.0f, metrics.panelTop, metrics.panelDrawW, metrics.panelDrawH},
-                  sf::Color(180, 180, 180), 235.0f);
-    ui_.drawOutlinedCenteredText(window, text::pauseTitle(), centerX, metrics.panelTop + metrics.panelDrawH * 0.18f, 42,
-                                 sf::Color(255, 220, 80), sf::Color(40, 30, 20), 3.0f);
-
-    const auto drawPauseActionButton = [&](const sf::FloatRect& area, const std::string& label) {
-        ui_.drawPanel(window, area, sf::Color(180, 180, 180), 255.0f);
-        ui_.drawOutlinedCenteredText(window, label, area.left + area.width / 2.0f, area.top + 12.0f, 22,
-                                     sf::Color(255, 220, 80), sf::Color(40, 30, 20), 2.0f);
-    };
-    drawPauseActionButton(metrics.menuBtn, text::pauseMenuButton());
-    drawPauseActionButton(metrics.retryBtn, text::resultRetryButton());
-    drawPauseActionButton(metrics.continueBtn, text::pauseContinueButton());
+    drawPauseStyleMenuPanel(window, ui_, centerX, mapH);
 }
 
 bool GameClient::handlePauseMenuClick(const sf::Event& event) {
@@ -3145,55 +3193,24 @@ bool GameClient::handlePauseMenuClick(const sf::Event& event) {
     const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
     const float centerX = static_cast<float>(window_.getSize().x) / 2.0f;
     const float mapH = static_cast<float>(map_.height()) * TILE_SIZE;
-    const PauseMenuMetrics metrics = computePauseMenuMetrics(mapH, centerX);
+    const sf::Texture* panelTex = assets_.hasPauseMenu() ? &assets_.pauseMenu() : nullptr;
+    const PauseMenuPanelDraw panelDraw = computePauseMenuPanelDraw(mapH, centerX, panelTex);
 
-    if (assets_.hasPauseMenu()) {
-        const sf::Texture& screenTex = assets_.pauseMenu();
-        const float scale = std::min(metrics.panelDrawW / static_cast<float>(screenTex.getSize().x),
-                                     metrics.panelDrawH / static_cast<float>(screenTex.getSize().y));
-        const float drawW = static_cast<float>(screenTex.getSize().x) * scale;
-        const float drawH = static_cast<float>(screenTex.getSize().y) * scale;
-        const float panelLeft = centerX - drawW / 2.0f;
-        const float panelTop = mapH / 2.0f - drawH / 2.0f;
-        const float baseLeft = centerX - metrics.panelDrawW / 2.0f;
-        const auto scaleRect = [&](const sf::FloatRect& rect) {
-            return sf::FloatRect{panelLeft + (rect.left - baseLeft) / metrics.panelDrawW * drawW,
-                                 panelTop + (rect.top - metrics.panelTop) / metrics.panelDrawH * drawH,
-                                 rect.width / metrics.panelDrawW * drawW, rect.height / metrics.panelDrawH * drawH};
-        };
-        const sf::FloatRect menuBtn = scaleRect(metrics.menuBtn);
-        const sf::FloatRect retryBtn = scaleRect(metrics.retryBtn);
-        const sf::FloatRect continueBtn = scaleRect(metrics.continueBtn);
+    const sf::FloatRect menuBtn = panelDraw.menuBtn();
+    const sf::FloatRect retryBtn = panelDraw.retryBtn();
+    const sf::FloatRect continueBtn = panelDraw.continueBtn();
 
-        if (continueBtn.contains(mouse)) {
-            paused_ = false;
-            return true;
-        }
-        if (menuBtn.contains(mouse)) {
-            paused_ = false;
-            localReady_ = false;
-            sendAction(PlayerAction::ReturnToLobby);
-            return true;
-        }
-        if (retryBtn.contains(mouse)) {
-            paused_ = false;
-            sendAction(PlayerAction::Restart);
-            return true;
-        }
-        return true;
-    }
-
-    if (metrics.continueBtn.contains(mouse)) {
+    if (continueBtn.contains(mouse)) {
         paused_ = false;
         return true;
     }
-    if (metrics.menuBtn.contains(mouse)) {
+    if (menuBtn.contains(mouse)) {
         paused_ = false;
         localReady_ = false;
         sendAction(PlayerAction::ReturnToLobby);
         return true;
     }
-    if (metrics.retryBtn.contains(mouse)) {
+    if (retryBtn.contains(mouse)) {
         paused_ = false;
         sendAction(PlayerAction::Restart);
         return true;
@@ -3208,7 +3225,8 @@ bool GameClient::handleResultOverlayClick(const sf::Event& event) {
 
     const sf::Vector2f mouse(static_cast<float>(event.mouseButton.x), static_cast<float>(event.mouseButton.y));
     const float centerX = static_cast<float>(window_.getSize().x) / 2.0f;
-    const float mapH = static_cast<float>(map_.height()) * TILE_SIZE;
+    const float mapH = resultOverlayMapHeight(map_.height(), tiledMap_.ready() ? tiledMap_.mapHeight() : map_.height(),
+                                              tiledMap_.ready(), renderWorld_.levelIndex);
 
     if (renderWorld_.phase == GamePhase::GameOver) {
         const GameOverLayout layout = computeGameOverLayout(mapH, centerX, static_cast<float>(window_.getSize().x));
@@ -3229,15 +3247,14 @@ bool GameClient::handleResultOverlayClick(const sf::Event& event) {
     const bool hasNextLevel =
         renderWorld_.levelIndex + 1 < renderWorld_.levelCount &&
         isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(renderWorld_.levelIndex + 1));
-    const VictoryLayout layout =
-        computeVictoryLayout(mapH, centerX, static_cast<float>(window_.getSize().x), hasNextLevel);
+    const VictoryLayout layout = computeVictoryLayout(mapH, centerX, static_cast<float>(window_.getSize().x));
 
     if (layout.retryBtn.contains(mouse)) {
         localReady_ = false;
         sendAction(PlayerAction::Restart);
         return true;
     }
-    if (layout.hasContinueBtn && layout.continueBtn.contains(mouse)) {
+    if (hasNextLevel && layout.nextBtn.contains(mouse)) {
         localReady_ = false;
         sendAction(PlayerAction::NextLevel);
         return true;
@@ -3261,20 +3278,15 @@ void GameClient::drawCountdownOverlay(sf::RenderWindow& window, float centerX) c
 }
 
 void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool victory) const {
-    // 第一关碰撞层较矮、视觉层更高，结算遮罩取较大高度
-    int overlayRows = map_.height();
-    if (renderWorld_.levelIndex == 0 && tiledMap_.ready()) {
-        overlayRows = std::max(overlayRows, tiledMap_.mapHeight());
-    }
-    const float mapH = static_cast<float>(overlayRows) * TILE_SIZE;
+    const float mapH = resultOverlayMapHeight(map_.height(), tiledMap_.ready() ? tiledMap_.mapHeight() : map_.height(),
+                                              tiledMap_.ready(), renderWorld_.levelIndex);
     const float windowW = static_cast<float>(window.getSize().x);
 
     sf::RectangleShape dim({windowW, mapH});
-    dim.setFillColor(sf::Color(0, 0, 0, 120));
+    dim.setFillColor(sf::Color(0, 0, 0, victory ? 90 : 120));
     window.draw(dim);
 
     const int totalGems = renderWorld_.players[0].gems + renderWorld_.players[1].gems;
-    // 服务端未同步宝石总数时，从 Tiled pickup 对象数推算目标
     int gemGoal = renderWorld_.totalGems;
     if (renderWorld_.levelIndex == 0 && gemGoal == 0 && tiledMap_.ready()) {
         gemGoal = static_cast<int>(std::min(255, tiledMap_.collectibleCount()));
@@ -3318,67 +3330,52 @@ void GameClient::drawResultOverlay(sf::RenderWindow& window, float centerX, bool
     const bool hasNextLevel =
         renderWorld_.levelIndex + 1 < renderWorld_.levelCount &&
         isLevelUnlocked(renderWorld_.unlockedMask, static_cast<uint8_t>(renderWorld_.levelIndex + 1));
-    const VictoryLayout layout = computeVictoryLayout(mapH, centerX, windowW, hasNextLevel);
+    const std::string scoreLine = text::resultGemScore(totalGems, gemGoal);
+    const VictoryLayout layout = computeVictoryLayout(mapH, centerX, windowW);
+
+    if (assets_.hasVictoryUi()) {
+        sf::Sprite panel(assets_.victoryMenu());
+        panel.setScale(layout.panelDrawW / static_cast<float>(panel.getTexture()->getSize().x),
+                       layout.panelDrawH / static_cast<float>(panel.getTexture()->getSize().y));
+        panel.setPosition(centerX - layout.panelDrawW / 2.0f, layout.panelTop);
+        panel.setColor(sf::Color(255, 252, 245));
+        window.draw(panel);
+
+        const unsigned titleSize = static_cast<unsigned>(44.0f * layout.uiScale);
+        const unsigned scoreSize = static_cast<unsigned>(26.0f * layout.uiScale);
+        ui_.drawVictoryTitleCentered(window, text::resultVictoryTitle(), centerX, layout.titleY, titleSize, animTime_);
+        ui_.drawVictoryScoreCentered(window, scoreLine, centerX, layout.scoreY, scoreSize);
+
+        drawVictoryLabelButton(window, ui_, layout.menuBtn, assets_.victoryButtonMenu(), text::resultMenuButton(), true,
+                               layout.uiScale, sf::Color(238, 242, 248));
+        drawVictoryLabelButton(window, ui_, layout.retryBtn, assets_.victoryButtonRetry(), text::resultRetryButton(),
+                               true, layout.uiScale, sf::Color(255, 246, 218));
+        drawVictoryLabelButton(window, ui_, layout.nextBtn, assets_.victoryButtonNext(), text::resultNextLevelButton(),
+                               hasNextLevel, layout.uiScale, sf::Color(228, 246, 232));
+        return;
+    }
+
     const sf::FloatRect panelRect{centerX - layout.panelDrawW / 2.0f, layout.panelTop, layout.panelDrawW,
                                   layout.panelDrawH};
 
-    if (assets_.ready()) {
-        const sf::Texture& screenTex =
-            (totalGems >= gemGoal && gemGoal > 0) ? assets_.winScreen() : assets_.winScreenPartial();
+    ui_.drawPanel(window, panelRect, sf::Color(218, 212, 200), 235.0f);
+    sf::RectangleShape innerFrame(
+        {panelRect.width - layout.uiScale * 28.0f, panelRect.height - layout.uiScale * 28.0f});
+    innerFrame.setPosition(panelRect.left + layout.uiScale * 14.0f, panelRect.top + layout.uiScale * 14.0f);
+    innerFrame.setFillColor(sf::Color(235, 230, 220, 220));
+    innerFrame.setOutlineThickness(2.0f);
+    innerFrame.setOutlineColor(sf::Color(180, 170, 155, 180));
+    window.draw(innerFrame);
 
-        sf::Sprite screen(screenTex);
-        const float scale = std::min(layout.panelDrawW / static_cast<float>(screenTex.getSize().x),
-                                     layout.panelDrawH / static_cast<float>(screenTex.getSize().y));
-        const float drawW = static_cast<float>(screenTex.getSize().x) * scale;
-        const float drawH = static_cast<float>(screenTex.getSize().y) * scale;
-        screen.setScale(scale, scale);
-        screen.setPosition(centerX - drawW / 2.0f, layout.panelTop + (layout.panelDrawH - drawH) / 2.0f);
-        window.draw(screen);
-    } else {
-        ui_.drawPanel(window, panelRect, sf::Color(175, 175, 175), 240.0f);
-        sf::RectangleShape innerFrame(
-            {panelRect.width - layout.uiScale * 28.0f, panelRect.height - layout.uiScale * 28.0f});
-        innerFrame.setPosition(panelRect.left + layout.uiScale * 14.0f, panelRect.top + layout.uiScale * 14.0f);
-        innerFrame.setFillColor(sf::Color(165, 165, 165, 220));
-        innerFrame.setOutlineThickness(3.0f);
-        innerFrame.setOutlineColor(sf::Color(90, 90, 90));
-        window.draw(innerFrame);
+    const unsigned titleSize = static_cast<unsigned>(44.0f * layout.uiScale);
+    const unsigned scoreSize = static_cast<unsigned>(26.0f * layout.uiScale);
+    ui_.drawVictoryTitleCentered(window, text::resultVictoryTitle(), centerX, layout.titleY, titleSize, animTime_);
+    ui_.drawVictoryScoreCentered(window, scoreLine, centerX, layout.scoreY, scoreSize);
 
-        const unsigned titleSize = static_cast<unsigned>(36.0f * layout.uiScale);
-        const unsigned bodySize = static_cast<unsigned>(22.0f * layout.uiScale);
-        ui_.drawOutlinedCenteredText(window, "Level Complete!", centerX, layout.titleY, titleSize,
-                                     sf::Color(255, 220, 80), sf::Color(40, 30, 20), 3.0f);
-
-        const std::string levelLine =
-            "Level " + std::to_string(renderWorld_.levelIndex + 1) + ": " + renderWorld_.levelName;
-        ui_.drawOutlinedCenteredText(window, levelLine, centerX, layout.subtitleY, bodySize, sf::Color(255, 220, 80),
-                                     sf::Color(40, 30, 20), 2.5f);
-
-        const std::string scoreLine = text::resultGemScore(totalGems, gemGoal);
-        ui_.drawOutlinedCenteredText(window, scoreLine, centerX, layout.scoreY, bodySize, sf::Color(255, 220, 80),
-                                     sf::Color(40, 30, 20), 2.5f);
-    }
-
-    if (assets_.hasButtons()) {
-        ui_.drawImageButtonWithHint(window, layout.retryBtn, assets_.retryButton(), "[R] Retry");
-        if (layout.hasContinueBtn) {
-            ui_.drawImageButtonWithHint(window, layout.continueBtn, assets_.continueButton(), "[N] Next");
-        }
-        ui_.drawImageButtonWithHint(window, layout.menuBtn, assets_.menuButton(), "[Esc] Lobby");
-    } else {
-        const unsigned btnFontSize = static_cast<unsigned>(22.0f * layout.uiScale);
-        const auto drawVictoryButton = [&](const sf::FloatRect& area, const std::string& label) {
-            ui_.drawPanel(window, area, sf::Color(190, 190, 190), 255.0f);
-            const float textY = area.top + (area.height - static_cast<float>(btnFontSize)) * 0.38f;
-            ui_.drawOutlinedCenteredText(window, label, area.left + area.width / 2.0f, textY, btnFontSize,
-                                         sf::Color(255, 220, 80), sf::Color(40, 30, 20), 2.0f);
-        };
-        drawVictoryButton(layout.retryBtn, text::resultRetryButton());
-        if (layout.hasContinueBtn) {
-            drawVictoryButton(layout.continueBtn, text::pauseContinueButton());
-        }
-        drawVictoryButton(layout.menuBtn, text::resultMenuButton());
-    }
+    ui_.drawButton(window, layout.menuBtn, text::resultMenuButton(), true, sf::Color(200, 208, 216));
+    ui_.drawButton(window, layout.retryBtn, text::resultRetryButton(), true, sf::Color(238, 218, 168));
+    ui_.drawButton(window, layout.nextBtn, text::resultNextLevelButton(), hasNextLevel,
+                   hasNextLevel ? sf::Color(188, 218, 198) : sf::Color(185, 188, 182));
 }
 
 const char* GameClient::roleDisplayName() const {

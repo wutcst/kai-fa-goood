@@ -53,7 +53,7 @@ void Room::selectLevel(uint8_t index, bool keepMapSelect) {
     applyLevelMetadata();
     resetWorld();
     world.phase = GamePhase::Lobby;
-    world.lobbyStep = keepMapSelect ? 1 : 0;
+    world.lobbyStep = (keepMapSelect || skipWaitingRoom) ? 1 : 0;
     world.countdown = 0;
     countdownTimer = 0.0f;
 
@@ -190,7 +190,7 @@ void Room::beginPlaying() {
 void Room::returnToLobby() {
     resetWorld();
     world.phase = GamePhase::Lobby;
-    world.lobbyStep = 0;
+    world.lobbyStep = skipWaitingRoom ? 1 : 0;
     world.countdown = 0;
     countdownTimer = 0.0f;
 
@@ -257,6 +257,9 @@ void Room::proceedToMapSelect() {
 }
 
 void Room::backToWaitingRoom() {
+    if (skipWaitingRoom) {
+        return;
+    }
     world.lobbyStep = 0;
     for (ClientSlot& client : clients) {
         client.waitingReady = false;

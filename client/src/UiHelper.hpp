@@ -35,6 +35,10 @@ public:
                            bool selected) const;
     void drawArtTitleCentered(sf::RenderWindow& window, const std::string& text, float centerX, float y, unsigned size,
                               float animPhase = 0.f) const;
+    void drawVictoryTitleCentered(sf::RenderWindow& window, const std::string& text, float centerX, float y,
+                                  unsigned size, float animPhase = 0.f) const;
+    void drawVictoryScoreCentered(sf::RenderWindow& window, const std::string& text, float centerX, float y,
+                                  unsigned size) const;
 
     bool hasFont() const { return fontLoaded_; }
 

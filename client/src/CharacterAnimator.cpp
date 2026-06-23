@@ -94,8 +94,8 @@ bool CharacterAnimator::load(const std::string& folderPath) {
     return ready_;
 }
 
-void CharacterAnimator::draw(sf::RenderWindow& window, const PlayerState& player, float animTime,
-                             InputFlags facingHint) const {
+void CharacterAnimator::draw(sf::RenderWindow& window, const PlayerState& player, float animTime, InputFlags facingHint,
+                             float footLift) const {
     if (!ready_) {
         return;
     }
@@ -138,7 +138,7 @@ void CharacterAnimator::draw(sf::RenderWindow& window, const PlayerState& player
     const float visualH = PLAYER_VISUAL_HEIGHT;
     const float visualW = visualH;
     const float visualX = player.x + (PLAYER_WIDTH - visualW) * 0.5f;
-    const float visualY = player.y + PLAYER_HEIGHT - visualH;
+    const float visualY = player.y + PLAYER_HEIGHT - visualH - footLift;
     const float scale = visualH / static_cast<float>(kFrameH);
     const bool flip = facingDir_ < 0;
 
