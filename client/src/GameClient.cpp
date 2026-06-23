@@ -707,10 +707,9 @@ void GameClient::ensureLayoutView() {
         const sf::Vector2u winSize = window_.getSize();
         const sf::View view = window_.getView();
         const sf::FloatRect viewport = view.getViewport();
-        const bool sizeMismatch =
-            winSize.x != LOBBY_WINDOW_WIDTH || winSize.y != LOBBY_WINDOW_HEIGHT ||
-            static_cast<unsigned>(view.getSize().x + 0.5f) != LOBBY_WINDOW_WIDTH ||
-            static_cast<unsigned>(view.getSize().y + 0.5f) != LOBBY_WINDOW_HEIGHT;
+        const bool sizeMismatch = winSize.x != LOBBY_WINDOW_WIDTH || winSize.y != LOBBY_WINDOW_HEIGHT ||
+                                  static_cast<unsigned>(view.getSize().x + 0.5f) != LOBBY_WINDOW_WIDTH ||
+                                  static_cast<unsigned>(view.getSize().y + 0.5f) != LOBBY_WINDOW_HEIGHT;
         const bool viewportMismatch =
             viewport.left != 0.0f || viewport.top != 0.0f || viewport.width != 1.0f || viewport.height != 1.0f;
         if (sizeMismatch || viewportMismatch || !lobbyLayout_) {
@@ -754,8 +753,8 @@ void GameClient::handleLevelChange(uint8_t levelIndex, bool resizeWindow) {
         }
         std::cout << "[Client] Level " << static_cast<int>(globalIndex + 1) << " loaded\n"
                   << "  collision: " << resolvedCollision << " (" << map_.width() << "x" << map_.height() << ")\n"
-                  << "  visual:    " << resolvedVisual << " (" << tiledMap_.mapWidth() << "x"
-                  << tiledMap_.mapHeight() << " tiles)"
+                  << "  visual:    " << resolvedVisual << " (" << tiledMap_.mapWidth() << "x" << tiledMap_.mapHeight()
+                  << " tiles)"
                   << " customBg=" << (tiledMap_.hasCustomBackground() ? "yes" : "no") << " fans=" << fanZones_.size()
                   << std::endl;
     } else if (!visualPath.empty()) {
@@ -2345,9 +2344,8 @@ void GameClient::renderGameScreen() {
     }
 
     // 第一关 Tiled 大地图：结算全屏贴图时不叠 HUD 文字
-    const bool hideHudOnResult =
-        renderWorld_.levelIndex == 0 &&
-        (renderWorld_.phase == GamePhase::Victory || renderWorld_.phase == GamePhase::GameOver);
+    const bool hideHudOnResult = renderWorld_.levelIndex == 0 && (renderWorld_.phase == GamePhase::Victory ||
+                                                                  renderWorld_.phase == GamePhase::GameOver);
     if (!hideHudOnResult) {
         drawHud(window_);
     }
