@@ -174,7 +174,7 @@ kai-fa-goood/
 ├── shared/                   # 客户端与服务端共用逻辑
 │   └── src/                  # Room、Physics、Map、Protocol…
 ├── assets/                   # 游戏资源（关卡、地图、贴图）
-├── docs/                     # 版本说明、变更记录、实训报告
+├── docs/                     # 版本说明、变更记录（CHANGELOG / RELEASE / VERSIONS）
 ├── scripts/                  # CI 构建、版本 bump、远程部署
 ├── tools/                    # 地图导入/导出 Python 脚本
 ├── tests/                    # C++ 单元测试
@@ -194,7 +194,7 @@ kai-fa-goood/
 | `server/` | 多房间管理、状态广播；部署到公网主机 |
 | `shared/` | 游戏规则与房间仿真；改这里客户端和服务端行为同步变化 |
 | `assets/` | 关卡 collision、Tiled 地图、贴图、音效 |
-| `docs/` | `CHANGELOG`、`RELEASE`、`VERSIONS`、实训报告 |
+| `docs/` | `CHANGELOG`、`RELEASE`、`VERSIONS` |
 | `scripts/` | CI 构建、clang-format、版本 bump、公网部署 |
 | `build/` | CMake 产物（`fireice_client.exe`、`fireice_server.exe`），非源码 |
 
