@@ -1577,27 +1577,31 @@ void GameClient::renderHelpOverlay() {
     dim.setFillColor(sf::Color(0, 0, 0, 160));
     window_.draw(dim);
 
-    const float panelW = lobbyScaled(680.0f);
-    const float panelH = lobbyScaled(520.0f);
+    const float panelW = lobbyScaled(740.0f);
+    const float panelH = lobbyScaled(640.0f);
     const sf::FloatRect panel{titleCenterX() - panelW / 2.0f, (h - panelH) / 2.0f, panelW, panelH};
     ui_.drawPanel(window_, panel, sf::Color(24, 34, 28), 235.0f);
-    ui_.drawOutlinedCenteredText(window_, text::helpTitle(), titleCenterX(), panel.top + lobbyScaled(24.0f),
+    ui_.drawOutlinedCenteredText(window_, text::helpTitle(), titleCenterX(), panel.top + lobbyScaled(20.0f),
                                  static_cast<unsigned>(lobbyScaled(36.0f)), sf::Color(255, 230, 100),
                                  sf::Color(80, 50, 10), 3.0f);
 
-    const float textX = panel.left + lobbyScaled(36.0f);
-    float y = panel.top + lobbyScaled(88.0f);
-    for (const std::string& line : text::helpLines()) {
-        if (line.empty()) {
-            y += lobbyScaled(18.0f);
-            continue;
+    const float textX = panel.left + lobbyScaled(32.0f);
+    const float indentX = textX + lobbyScaled(16.0f);
+    float y = panel.top + lobbyScaled(72.0f);
+    for (const text::HelpSection& section : text::helpSections()) {
+        ui_.drawText(window_, section.title, textX, y, static_cast<unsigned>(lobbyScaled(22.0f)),
+                     sf::Color(255, 210, 80));
+        y += lobbyScaled(30.0f);
+        for (const std::string& line : section.lines) {
+            ui_.drawText(window_, line, indentX, y, static_cast<unsigned>(lobbyScaled(18.0f)),
+                         sf::Color(230, 235, 220));
+            y += lobbyScaled(26.0f);
         }
-        ui_.drawText(window_, line, textX, y, static_cast<unsigned>(lobbyScaled(20.0f)), sf::Color(230, 235, 220));
-        y += lobbyScaled(34.0f);
+        y += lobbyScaled(6.0f);
     }
 
     ui_.drawCenteredText(window_, text::backToTitleHint(), titleCenterX(),
-                         panel.top + panel.height - lobbyScaled(36.0f), static_cast<unsigned>(lobbyScaled(18.0f)),
+                         panel.top + panel.height - lobbyScaled(32.0f), static_cast<unsigned>(lobbyScaled(18.0f)),
                          sf::Color(255, 220, 120));
 }
 
