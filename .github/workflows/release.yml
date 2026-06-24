@@ -85,13 +85,14 @@ jobs:
           VERSION="${{ steps.meta.outputs.version }}"
           ZIP="dist/fire-ice-${VERSION}-win64-native.zip"
           mkdir -p dist
-          powershell -NoProfile -Command "
-            Compress-Archive -Force -Path @(
-              'build/fireice_server.exe',
-              'build/fireice_client.exe',
-              (Get-ChildItem 'build/*.dll' | ForEach-Object { $_.FullName })
-            ) -DestinationPath '$ZIP'
-          "
+          powershell -NoProfile -Command '
+            $zip = "'"${ZIP}"'"
+            $files = @(
+              "build/fireice_server.exe",
+              "build/fireice_client.exe"
+            ) + @(Get-ChildItem "build/*.dll" | Select-Object -ExpandProperty FullName)
+            Compress-Archive -Force -Path $files -DestinationPath $zip
+          '
           ls -lh dist/
 
       - name: Create GitHub Release
