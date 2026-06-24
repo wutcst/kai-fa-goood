@@ -6,7 +6,7 @@
 
     <groupId>cn.edu.whut.sept</groupId>
     <artifactId>fire-ice</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <packaging>jar</packaging>
 
     <name>Fire-Ice Online</name>

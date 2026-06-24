@@ -1,4 +1,4 @@
-# FPixel Adventure  Online — 联机协作平台游戏
+# Pixel Adventure Online — 联机协作平台游戏
 
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/u1xW62gh)
 
@@ -44,40 +44,42 @@
 | 3 | Temple Gates | 按钮（`B`）、尖刺（`S`）、元素门（代码支持，持续迭代） |
 | 4～8 | Gem Grotto 等 | 地形与协作布局；部分机关在 TMX / collision 中逐步补全 |
 
-collision 字符层与 TMX 对象层分工：墙体、出口、按钮等写在 `levelXX_collision.txt`；泥浆发射点、风扇、锯子等从 `levelXX.tmx` 解析。运行时以 `shared/src/LevelCatalog.cpp` 登记为准。
+**collision 字符层与 TMX 对象层分工：** 墙体、出口、按钮等写在 `levelXX_collision.txt`；泥浆发射点、风扇、锯子等从 `levelXX.tmx` 解析。运行时以 `shared/src/LevelCatalog.cpp` 登记为准。
 
 ### 待完善 / 已知限制
 
-- 部分关卡（4～8）玩法与机关仍在迭代  
-- 毒娃贴图仍为占位渲染（见 [Issue #4](https://github.com/wutcst/kai-fa-goood/issues/4)）  
-- 联机依赖已部署的 UDP 服务端，无公网中继与账号系统  
-- 主菜单文案「快速加入」实际进入**离线单人**模式
+- 部分关卡（4～8）玩法与机关仍在迭代
+- 面具侠贴图在资源未加载时回退为纯色方块（见 [Issue #4](https://github.com/wutcst/kai-fa-goood/issues/4)）
+- 联机依赖已部署的 UDP 服务端，无公网中继与账号系统
+- 主菜单文案「快速加入」实际进入离线单人模式
 
 ### 版本与里程碑
 
 | 版本 | Git 标签 | 对应提交 | 里程碑 | 状态 | 主要内容 |
 |------|----------|----------|--------|------|----------|
-| **v0.1.0** | [`v0.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.1.0) | `5834fe3` | 三人联机核心 | ✅ 已完成 | 三角色、房间号、多房间、公网联机（[Issue #2](https://github.com/wutcst/kai-fa-goood/issues/2)） |
-| **v0.2.0** | [`v0.2.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.2.0) | `12617bb` | 关卡与玩法扩展 | ✅ 已完成 | Tiled 三关、像素动画、机关与道具系统（[Issue #3](https://github.com/wutcst/kai-fa-goood/issues/3)） |
-| **v0.3.0** | [`v0.3.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.3.0) | `77f444a` | 质量与体验 | ✅ 基线完成 | 工程拆分、暂停菜单、单元测试、通关界面、CI 打包；HUD / 单人关等待完善（[Issue #5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
+| **v0.1.0** | [`v0.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.1.0) | `5834fe3` | 三人联机核心 | ✅ 已完成 | 三角色、房间号、多房间、公网联机（[#2](https://github.com/wutcst/kai-fa-goood/issues/2)） |
+| **v0.2.0** | [`v0.2.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.2.0) | `12617bb` | 关卡与玩法扩展 | ✅ 已完成 | Tiled 三关、像素动画、机关与道具系统（[#3](https://github.com/wutcst/kai-fa-goood/issues/3)） |
+| **v0.3.0** | [`v0.3.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.3.0) | `77f444a` | 质量与体验 | ✅ 基线完成 | 工程拆分、暂停菜单、单元测试、通关界面、CI 打包（[#5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
+| **v1.1.0** | [`v1.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v1.1.0) | 本 PR | 发布工程化 | ✅ 已完成 | 统一 `VERSION`、CHANGELOG、标签触发 Release（[#20](https://github.com/wutcst/kai-fa-goood/pull/20)） |
 
-> 完整版本说明、变更摘要与检出命令见 **[VERSIONS.md](VERSIONS.md)**。  
-> **v0.3.0** 标签标记里程碑 3 基线提交；`master` 可能含后续文档与功能更新。检出历史版本：`git checkout v0.1.0` / `v0.2.0` / `v0.3.0`。
+完整版本说明、变更摘要与检出命令见 [`VERSIONS.md`](VERSIONS.md)。
+
+> `v0.3.0` 标记里程碑 3 基线提交；`master` 可能含后续文档与功能更新。检出历史版本：`git checkout v0.1.0` / `v0.2.0` / `v0.3.0`。
 
 ### CI / 代码规范
 
-- **CI 流水线**：`.github/workflows/ci.yml` — push/PR 到 `master`（及 `lzh` 分支 push）时自动触发  
-  1. **代码格式检查**（clang-format）：不符合 `.clang-format` 则 **CI 失败**  
-  2. **Maven 构建**（`mvn verify package`）：C++ 单元测试 + 服务端冒烟测试 + Java 单元测试  
-  3. **产物上传**：`target/fire-ice-1.0.0-release.jar` 与原生 exe/DLL  
-  4. **手动发布**：Actions → `CI - Build & Check` → `Run workflow` 可创建 GitHub Pre-release  
+- **CI 流水线**：`.github/workflows/ci.yml` — push/PR 到 `master`（及 `lzh` 分支 push）时自动触发
+  1. **代码格式检查**（clang-format）：不符合 `.clang-format` 则 **CI 失败**
+  2. **Maven 构建**（`mvn verify package`）：C++ 单元测试 + 服务端冒烟测试 + Java 单元测试
+  3. **产物上传**：`target/fire-ice-{VERSION}-release.jar` 与原生 exe/DLL
+  4. **正式发布**：打标签 `vX.Y.Z`（须与 [`VERSION`](VERSION) 一致）触发 `.github/workflows/release.yml`
 
-- **发布 JAR 用法**：
+- **发布 JAR 用法**（版本号以 `VERSION` 为准，当前 `1.1.0`）：
 
 ```bat
-java -jar target\fire-ice-1.0.0-release.jar server
-java -jar target\fire-ice-1.0.0-release.jar client 127.0.0.1 fire
-java -jar target\fire-ice-1.0.0-release.jar --version
+java -jar target\fire-ice-1.1.0-release.jar server
+java -jar target\fire-ice-1.1.0-release.jar client 127.0.0.1 fire
+java -jar target\fire-ice-1.1.0-release.jar --version
 ```
 
 - **本地完整构建**（需 VS 2022 + CMake + JDK 8+）：
@@ -99,6 +101,8 @@ scripts\clang-format-check.bat
 mvn -DskipFormatCheck=true verify package
 ```
 
+发布流程详见 [`RELEASE.md`](RELEASE.md)，变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。
+
 ### Issue 跟踪
 
 | # | 标题 | 状态 |
@@ -106,11 +110,13 @@ mvn -DskipFormatCheck=true verify package
 | [#2](https://github.com/wutcst/kai-fa-goood/issues/2) | [里程碑 1] 三人联机核心功能开发 | ✅ 已关闭 |
 | [#3](https://github.com/wutcst/kai-fa-goood/issues/3) | 三人联机专属关卡设计 | ✅ 已关闭 |
 | [#6](https://github.com/wutcst/kai-fa-goood/issues/6) | CI/CD 流水线维护与自动化打包 | ✅ 已关闭 |
-| [#4](https://github.com/wutcst/kai-fa-goood/issues/4) | 更多角色贴图资源制作 | 🔓 开放 |
-| [#5](https://github.com/wutcst/kai-fa-goood/issues/5) | 单元测试与集成测试 | 🔓 开放 |
-| [#7](https://github.com/wutcst/kai-fa-goood/issues/7) | 游戏机关扩展：传送门与移动平台 | 🔓 开放 |
-| [#8](https://github.com/wutcst/kai-fa-goood/issues/8) | 游戏内暂停菜单与 HUD 优化 | 🔓 开放（暂停菜单已实现，HUD 仍待优化） |
-| [#9](https://github.com/wutcst/kai-fa-goood/issues/9) | 单人图关卡设计（1 人模式） | 🔓 开放 |
+| [#4](https://github.com/wutcst/kai-fa-goood/issues/4) | 更多角色贴图资源制作 | ✅ 已关闭 → [#12](https://github.com/wutcst/kai-fa-goood/issues/12) |
+| [#5](https://github.com/wutcst/kai-fa-goood/issues/5) | 单元测试与集成测试 | ✅ 已关闭 → [#13](https://github.com/wutcst/kai-fa-goood/issues/13) [#14](https://github.com/wutcst/kai-fa-goood/issues/14) [#15](https://github.com/wutcst/kai-fa-goood/issues/15) |
+| [#7](https://github.com/wutcst/kai-fa-goood/issues/7) | 游戏机关扩展：传送门与移动平台 | ✅ 已关闭（未实现，不纳入版本） |
+| [#8](https://github.com/wutcst/kai-fa-goood/issues/8) | 游戏内暂停菜单与 HUD 优化 | ✅ 已关闭 → [#17](https://github.com/wutcst/kai-fa-goood/issues/17) |
+| [#9](https://github.com/wutcst/kai-fa-goood/issues/9) | 单人图关卡设计（1 人模式） | ✅ 已关闭 → [#16](https://github.com/wutcst/kai-fa-goood/issues/16)（离线模式） |
+
+细分 Issue（[#12–#19](https://github.com/wutcst/kai-fa-goood/issues/12)，均已关闭）见 GitHub Issues 列表。
 
 ---
 
@@ -143,7 +149,7 @@ mvn -DskipFormatCheck=true verify package
 | 测试 | Google Test |
 | 打包 | Maven + Java 8 启动器（`pom.xml`） |
 | 地图编辑 | [Tiled Map Editor](https://www.mapeditor.org/) |
-| 地图脚本 | Python 3（`tools/export_level.py` / `import_tiled_level.py`） |
+| 地图脚本 | Python 3（`tools/export_level.py` / `tools/import_tiled_level.py`） |
 
 ---
 
@@ -213,10 +219,10 @@ kai-fa-goood/
 
 ### 环境要求
 
-- Windows 10/11 x64  
-- [Visual Studio 2022](https://visualstudio.microsoft.com/)（含「使用 C++ 的桌面开发」）  
-- [CMake 3.16+](https://cmake.org/)（已加入 PATH）  
-- Python 3（可选，仅编辑地图时需要）  
+- Windows 10/11 x64
+- [Visual Studio 2022](https://visualstudio.microsoft.com/)（含「使用 C++ 的桌面开发」）
+- [CMake 3.16+](https://cmake.org/)（已加入 PATH）
+- Python 3（可选，仅编辑地图时需要）
 
 ### 编译
 
@@ -269,7 +275,7 @@ build\Release\fireice_client.exe --solo
 
 或在主菜单选择 **「快速加入」**。
 
-**修改地图后热同步资源（无需重新编译）：**
+修改地图后热同步资源（无需重新编译）：
 
 ```bat
 client\sync_assets.bat
@@ -307,8 +313,8 @@ client\sync_assets.bat
 
 ### 对局
 
-| 角色   | 移动 | 跳跃 | 快速下落 |
-|--------|------|------|----------|
+| 角色 | 移动 | 跳跃 | 快速下落 |
+|------|------|------|----------|
 | 忍者蛙 | A / D | W | S |
 | 粉红侠 | ← / → | ↑ | ↓ |
 | 面具侠 | I / L | J | K |
@@ -357,7 +363,7 @@ python tools/import_tiled_level.py "你的Tiled文件夹路径" --level 2
 | `.` | 空气 |
 | `^` | 单向平台 |
 | `~` | 消失平台 |
-| `f` / `w` / `p` |  出生点 |
+| `f` / `w` / `p` | 出生点 |
 | `G` / `B` / `F` / `I` / `D` | 宝石 / 按钮 / 各元素门 |
 | `S` | 尖刺 |
 
@@ -385,9 +391,9 @@ python tools/import_tiled_level.py "你的Tiled文件夹路径" --level 2
 
 ## 协作与分支
 
-- 仓库托管于 GitHub Classroom，小组成员共用本仓库  
-- CI 监听分支：`master`（PR）、`lzh`（push）  
-- 提交信息建议：`feat:` / `fix:` / `docs:` 前缀 + 简短中文或英文说明  
+- 仓库托管于 GitHub Classroom，小组成员共用本仓库
+- CI 监听分支：`master`（PR）、`lzh`（push）
+- 提交信息建议：`feat:` / `fix:` / `docs:` 前缀 + 简短中文或英文说明
 
 ---
 

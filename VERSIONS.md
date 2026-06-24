@@ -7,6 +7,28 @@
 | **v0.1.0** | [`v0.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.1.0) | [`5834fe3`](https://github.com/wutcst/kai-fa-goood/commit/5834fe3) | 三人联机核心 | ✅ 已完成 |
 | **v0.2.0** | [`v0.2.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.2.0) | [`12617bb`](https://github.com/wutcst/kai-fa-goood/commit/12617bb) | 关卡与玩法扩展 | ✅ 已完成 |
 | **v0.3.0** | [`v0.3.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.3.0) | [`77f444a`](https://github.com/wutcst/kai-fa-goood/commit/77f444a) | 质量与体验 | ✅ 基线完成 |
+| **v1.1.0** | [`v1.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v1.1.0) | 见 master | 发布工程化 | ✅ 已完成 |
+
+---
+
+## v1.1.0 — 发布工程化
+
+**发布标签**：`v1.1.0` — 统一版本源、文档整理与 GitHub Release 自动化
+
+**交付内容**：
+
+- 根目录 [`VERSION`](VERSION) 单一版本源（当前 **1.1.0**），同步 CMake / Maven / Java
+- [`CHANGELOG.md`](CHANGELOG.md)、[`RELEASE.md`](RELEASE.md)、bump 脚本
+- [`.github/workflows/release.yml`](.github/workflows/release.yml)：打 `v*` 标签自动发布 JAR + 原生 zip
+- [`README.md`](README.md) 重写、Issue #2–#19 跟踪对齐
+
+**关键 PR / Issue**：[PR #20](https://github.com/wutcst/kai-fa-goood/pull/20) · [#12–#19](https://github.com/wutcst/kai-fa-goood/issues/12)
+
+**检出此版本**：
+
+```bash
+git checkout v1.1.0
+```
 
 ---
 
@@ -100,7 +122,11 @@ e58f196 Initial commit
     │
     ├─ … 通关界面、CI 修复、文档 …
     │
-    ▼ v0.3.0 ── 77f444a（当前 master HEAD）
+    ▼ v0.3.0 ── 77f444a（质量与体验基线）
+    │
+    ├─ … 文档整理、Release 工作流 …
+    │
+    ▼ v1.1.0 ── 发布工程化（VERSION / CHANGELOG / release.yml）
 ```
 
 ---
@@ -118,5 +144,5 @@ build.bat
 
 ```bat
 mvn verify package
-java -jar target\fire-ice-1.0.0.jar --version
+java -jar target\fire-ice-1.1.0-release.jar --version
 ```
