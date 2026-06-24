@@ -11,7 +11,11 @@ Version numbers are defined in the repository root [`VERSION`](VERSION) file.
 
 ### Added
 
+- [`VERSIONS.md`](VERSIONS.md)：里程碑提交对照与检出说明
+
 ### Changed
+
+- [`README.md`](README.md)：同步 Pixel Adventure Online 文档、架构说明与 Issue 跟踪
 
 ### Fixed
 
