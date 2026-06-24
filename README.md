@@ -55,13 +55,14 @@ collision 字符层与 TMX 对象层分工：墙体、出口、按钮等写在 `
 
 ### 版本与里程碑
 
-| 版本 | 对应里程碑 | 状态 | 主要内容 |
-|------|-----------|------|----------|
-| **v0.1.0** | 里程碑 1 — 三人联机核心功能 | ✅ 已完成 | 毒娃角色、3 slot 服务端、房间号（[Issue #2](https://github.com/wutcst/kai-fa-goood/issues/2)） |
-| **v0.2.0** | 里程碑 2 — 关卡与玩法扩展 | ✅ 已完成 | Tiled 地图、消失平台 / 泥浆 / 风扇等（[Issue #3](https://github.com/wutcst/kai-fa-goood/issues/3)） |
-| **v0.3.0** | 里程碑 3 — 质量与体验 | ✅ 已完成 | 工程拆分、暂停菜单、单元测试、CI 打包（CI 预发布标签 `v0.3.0-alpha`） |
+| 版本 | Git 标签 | 对应提交 | 里程碑 | 状态 | 主要内容 |
+|------|----------|----------|--------|------|----------|
+| **v0.1.0** | [`v0.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.1.0) | `5834fe3` | 三人联机核心 | ✅ 已完成 | 三角色、房间号、多房间、公网联机（[Issue #2](https://github.com/wutcst/kai-fa-goood/issues/2)） |
+| **v0.2.0** | [`v0.2.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.2.0) | `12617bb` | 关卡与玩法扩展 | ✅ 已完成 | Tiled 三关、像素动画、机关与道具系统（[Issue #3](https://github.com/wutcst/kai-fa-goood/issues/3)） |
+| **v0.3.0** | [`v0.3.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.3.0) | `77f444a` | 质量与体验 | ✅ 基线完成 | 工程拆分、暂停菜单、单元测试、通关界面、CI 打包；HUD / 单人关等待完善（[Issue #5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
 
-> CMake 项目版本：`FireIceOnline VERSION 0.1.0`（根目录 `CMakeLists.txt`）。功能已远超 0.1.0，后续可统一 bump 版本号。
+> 完整版本说明、变更摘要与检出命令见 **[VERSIONS.md](VERSIONS.md)**。  
+> **v0.3.0** 标签标记里程碑 3 基线提交；`master` 可能含后续文档与功能更新。检出历史版本：`git checkout v0.1.0` / `v0.2.0` / `v0.3.0`。
 
 ### CI / 代码规范
 
