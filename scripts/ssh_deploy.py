@@ -11,7 +11,8 @@ PORT = 22
 USER = "root"
 PASSWORD = "wll13569035397."
 PROJECT = "/root/fire-ice"
-LOCAL_SRC = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LOCAL_SRC = ROOT
 
 
 class Deploy:
@@ -131,10 +132,10 @@ def upload_code(deploy):
     deploy.run(f"mkdir -p {PROJECT}/shared/src {PROJECT}/server/src {PROJECT}/assets/levels {PROJECT}/assets/textures")
 
     local = LOCAL_SRC.replace("\\", "/")
-    deploy_local = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
+    script_dir = os.path.dirname(os.path.abspath(__file__)).replace("\\", "/")
 
     # Use server-only CMakeLists
-    server_cmake = f"{deploy_local}/CMakeLists_server.txt"
+    server_cmake = f"{script_dir}/CMakeLists_server.txt"
     if os.path.exists(server_cmake):
         deploy.put_file(server_cmake, f"{PROJECT}/CMakeLists.txt")
         print("  Uploaded server-only CMakeLists.txt")
@@ -239,7 +240,7 @@ echo $!
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python ssh_deploy.py [deploy|start|status|stop|check]")
+        print("Usage: python scripts/ssh_deploy.py [deploy|start|status|stop|check]")
         print("  deploy  - Full deploy: env check, install deps, upload, build, firewall, start")
         print("  start   - Start/restart server")
         print("  status  - Show server status and recent logs")

@@ -6,10 +6,10 @@
 
 | 文件 | 作用 |
 |------|------|
-| [`VERSION`](VERSION) | **唯一权威版本号**，发布前在此修改 |
-| [`pom.xml`](pom.xml) | Maven 产物名 `fire-ice-{version}-release.jar` |
-| [`ReleaseVersion.java`](src/main/java/cn/edu/whut/sept/fireice/ReleaseVersion.java) | JAR 启动器 `--version` 输出 |
-| [`CMakeLists.txt`](CMakeLists.txt) | 原生工程 `FireIceOnline` 版本 |
+| [`VERSION`](../VERSION) | **唯一权威版本号**，发布前在此修改 |
+| [`pom.xml`](../pom.xml) | Maven 产物名 `fire-ice-{version}-release.jar` |
+| [`ReleaseVersion.java`](../src/main/java/cn/edu/whut/sept/fireice/ReleaseVersion.java) | JAR 启动器 `--version` 输出 |
+| [`CMakeLists.txt`](../CMakeLists.txt) | 原生工程 `FireIceOnline` 版本 |
 | [`CHANGELOG.md`](CHANGELOG.md) | 面向用户的变更记录 |
 
 同步版本（推荐）：
@@ -39,7 +39,7 @@ scripts\bump-version.bat
 3. 提交并推送到 `master`：
 
    ```bat
-   git add VERSION CHANGELOG.md pom.xml CMakeLists.txt src/
+   git add VERSION docs/CHANGELOG.md pom.xml CMakeLists.txt src/
    git commit -m "chore: release vX.Y.Z"
    git push origin master
    ```

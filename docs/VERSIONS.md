@@ -17,10 +17,10 @@
 
 **交付内容**：
 
-- 根目录 [`VERSION`](VERSION) 单一版本源（当前 **1.1.0**），同步 CMake / Maven / Java
+- 根目录 [`VERSION`](../VERSION) 单一版本源（当前 **1.1.0**），同步 CMake / Maven / Java
 - [`CHANGELOG.md`](CHANGELOG.md)、[`RELEASE.md`](RELEASE.md)、bump 脚本
-- [`.github/workflows/release.yml`](.github/workflows/release.yml)：打 `v*` 标签自动发布 JAR + 原生 zip
-- [`README.md`](README.md) 重写、Issue #2–#19 跟踪对齐
+- [`.github/workflows/release.yml`](../.github/workflows/release.yml)：打 `v*` 标签自动发布 JAR + 原生 zip
+- [`README.md`](../README.md) 重写、Issue #2–#19 跟踪对齐
 
 **关键 PR / Issue**：[PR #20](https://github.com/wutcst/kai-fa-goood/pull/20) · [#12–#19](https://github.com/wutcst/kai-fa-goood/issues/12)
 

@@ -62,7 +62,7 @@
 | **v0.3.0** | [`v0.3.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.3.0) | `77f444a` | 质量与体验 | ✅ 基线完成 | 工程拆分、暂停菜单、单元测试、通关界面、CI 打包（[#5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
 | **v1.1.0** | [`v1.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v1.1.0) | 本 PR | 发布工程化 | ✅ 已完成 | 统一 `VERSION`、CHANGELOG、标签触发 Release（[#20](https://github.com/wutcst/kai-fa-goood/pull/20)） |
 
-完整版本说明、变更摘要与检出命令见 [`VERSIONS.md`](VERSIONS.md)。
+完整版本说明、变更摘要与检出命令见 [`docs/VERSIONS.md`](docs/VERSIONS.md)。
 
 > `v0.3.0` 标记里程碑 3 基线提交；`master` 可能含后续文档与功能更新。检出历史版本：`git checkout v0.1.0` / `v0.2.0` / `v0.3.0`。
 
@@ -101,7 +101,7 @@ scripts\clang-format-check.bat
 mvn -DskipFormatCheck=true verify package
 ```
 
-发布流程详见 [`RELEASE.md`](RELEASE.md)，变更记录见 [`CHANGELOG.md`](CHANGELOG.md)。
+发布流程详见 [`docs/RELEASE.md`](docs/RELEASE.md)，变更记录见 [`docs/CHANGELOG.md`](docs/CHANGELOG.md)。
 
 ### Issue 跟踪
 
@@ -172,21 +172,18 @@ kai-fa-goood/
 │   ├── run.bat / run.sh      # 后台启动服务端
 │   └── stop.bat / stop.sh    # 停止服务端
 ├── shared/                   # 客户端与服务端共用逻辑
-│   └── src/
-│       ├── Room.cpp          # 房间仿真（物理、大厅、胜负）
-│       ├── Physics.cpp       # 移动、碰撞
-│       ├── Map.cpp           # 碰撞网格
-│       ├── LevelMechanics.cpp# 机关运行时
-│       ├── Protocol.hpp      # UDP 包结构
-│       └── Types.hpp         # 常量、WorldState
+│   └── src/                  # Room、Physics、Map、Protocol…
 ├── assets/                   # 游戏资源（关卡、地图、贴图）
+├── docs/                     # 版本说明、变更记录、实训报告
+├── scripts/                  # CI 构建、版本 bump、远程部署
 ├── tools/                    # 地图导入/导出 Python 脚本
 ├── tests/                    # C++ 单元测试
-├── build.bat                 # CMake 编译
-├── start.bat                 # 快捷启动客户端
-├── scripts/                  # CI / Maven 原生构建脚本
 ├── src/                      # Java 启动器（Maven）
-└── pom.xml
+├── CMakeLists.txt            # C++ 工程入口
+├── VERSION                   # 发布版本号（单一来源）
+├── pom.xml                   # Maven 打包配置
+├── build.bat                 # 本地 CMake 编译
+└── start.bat                 # 快捷启动客户端
 ```
 
 **各目录职责：**
@@ -197,6 +194,8 @@ kai-fa-goood/
 | `server/` | 多房间管理、状态广播；部署到公网主机 |
 | `shared/` | 游戏规则与房间仿真；改这里客户端和服务端行为同步变化 |
 | `assets/` | 关卡 collision、Tiled 地图、贴图、音效 |
+| `docs/` | `CHANGELOG`、`RELEASE`、`VERSIONS`、实训报告 |
+| `scripts/` | CI 构建、clang-format、版本 bump、公网部署 |
 | `build/` | CMake 产物（`fireice_client.exe`、`fireice_server.exe`），非源码 |
 
 **网络模型：**

@@ -1,12 +1,13 @@
-# 忽略以下目录中的所有子目录及文件
+# 构建产物
 /target/*
 /.idea/*
 /build/*
 /build/
 /dist/
 
-# 忽略以下文件
+# 本地杂项
 *.iml
 .DS_Store
 *.msi
 __pycache__/
+fire-ice/
