@@ -57,10 +57,10 @@
 
 | 版本 | Git 标签 | 对应提交 | 里程碑 | 状态 | 主要内容 |
 |------|----------|----------|--------|------|----------|
-| **v0.1.0** | `v0.1.0` | `5834fe3` | 三人联机核心 | ✅ 已完成 | 三角色、房间号、多房间、公网联机（[#2](https://github.com/wutcst/kai-fa-goood/issues/2)） |
-| **v0.2.0** | `v0.2.0` | `12617bb` | 关卡与玩法扩展 | ✅ 已完成 | Tiled 三关、像素动画、机关与道具系统（[#3](https://github.com/wutcst/kai-fa-goood/issues/3)） |
-| **v0.3.0** | `v0.3.0` | `77f444a` | 质量与体验 | ✅ 基线完成 | 工程拆分、暂停菜单、单元测试、通关界面、CI 打包；HUD / 单人关等待完善（[#5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
-| **v1.1.0** | — | 当前分支 | 发布工程化 | 🚧 本 PR | 统一 `VERSION`、CHANGELOG、标签触发 Release |
+| **v0.1.0** | [`v0.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.1.0) | `5834fe3` | 三人联机核心 | ✅ 已完成 | 三角色、房间号、多房间、公网联机（[#2](https://github.com/wutcst/kai-fa-goood/issues/2)） |
+| **v0.2.0** | [`v0.2.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.2.0) | `12617bb` | 关卡与玩法扩展 | ✅ 已完成 | Tiled 三关、像素动画、机关与道具系统（[#3](https://github.com/wutcst/kai-fa-goood/issues/3)） |
+| **v0.3.0** | [`v0.3.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v0.3.0) | `77f444a` | 质量与体验 | ✅ 基线完成 | 工程拆分、暂停菜单、单元测试、通关界面、CI 打包（[#5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
+| **v1.1.0** | [`v1.1.0`](https://github.com/wutcst/kai-fa-goood/releases/tag/v1.1.0) | 本 PR | 发布工程化 | ✅ 已完成 | 统一 `VERSION`、CHANGELOG、标签触发 Release（[#20](https://github.com/wutcst/kai-fa-goood/pull/20)） |
 
 完整版本说明、变更摘要与检出命令见 [`VERSIONS.md`](VERSIONS.md)。
 

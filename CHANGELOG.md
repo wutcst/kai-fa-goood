@@ -11,15 +11,11 @@ Version numbers are defined in the repository root [`VERSION`](VERSION) file.
 
 ### Added
 
-- [`VERSIONS.md`](VERSIONS.md)：里程碑提交对照与检出说明
-
 ### Changed
-
-- [`README.md`](README.md)：同步 Pixel Adventure Online 文档、架构说明与 Issue 跟踪
 
 ### Fixed
 
-## [1.1.0] - 2026-06-22
+## [1.1.0] - 2026-06-24
 
 ### Added
 
@@ -27,12 +23,14 @@ Version numbers are defined in the repository root [`VERSION`](VERSION) file.
 - 风扇区域喷泉物理、风场视觉效果与飞行敌人碰撞即失败
 - 通关界面重做（victory 按钮与菜单资源）
 - 第一关 Tiled 大地图与薄平台支持
-- 统一版本源 `VERSION` 与发布工作流
+- 统一版本源 `VERSION` 与发布工作流（`RELEASE.md`、`release.yml`、bump 脚本）
+- [`VERSIONS.md`](VERSIONS.md)：里程碑提交对照与检出说明
 
 ### Changed
 
 - 仓库目录重组为 `client/`、`server/`、`shared/`
 - 道具掉落速度与显示尺寸多次调优
+- [`README.md`](README.md)：同步 Pixel Adventure Online 文档、架构说明与 Issue 跟踪（#2–#19 均已关闭）
 
 ### Fixed
 
