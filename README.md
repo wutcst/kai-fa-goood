@@ -54,25 +54,33 @@
 | **v0.2.0** | 里程碑 2 — 关卡与玩法扩展 | 🚧 进行中 | Tiled 三关地图、消失平台 / 泥浆 / 风扇等机制（[Issue #3](https://github.com/wutcst/kai-fa-goood/issues/3) 已关闭） |
 | **v0.3.0** | 里程碑 3 — 质量与体验 | 📋 待开发 | 单元测试、HUD / 暂停菜单、机关扩展、单人专属关等（[Issue #5–#9](https://github.com/wutcst/kai-fa-goood/issues)） |
 
-> CMake 项目版本：`FireIceOnline VERSION 0.1.0`（根目录 `CMakeLists.txt`）。里程碑 2 合并后可考虑 bump 至 `0.2.0`。  
-> GitHub 仓库尚未创建正式的 Milestone 对象，以上以 Issue 标题与进度为准。
+> CMake / Maven / JAR 版本与根目录 [`VERSION`](VERSION) 同步（当前 **1.1.0**）。发布流程见 [`RELEASE.md`](RELEASE.md)。
 
-### CI / 代码规范
+### CI / 代码规范与版本发布
 
+- **版本号**：根目录 [`VERSION`](VERSION) 为唯一来源，详见 [`RELEASE.md`](RELEASE.md)
+- **变更记录**：[`CHANGELOG.md`](CHANGELOG.md)
 - **CI 流水线**：`.github/workflows/ci.yml` — push/PR 到 `master` 时自动触发  
   1. **代码格式检查**（clang-format）：不符合 `.clang-format` 则 **CI 失败**  
   2. **Maven 构建流水线**（`mvn verify package`）：  
      - C++ 单元测试（Google Test）+ 服务端冒烟测试失败则 **CI 失败**  
      - Java 单元测试（JUnit 5）失败则 **CI 失败**  
-  3. **自动化打包**：通过后生成 **`target/fire-ice-1.0.0-release.jar`**（含启动器 + 原生 exe/DLL + 资源），上传至 Actions Artifact
-  4. **手动发布**：在 Actions 页选择 `CI - Build & Check` → `Run workflow`，可额外创建 GitHub Release  
-
-- **发布 JAR 用法**：
+  3. **自动化打包**：通过后生成 **`target/fire-ice-{VERSION}-release.jar`**，上传至 Actions Artifact
+- **正式发布**：打标签 `vX.Y.Z`（须与 `VERSION` 一致）触发 `.github/workflows/release.yml`，自动创建 GitHub Release 并附带 JAR + 原生 zip
 
 ```bat
-java -jar target\fire-ice-1.0.0.jar server
-java -jar target\fire-ice-1.0.0.jar client 127.0.0.1 fire
-java -jar target\fire-ice-1.0.0.jar --version
+scripts\bump-version.bat          :: 查看当前版本
+scripts\bump-version.bat 1.2.0    :: 同步 bump 全项目
+git tag -a v1.1.0 -m "Fire-Ice Online v1.1.0"
+git push origin v1.1.0            :: 触发 Release 工作流
+```
+
+- **发布 JAR 用法**（版本号以 `VERSION` 为准，当前 `1.1.0`）：
+
+```bat
+java -jar target\fire-ice-1.1.0-release.jar server
+java -jar target\fire-ice-1.1.0-release.jar client 127.0.0.1 fire
+java -jar target\fire-ice-1.1.0-release.jar --version
 ```
 
 - **本地完整构建**（需 VS 2022 + CMake + Ninja + JDK 8+）：

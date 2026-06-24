@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v1.1.0). Empty = v{VERSION file}"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark as pre-release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve release version
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          FILE_VERSION="$(tr -d '\r\n' < VERSION)"
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v${FILE_VERSION}"
+          fi
+          VERSION="${TAG#v}"
+          if [[ "$VERSION" != "$FILE_VERSION" ]]; then
+            echo "Tag version ($VERSION) does not match VERSION file ($FILE_VERSION)"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "jar=target/fire-ice-${VERSION}-release.jar" >> "$GITHUB_OUTPUT"
+          echo "Release: $TAG ($VERSION)"
+
+      - name: Check clang-format
+        shell: bash
+        run: bash scripts/clang-format-check.sh
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "8"
+          cache: maven
+
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Maven verify and package release JAR
+        shell: bash
+        run: mvn -B -DskipFormatCheck=true verify package
+
+      - name: Verify release artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          JAR="${{ steps.meta.outputs.jar }}"
+          test -f "$JAR"
+          java -jar "$JAR" --version
+          test -f build/fireice_server.exe
+          test -f build/fireice_client.exe
+          ls -lh "$JAR" build/fireice_*.exe build/*.dll
+
+      - name: Package native zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.meta.outputs.version }}"
+          ZIP="dist/fire-ice-${VERSION}-win64-native.zip"
+          mkdir -p dist
+          powershell -NoProfile -Command "
+            Compress-Archive -Force -Path @(
+              'build/fireice_server.exe',
+              'build/fireice_client.exe',
+              (Get-ChildItem 'build/*.dll' | ForEach-Object { $_.FullName })
+            ) -DestinationPath '$ZIP'
+          "
+          ls -lh dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: Fire-Ice Online ${{ steps.meta.outputs.tag }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && inputs.prerelease || false }}
+          generate_release_notes: true
+          files: |
+            ${{ steps.meta.outputs.jar }}
+            dist/fire-ice-${{ steps.meta.outputs.version }}-win64-native.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
